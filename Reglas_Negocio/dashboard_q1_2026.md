@@ -22,3 +22,4 @@
 - Sin `DATABASE_URL`, comportamiento anterior: **`data/dashboard.db`**.
 - Guía paso a paso de la URI, IPv4 y pooler: **`docs/SUPABASE_CONNECTION.md`**.
 - Esquema SQL para pegar en Supabase: **`supabase/migrations/001_init.sql`**.
+- Despliegue público (Render): **`DEPLOY.md`** y **`render.yaml`** en la raíz del repo.

@@ -1,73 +1,48 @@
-# Desplegar en Render (URL pública)
+# Desplegar en Railway
 
 ## Antes de empezar
 
-1. **Supabase:** en **SQL Editor**, ejecuta el archivo `supabase/migrations/001_init.sql` (crea las tablas).
+1. **Supabase:** en **SQL Editor**, ejecuta `supabase/migrations/001_init.sql` (crea las tablas).
 2. **No subas `.env` a Git.** Contiene secretos; ya está en `.gitignore`.
 
 ---
 
-## Paso 1 — Subir el código a GitHub
+## Paso 1 — Crear el proyecto en Railway
 
-En Terminal (ajusta la ruta si hace falta):
-
-```bash
-cd "/Users/jeronimocelisrodriguez/Documents/Claude/Projects/Vision 2026/dashboard_q1_api"
-
-git init
-git add .
-git status   # comprueba que NO aparezca .env
-git commit -m "Dashboard Q1 API + Render"
-```
-
-En [github.com](https://github.com): **New repository** (vacío, sin README si ya tienes código local).
-
-Luego (sustituye `TU_USUARIO` y `TU_REPO`):
-
-```bash
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/TU_REPO.git
-git push -u origin main
-```
-
-Si GitHub pide login, usa su asistente de credenciales o un **Personal Access Token** como contraseña.
+1. Entra a [railway.app](https://railway.app) y regístrate con GitHub.
+2. **New Project → Deploy from GitHub Repo**.
+3. Selecciona el repo `Skatalites94/dashboard-q1-api`, rama `main`.
+4. Railway detecta Python automáticamente (Nixpacks) y usa `railway.toml`.
 
 ---
 
-## Paso 2 — Crear el servicio en Render
+## Paso 2 — Variable `DATABASE_URL` en Railway
 
-1. Entra a [render.com](https://render.com) y **Sign up** (puedes usar “Sign up with GitHub”).
-2. **Dashboard → New → Blueprint** (o **New Web Service** si prefieres manual).
-3. **Blueprint:** conecta el mismo repo de GitHub y elige la rama `main`. Render detectará `render.yaml`.
-4. Si usas **Web Service** manual en lugar de Blueprint:
-   - **Build command:** `pip install -r requirements.txt`
-   - **Start command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - **Runtime:** Python 3.11
+1. En tu servicio: **Variables → New Variable**.
+2. **Key:** `DATABASE_URL`
+3. **Value:** tu URI de Supabase (la misma de `.env` local).
+4. Click **Deploy** para que tome la variable.
 
 ---
 
-## Paso 3 — Variable `DATABASE_URL` en Render
+## Paso 3 — Generar dominio público
 
-1. En tu servicio en Render: **Environment**.
-2. **Add Environment Variable**
-   - **Key:** `DATABASE_URL`
-   - **Value:** la misma URI completa que usas en tu `.env` local (Supabase, con contraseña). Cópiala desde Supabase o desde tu `.env` (no la compartas en chats públicos).
-3. **Save** y deja que vuelva a desplegar (**Manual Deploy → Deploy latest commit** si no arranca solo).
+1. En tu servicio: **Settings → Networking → Generate Domain**.
+2. Railway asigna una URL tipo `dashboard-q1-api-production.up.railway.app`.
 
 ---
 
 ## Paso 4 — Probar
 
-Abre la URL que Render muestra (ej. `https://dashboard-q1-api.onrender.com`).
-
-- Debe cargar el dashboard en `/`
-- API: `https://TU-URL.onrender.com/docs`
+- Dashboard: `https://TU-URL.up.railway.app`
+- API docs: `https://TU-URL.up.railway.app/docs`
+- Health check: `https://TU-URL.up.railway.app/api/areas`
 
 ---
 
-## Poblar datos la primera vez (opcional)
+## Poblar datos (opcional)
 
-Desde tu Mac, con la misma URI en variable (no hace falta pegarla aquí):
+Desde tu Mac:
 
 ```bash
 export DATABASE_URL="postgresql://postgres:...@db....supabase.co:5432/postgres"
@@ -75,13 +50,11 @@ cd "/Users/jeronimocelisrodriguez/Documents/Claude/Projects/Vision 2026/dashboar
 python3 seed.py
 ```
 
-Eso escribe en **Supabase** (misma base que usa Render). Si `seed` vacía tablas, hazlo solo cuando quieras resetear datos.
-
 ---
 
-## Si el deploy falla al conectar a Supabase
+## Si falla la conexión a Supabase
 
-Render a veces usa **solo IPv4** y la conexión **directa** a `db.xxx.supabase.co:5432` falla. En Supabase, copia la URI del **Session pooler** o **Shared pooler** y úsala como `DATABASE_URL` en Render.
+Usa la URI del **Session pooler** de Supabase (puerto 5432 pooled) como `DATABASE_URL` en Railway.
 
 ---
 
@@ -90,5 +63,11 @@ Render a veces usa **solo IPv4** y la conexión **directa** a `db.xxx.supabase.c
 | Dónde | Qué guardas |
 |--------|------------|
 | **Tu Mac** | `.env` con `DATABASE_URL` (solo local) |
-| **Render** | Misma variable `DATABASE_URL` en **Environment** |
+| **Railway** | Misma variable `DATABASE_URL` en **Variables** |
 | **GitHub** | Código **sin** `.env` |
+
+---
+
+## Alternativa: Render
+
+Si prefieres Render, el archivo `render.yaml` sigue disponible en el repo. Sigue las instrucciones del Blueprint en render.com.

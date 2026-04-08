@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configurador de Gastos Fijos — Grupo Select 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0e14;--card:#151821;--card2:#1c2030;--accent:#6366f1;--accent2:#818cf8;--green:#22c55e;--red:#ef4444;--yellow:#eab308;--orange:#f97316;--text:#e2e8f0;--muted:#94a3b8;--border:#262d40}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Top bar */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(12,14,20,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:12px 24px}
+.topbar-inner{max-width:1440px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.topbar h1{font-size:1.15rem;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar .back{font-size:.85rem;font-weight:500;color:var(--accent2);white-space:nowrap}
+
+/* KPI strip */
+.kpi-strip{max-width:1440px;margin:0 auto;padding:16px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden;transition:border-color .2s}
+.kpi:hover{border-color:var(--accent)}
+.kpi .kl{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.kpi .kv{font-size:1.35rem;font-weight:700}
+.kpi .ks{font-size:.75rem;color:var(--muted);margin-top:2px}
+.kpi .bar{height:6px;border-radius:3px;background:var(--card2);margin-top:8px;overflow:hidden}
+.kpi .bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s ease}
+.kpi .accent-top{position:absolute;top:0;left:0;right:0;height:3px}
+.green-top{background:linear-gradient(90deg,var(--green),#4ade80)}
+.red-top{background:linear-gradient(90deg,var(--red),#f87171)}
+.accent-top-main{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.yellow-top{background:linear-gradient(90deg,var(--yellow),#facc15)}
+
+/* Tabs */
+.container{max-width:1440px;margin:0 auto;padding:0 24px 40px}
+.tabs{display:flex;gap:4px;margin-bottom:16px;background:var(--card);border-radius:12px;padding:4px;flex-wrap:wrap}
+.tab{padding:10px 18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:10px;font-size:.85rem;font-weight:600;transition:all .2s;font-family:inherit;white-space:nowrap}
+.tab.active{background:linear-gradient(135deg,var(--accent),#4f46e5);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,.3)}
+.tab:hover:not(.active){color:var(--text);background:var(--card2)}
+
+/* Search */
+.search-box{margin-bottom:12px}
+.search-box input{width:100%;max-width:360px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:.85rem;font-family:inherit;outline:none;transition:border-color .2s}
+.search-box input:focus{border-color:var(--accent)}
+.search-box input::placeholder{color:var(--muted)}
+
+/* Panel */
+.panel{background:var(--card);border-radius:14px;border:1px solid var(--border);overflow:hidden}
+.table-wrap{overflow-x:auto;max-height:70vh;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th{background:var(--card2);padding:10px 12px;text-align:left;font-weight:600;color:var(--muted);text-transform:uppercase;font-size:.7rem;letter-spacing:.5px;position:sticky;top:0;z-index:2}
+td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:hover td{background:rgba(99,102,241,.04)}
+tfoot td{background:var(--card2);font-weight:700;border-top:2px solid var(--border);position:sticky;bottom:0;z-index:1}
+
+/* Cut row */
+tr.cut td{background:rgba(239,68,68,.06);text-decoration:line-through;color:var(--muted)}
+tr.cut td:first-child{text-decoration:none}
+tr.cut .badge{opacity:.5}
+
+/* Toggle switch */
+.toggle{position:relative;width:38px;height:20px;display:inline-block;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;inset:0;background:var(--card2);border:1px solid var(--border);border-radius:20px;cursor:pointer;transition:all .2s}
+.toggle .slider::before{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:all .2s}
+.toggle input:checked+.slider{background:var(--red);border-color:var(--red)}
+.toggle input:checked+.slider::before{transform:translateX(18px);background:#fff}
+
+/* Editable input */
+.cost-input{width:110px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:.82rem;font-family:inherit;text-align:right;outline:none;transition:border-color .2s}
+.cost-input:focus{border-color:var(--accent)}
+.cost-input.changed{border-color:var(--yellow);box-shadow:0 0 0 2px rgba(234,179,8,.15)}
+
+/* Badges */
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.7rem;font-weight:600;white-space:nowrap}
+.b-green{background:rgba(34,197,94,.15);color:var(--green)}
+.b-red{background:rgba(239,68,68,.15);color:var(--red)}
+.b-orange{background:rgba(249,115,22,.15);color:var(--orange)}
+.b-yellow{background:rgba(234,179,8,.15);color:var(--yellow)}
+.b-gray{background:rgba(148,163,184,.12);color:var(--muted)}
+.b-accent{background:rgba(99,102,241,.15);color:var(--accent2)}
+
+/* Money colors */
+.money-green{color:var(--green)}
+.money-red{color:var(--red)}
+
+/* Responsive */
+@media(max-width:768px){
+  .topbar-inner{flex-direction:column;align-items:flex-start}
+  .kpi-strip{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));padding:12px 16px;gap:8px}
+  .container{padding:0 12px 32px}
+  .kpi .kv{font-size:1.1rem}
+  .tabs{gap:2px}
+  .tab{padding:8px 12px;font-size:.78rem}
+}
+
+/* Var column */
+.var-pos{color:var(--green)}
+.var-neg{color:var(--red)}
+
+/* Nota cell */
+.nota{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:.78rem}
+.nota:hover{white-space:normal}
+
+/* Hidden tab content */
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* Loading */
+.loading{text-align:center;padding:60px;color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <h1>Configurador de Gastos Fijos — Grupo Select 2026</h1>
+    <a href="/" class="back">&larr; Dashboard Q1</a>
+  </div>
+</div>
+
+<div class="kpi-strip" id="kpiStrip">
+  <div class="kpi"><div class="accent-top accent-top-main"></div><div class="kl">Gasto Fijo Actual</div><div class="kv" id="kTotal">—</div><div class="ks">Total mensual</div></div>
+  <div class="kpi"><div class="accent-top green-top"></div><div class="kl">Gasto Fijo Nuevo</div><div class="kv" id="kNew">—</div><div class="ks" id="kNewSub">Con ahorros</div></div>
+  <div class="kpi"><div class="accent-top yellow-top"></div><div class="kl">Ahorro Total</div><div class="kv money-green" id="kSave">—</div><div class="ks" id="kSavePct">—</div></div>
+  <div class="kpi"><div class="accent-top accent-top-main"></div><div class="kl">Objetivo $200K</div><div class="kv" id="kGoal">0%</div><div class="bar"><div class="bar-fill" id="kGoalBar" style="width:0%"></div></div></div>
+  <div class="kpi"><div class="accent-top accent-top-main"></div><div class="kl">Nomina Actual</div><div class="kv" id="kNomAct">—</div><div class="ks">Empleados</div></div>
+  <div class="kpi"><div class="accent-top green-top"></div><div class="kl">Nomina Nueva</div><div class="kv" id="kNomNew">—</div><div class="ks" id="kNomSub">—</div></div>
+</div>
+
+<div class="container">
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="nomina">Nomina (Personas)</button>
+    <button class="tab" data-tab="operativos">Gastos Operativos</button>
+    <button class="tab" data-tab="suscripciones">Suscripciones</button>
+    <button class="tab" data-tab="consultorias">Consultorias</button>
+    <button class="tab" data-tab="financieros">Gastos Financieros</button>
+  </div>
+
+  <div id="content">
+    <div class="loading">Cargando datos...</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // State
+  let state = {empleados:[],gastos_operativos:[],suscripciones:[],consultorias:[],financieros:[]};
+  let activeTab = 'nomina';
+  let searchTerm = '';
+
+  // Format money
+  const fmt = n => '$' + Math.round(n).toLocaleString('es-MX');
+  const fmtPct = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+
+  // API helpers
+  function patchItem(endpoint, id, data) {
+    fetch(`/api/gastos/${endpoint}/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    }).catch(() => {});
+  }
+
+  const endpointMap = {
+    empleados: 'empleados',
+    gastos_operativos: 'operativos',
+    suscripciones: 'suscripciones',
+    consultorias: 'consultorias',
+    financieros: 'financieros'
+  };
+
+  // KPI calculations
+  function calcKPIs() {
+    let totalActual = 0, totalNew = 0, nomActual = 0, nomNew = 0;
+
+    for (const key of ['empleados','gastos_operativos','suscripciones','consultorias','financieros']) {
+      for (const item of state[key]) {
+        const orig = item._originalCosto;
+        const curr = item.costo;
+        totalActual += orig;
+        totalNew += item.cortado ? 0 : curr;
+        if (key === 'empleados') {
+          nomActual += orig;
+          nomNew += item.cortado ? 0 : curr;
+        }
+      }
+    }
+
+    const ahorro = totalActual - totalNew;
+    const pct = totalActual > 0 ? (ahorro / totalActual * 100) : 0;
+    const goalPct = Math.min(100, ahorro / 200000 * 100);
+
+    document.getElementById('kTotal').textContent = fmt(totalActual);
+    document.getElementById('kNew').textContent = fmt(totalNew);
+    document.getElementById('kSave').textContent = fmt(ahorro);
+    document.getElementById('kSavePct').textContent = fmtPct(pct) + ' vs actual';
+    document.getElementById('kGoal').textContent = goalPct.toFixed(1) + '%';
+    document.getElementById('kGoalBar').style.width = goalPct + '%';
+    document.getElementById('kNomAct').textContent = fmt(nomActual);
+    document.getElementById('kNomNew').textContent = fmt(nomNew);
+    const nomAhorro = nomActual - nomNew;
+    document.getElementById('kNomSub').textContent = 'Ahorro: ' + fmt(nomAhorro);
+  }
+
+  // Tab rendering
+  function renderTabs() {
+    document.querySelectorAll('.tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === activeTab);
+    });
+  }
+
+  // Toggle handler
+  function onToggle(collection, id) {
+    const item = state[collection].find(i => i.id === id);
+    if (!item) return;
+    item.cortado = !item.cortado;
+    patchItem(endpointMap[collection], id, {cortado: item.cortado});
+    renderContent();
+    calcKPIs();
+  }
+
+  // Cost change handler
+  function onCostChange(collection, id, value) {
+    const item = state[collection].find(i => i.id === id);
+    if (!item) return;
+    const num = parseFloat(value) || 0;
+    item.costo = num;
+    patchItem(endpointMap[collection], id, {costo: num});
+    calcKPIs();
+    // Update the nuevo and var cells without full re-render
+    const nuevoEl = document.getElementById(`nuevo-${collection}-${id}`);
+    if (nuevoEl) nuevoEl.textContent = fmt(item.cortado ? 0 : num);
+    const varEl = document.getElementById(`var-${collection}-${id}`);
+    if (varEl) {
+      const diff = num - item._originalCosto;
+      varEl.textContent = fmt(diff);
+      varEl.className = diff <= 0 ? 'var-pos' : 'var-neg';
+    }
+    // Mark input as changed
+    const inp = document.getElementById(`input-${collection}-${id}`);
+    if (inp) inp.classList.toggle('changed', num !== item._originalCosto);
+    // Update footer
+    updateFooter(collection);
+  }
+
+  function updateFooter(collection) {
+    const items = state[collection];
+    let sumOrig = 0, sumNew = 0;
+    items.forEach(i => { sumOrig += i._originalCosto; sumNew += i.cortado ? 0 : i.costo; });
+    const fOrig = document.getElementById(`foot-orig-${collection}`);
+    const fNew = document.getElementById(`foot-new-${collection}`);
+    if (fOrig) fOrig.textContent = fmt(sumOrig);
+    if (fNew) fNew.textContent = fmt(sumNew);
+  }
+
+  // Badge helper
+  function statusBadge(item) {
+    if (item.cortado) return '<span class="badge b-red">SALE</span>';
+    if (item.es_contratacion) return '<span class="badge b-orange">NUEVA CONTRATACION</span>';
+    return '<span class="badge b-green">ACTIVO</span>';
+  }
+
+  function toggleHTML(collection, item) {
+    return `<label class="toggle"><input type="checkbox" ${item.cortado ? 'checked' : ''} onchange="window.__toggle('${collection}',${item.id})"><span class="slider"></span></label>`;
+  }
+
+  function costInput(collection, item) {
+    const changed = item.costo !== item._originalCosto;
+    return `<input class="cost-input${changed ? ' changed' : ''}" id="input-${collection}-${item.id}" type="number" value="${item.costo}" onchange="window.__costChange('${collection}',${item.id},this.value)">`;
+  }
+
+  function nuevoCell(collection, item) {
+    const val = item.cortado ? 0 : item.costo;
+    return `<span id="nuevo-${collection}-${item.id}">${fmt(val)}</span>`;
+  }
+
+  // Render content
+  function renderContent() {
+    const el = document.getElementById('content');
+    let html = '';
+
+    if (activeTab === 'nomina') {
+      const filtered = state.empleados.filter(e => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        return (e.nombre||'').toLowerCase().includes(s) || (e.depto||'').toLowerCase().includes(s);
+      });
+      let sumOrig = 0, sumNew = 0;
+      state.empleados.forEach(e => { sumOrig += e._originalCosto; sumNew += e.cortado ? 0 : e.costo; });
+
+      html = `<div class="search-box"><input type="text" placeholder="Buscar por nombre o departamento..." value="${searchTerm}" oninput="window.__search(this.value)"></div>`;
+      html += `<div class="panel"><div class="table-wrap"><table>
+        <thead><tr><th>Cortar</th><th>Empleado</th><th>Departamento</th><th>Costo Empresa/Mes</th><th>Nuevo Costo</th><th>Estado</th></tr></thead>
+        <tbody>`;
+      filtered.forEach(e => {
+        html += `<tr class="${e.cortado ? 'cut' : ''}">
+          <td>${toggleHTML('empleados', e)}</td>
+          <td>${e.nombre}</td>
+          <td>${e.depto || '—'}</td>
+          <td>${costInput('empleados', e)}</td>
+          <td>${nuevoCell('empleados', e)}</td>
+          <td>${statusBadge(e)}</td>
+        </tr>`;
+      });
+      html += `</tbody><tfoot><tr>
+        <td colspan="3" style="text-align:right">TOTAL (${state.empleados.length} personas)</td>
+        <td id="foot-orig-empleados">${fmt(sumOrig)}</td>
+        <td id="foot-new-empleados">${fmt(sumNew)}</td>
+        <td></td>
+      </tr></tfoot></table></div></div>`;
+    }
+
+    else if (activeTab === 'operativos') {
+      let sumOrig = 0, sumNew = 0;
+      state.gastos_operativos.forEach(g => { sumOrig += g._originalCosto; sumNew += g.cortado ? 0 : g.costo; });
+      html = `<div class="panel"><div class="table-wrap"><table>
+        <thead><tr><th>Cortar</th><th>Partida</th><th>Categoria</th><th>Actual/Mes</th><th>Nuevo/Mes</th><th>Var</th></tr></thead>
+        <tbody>`;
+      state.gastos_operativos.forEach(g => {
+        const diff = g.costo - g._originalCosto;
+        const catBadge = g.fijo
+          ? '<span class="badge b-gray">NO CONTROLABLE</span>'
+          : `<span class="badge b-accent">${g.categoria || '—'}</span>`;
+        html += `<tr class="${g.cortado ? 'cut' : ''}">
+          <td>${toggleHTML('gastos_operativos', g)}</td>
+          <td>${g.nombre}</td>
+          <td>${catBadge}</td>
+          <td>${costInput('gastos_operativos', g)}</td>
+          <td>${nuevoCell('gastos_operativos', g)}</td>
+          <td><span id="var-gastos_operativos-${g.id}" class="${diff <= 0 ? 'var-pos' : 'var-neg'}">${fmt(diff)}</span></td>
+        </tr>`;
+      });
+      html += `</tbody><tfoot><tr>
+        <td colspan="3" style="text-align:right">TOTAL</td>
+        <td id="foot-orig-gastos_operativos">${fmt(sumOrig)}</td>
+        <td id="foot-new-gastos_operativos">${fmt(sumNew)}</td>
+        <td></td>
+      </tr></tfoot></table></div></div>`;
+    }
+
+    else if (activeTab === 'suscripciones') {
+      let sumOrig = 0, sumNew = 0;
+      state.suscripciones.forEach(s => { sumOrig += s._originalCosto; sumNew += s.cortado ? 0 : s.costo; });
+      html = `<div class="panel"><div class="table-wrap"><table>
+        <thead><tr><th>Cortar</th><th>Suscripcion</th><th>Frecuencia</th><th>Costo Mensual</th><th>Nuevo/Mes</th><th>Nota</th></tr></thead>
+        <tbody>`;
+      state.suscripciones.forEach(s => {
+        html += `<tr class="${s.cortado ? 'cut' : ''}">
+          <td>${toggleHTML('suscripciones', s)}</td>
+          <td>${s.nombre}</td>
+          <td><span class="badge b-accent">${s.frecuencia || '—'}</span></td>
+          <td>${costInput('suscripciones', s)}</td>
+          <td>${nuevoCell('suscripciones', s)}</td>
+          <td class="nota" title="${(s.nota||'').replace(/"/g,'&quot;')}">${s.nota || '—'}</td>
+        </tr>`;
+      });
+      html += `</tbody><tfoot><tr>
+        <td colspan="3" style="text-align:right">TOTAL</td>
+        <td id="foot-orig-suscripciones">${fmt(sumOrig)}</td>
+        <td id="foot-new-suscripciones">${fmt(sumNew)}</td>
+        <td></td>
+      </tr></tfoot></table></div></div>`;
+    }
+
+    else if (activeTab === 'consultorias') {
+      let sumOrig = 0, sumNew = 0;
+      state.consultorias.forEach(c => { sumOrig += c._originalCosto; sumNew += c.cortado ? 0 : c.costo; });
+      html = `<div class="panel"><div class="table-wrap"><table>
+        <thead><tr><th>Cortar</th><th>Consultoria</th><th>Actual/Mes</th><th>Nuevo/Mes</th><th>Nota</th></tr></thead>
+        <tbody>`;
+      state.consultorias.forEach(c => {
+        html += `<tr class="${c.cortado ? 'cut' : ''}">
+          <td>${toggleHTML('consultorias', c)}</td>
+          <td>${c.nombre}</td>
+          <td>${costInput('consultorias', c)}</td>
+          <td>${nuevoCell('consultorias', c)}</td>
+          <td class="nota" title="${(c.nota||'').replace(/"/g,'&quot;')}">${c.nota || '—'}</td>
+        </tr>`;
+      });
+      html += `</tbody><tfoot><tr>
+        <td colspan="2" style="text-align:right">TOTAL</td>
+        <td id="foot-orig-consultorias">${fmt(sumOrig)}</td>
+        <td id="foot-new-consultorias">${fmt(sumNew)}</td>
+        <td></td>
+      </tr></tfoot></table></div></div>`;
+    }
+
+    else if (activeTab === 'financieros') {
+      let sumOrig = 0, sumNew = 0;
+      state.financieros.forEach(f => { sumOrig += f._originalCosto; sumNew += f.cortado ? 0 : f.costo; });
+      html = `<div class="panel"><div class="table-wrap"><table>
+        <thead><tr><th>Cortar</th><th>Concepto</th><th>Actual/Mes</th><th>Nuevo/Mes</th><th>Nota</th></tr></thead>
+        <tbody>`;
+      state.financieros.forEach(f => {
+        html += `<tr class="${f.cortado ? 'cut' : ''}">
+          <td>${toggleHTML('financieros', f)}</td>
+          <td>${f.nombre}</td>
+          <td>${costInput('financieros', f)}</td>
+          <td>${nuevoCell('financieros', f)}</td>
+          <td class="nota" title="${(f.nota||'').replace(/"/g,'&quot;')}">${f.nota || '—'}</td>
+        </tr>`;
+      });
+      html += `</tbody><tfoot><tr>
+        <td colspan="2" style="text-align:right">TOTAL</td>
+        <td id="foot-orig-financieros">${fmt(sumOrig)}</td>
+        <td id="foot-new-financieros">${fmt(sumNew)}</td>
+        <td></td>
+      </tr></tfoot></table></div></div>`;
+    }
+
+    el.innerHTML = html;
+  }
+
+  // Global handlers
+  window.__toggle = onToggle;
+  window.__costChange = onCostChange;
+  window.__search = function(v) {
+    searchTerm = v;
+    renderContent();
+  };
+
+  // Tab clicks
+  document.getElementById('tabs').addEventListener('click', function(e) {
+    const btn = e.target.closest('.tab');
+    if (!btn) return;
+    activeTab = btn.dataset.tab;
+    searchTerm = '';
+    renderTabs();
+    renderContent();
+  });
+
+  // Bootstrap
+  fetch('/api/gastos/bootstrap')
+    .then(r => r.json())
+    .then(data => {
+      // Store original costs
+      for (const key of ['empleados','gastos_operativos','suscripciones','consultorias','financieros']) {
+        if (data[key]) {
+          data[key].forEach(item => { item._originalCosto = item.costo; });
+        }
+        state[key] = data[key] || [];
+      }
+      calcKPIs();
+      renderContent();
+    })
+    .catch(err => {
+      document.getElementById('content').innerHTML = '<div class="loading" style="color:var(--red)">Error al cargar datos. Verifica que el API este disponible.</div>';
+      console.error('Bootstrap error:', err);
+    });
+})();
+</script>
+</body>
+</html>

@@ -6,3 +6,7 @@ venv/
 data/*.db
 *.egg-info/
 .DS_Store
+Referencias de pagina ORKs./
+contexto documentos/*.xlsx
+contexto documentos/*.pdf
+contexto documentos/*.zip

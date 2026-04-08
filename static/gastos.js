@@ -412,7 +412,7 @@ window.GastosModule = (function() {
   }
 
   window.__gEditField = function(collection, id, field, el) {
-    var item = state[collection].find(function(i) { return i.id === id; });
+    var item = state[collection].find(function(i) { return i.id == id; });
     if (!item) return;
     var currentVal = item[field] || '';
     var input = document.createElement('input');
@@ -457,7 +457,7 @@ window.GastosModule = (function() {
   }
 
   window.__gCatChange = function(collection, id, catId) {
-    var item = state[collection].find(function(i) { return i.id === id; });
+    var item = state[collection].find(function(i) { return i.id == id; });
     if (!item) return;
     item.categoria_id = catId ? parseInt(catId) : null;
     patchItem(endpointMap[collection], id, { categoria_id: item.categoria_id });
@@ -526,7 +526,7 @@ window.GastosModule = (function() {
 
   /* ── Global handlers ── */
   window.__gToggle = function(collection, id) {
-    var item = state[collection].find(function(i) { return i.id === id; });
+    var item = state[collection].find(function(i) { return i.id == id; });
     if (!item) return;
     item.cortado = !item.cortado;
     patchItem(endpointMap[collection], id, { cortado: item.cortado });
@@ -567,7 +567,7 @@ window.GastosModule = (function() {
   };
 
   window.__gCostChange = function(collection, id, value) {
-    var item = state[collection].find(function(i) { return i.id === id; });
+    var item = state[collection].find(function(i) { return i.id == id; });
     if (!item) return;
     var num = parseFloat(value) || 0;
     item.costo = num;
@@ -616,7 +616,7 @@ window.GastosModule = (function() {
 
   /* ── Suscripciones-specific handlers ── */
   window.__gMonedaChange = function(id, value) {
-    var item = state.suscripciones.find(function(i) { return i.id === id; });
+    var item = state.suscripciones.find(function(i) { return i.id == id; });
     if (!item) return;
     item.moneda = value;
     if (value === 'USD') item.tipo_cambio = tipoCambioGlobal;
@@ -626,7 +626,7 @@ window.GastosModule = (function() {
   };
 
   window.__gUsuariosChange = function(id, value) {
-    var item = state.suscripciones.find(function(i) { return i.id === id; });
+    var item = state.suscripciones.find(function(i) { return i.id == id; });
     if (!item) return;
     item.usuarios = parseInt(value) || 1;
     patchItem('suscripciones', id, { usuarios: item.usuarios });
@@ -639,7 +639,7 @@ window.GastosModule = (function() {
   };
 
   window.__gCostoPorUsuarioChange = function(id, value) {
-    var item = state.suscripciones.find(function(i) { return i.id === id; });
+    var item = state.suscripciones.find(function(i) { return i.id == id; });
     if (!item) return;
     item.costo_por_usuario = parseFloat(value) || 0;
     patchItem('suscripciones', id, { costo_por_usuario: item.costo_por_usuario });
@@ -652,7 +652,7 @@ window.GastosModule = (function() {
   };
 
   window.__gTogglePorUsuario = function(id) {
-    var item = state.suscripciones.find(function(i) { return i.id === id; });
+    var item = state.suscripciones.find(function(i) { return i.id == id; });
     if (!item) return;
     item.es_por_usuario = !item.es_por_usuario;
     patchItem('suscripciones', id, { es_por_usuario: item.es_por_usuario });
@@ -720,15 +720,15 @@ window.GastosModule = (function() {
   }
 
   window.__gEsquemaChange = function(id, value) {
-    var item = state.empleados.find(function(i) { return i.id === id; });
+    var item = state.empleados.find(function(i) { return i.id == id; });
     if (!item) return;
     item.esquema = value;
     item.costo = calcCostoFromEsquema(item);
     patchItem('empleados', id, { esquema: value, costo: item.costo });
-    // Update DOM inline
-    var costoEl = container.querySelector('#g-costo-empleados-' + id);
+    // Update DOM inline — use document.getElementById as fallback
+    var costoEl = container.querySelector('#g-costo-empleados-' + id) || document.getElementById('g-costo-empleados-' + id);
     if (costoEl) costoEl.textContent = fmt(item.costo);
-    var varEl = container.querySelector('#g-var-empleados-' + id);
+    var varEl = container.querySelector('#g-var-empleados-' + id) || document.getElementById('g-var-empleados-' + id);
     if (varEl) {
       var diff = (item.cortado ? 0 : item.costo) - item._originalCosto;
       varEl.textContent = diff !== 0 ? fmt(diff) : '\u2014';
@@ -739,23 +739,21 @@ window.GastosModule = (function() {
   };
 
   window.__gSueldoNetoChange = function(id, value) {
-    var item = state.empleados.find(function(i) { return i.id === id; });
+    var item = state.empleados.find(function(i) { return i.id == id; });
     if (!item) return;
     var num = parseFloat(value) || 0;
     item.sueldo_neto = num;
     item.costo = calcCostoFromEsquema(item);
     patchItem('empleados', id, { sueldo_neto: num, costo: item.costo });
-    // Update DOM inline
-    var costoEl = container.querySelector('#g-costo-empleados-' + id);
+    // Update DOM inline — use document.querySelector as fallback
+    var costoEl = container.querySelector('#g-costo-empleados-' + id) || document.getElementById('g-costo-empleados-' + id);
     if (costoEl) costoEl.textContent = fmt(item.costo);
-    var varEl = container.querySelector('#g-var-empleados-' + id);
+    var varEl = container.querySelector('#g-var-empleados-' + id) || document.getElementById('g-var-empleados-' + id);
     if (varEl) {
       var diff = (item.cortado ? 0 : item.costo) - item._originalCosto;
       varEl.textContent = diff !== 0 ? fmt(diff) : '\u2014';
       varEl.className = diff <= 0 ? 'var-pos' : 'var-neg';
     }
-    var inp = container.querySelector('#g-input-sueldo-' + id);
-    if (inp) inp.classList.toggle('changed', item.costo !== item._originalCosto);
     updateFooter('empleados');
     calcKPIs();
   };

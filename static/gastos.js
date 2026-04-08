@@ -699,7 +699,16 @@ window.GastosModule = (function() {
     if (esquema === 'nomina_gpp') return sueldo * (e.factor_carga || 1.35);
     if (esquema === 'poder_global') return sueldo * (1 + (e.comision_pct || 0.04));
     if (esquema === 'factura') return sueldo;
-    if (esquema === 'mixto') return (e.sueldo_imss || 0) * (e.factor_carga || 1.35) + (e.sueldo_complemento || 0) * (1 + (e.comision_pct || 0.04));
+    if (esquema === 'mixto') {
+      var imss = e.sueldo_imss || 0;
+      var comp = e.sueldo_complemento || 0;
+      if (imss === 0 && comp === 0 && sueldo > 0) {
+        // Fallback: split sueldo_neto proportionally (60% IMSS, 40% complemento)
+        imss = sueldo * 0.6;
+        comp = sueldo * 0.4;
+      }
+      return imss * (e.factor_carga || 1.35) + comp * (1 + (e.comision_pct || 0.04));
+    }
     if (esquema === 'otra_razon') return sueldo;
     return sueldo;
   }
@@ -742,9 +751,21 @@ window.GastosModule = (function() {
     var item = state.empleados.find(function(i) { return i.id == id; });
     if (!item) return;
     var num = parseFloat(value) || 0;
+    var oldSueldo = item.sueldo_neto || 0;
     item.sueldo_neto = num;
+    // For mixto: scale sueldo_imss and sueldo_complemento proportionally
+    if (item.esquema === 'mixto' && oldSueldo > 0) {
+      var ratio = num / oldSueldo;
+      item.sueldo_imss = Math.round((item.sueldo_imss || 0) * ratio);
+      item.sueldo_complemento = Math.round((item.sueldo_complemento || 0) * ratio);
+    }
     item.costo = calcCostoFromEsquema(item);
-    patchItem('empleados', id, { sueldo_neto: num, costo: item.costo });
+    var patchData = { sueldo_neto: num, costo: item.costo };
+    if (item.esquema === 'mixto') {
+      patchData.sueldo_imss = item.sueldo_imss;
+      patchData.sueldo_complemento = item.sueldo_complemento;
+    }
+    patchItem('empleados', id, patchData);
     // Update DOM inline — use document.querySelector as fallback
     var costoEl = container.querySelector('#g-costo-empleados-' + id) || document.getElementById('g-costo-empleados-' + id);
     if (costoEl) costoEl.textContent = fmt(item.costo);

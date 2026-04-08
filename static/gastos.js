@@ -524,31 +524,6 @@ window.GastosModule = (function() {
     return items.filter(function(i) { return i.categoria_id === catId; });
   }
 
-  /* ── Esquema/Sueldo handlers ── */
-  window.__gEsquemaChange = function(id, value) {
-    var item = state.empleados.find(function(i) { return i.id === id; });
-    if (!item) return;
-    item.esquema = value;
-    item.costo = calcCostoFromEsquema(item);
-    patchItem('empleados', id, { esquema: value, costo: item.costo });
-    renderContent(true);
-  };
-
-  window.__gSueldoNetoChange = function(id, value) {
-    var item = state.empleados.find(function(i) { return i.id === id; });
-    if (!item) return;
-    item.sueldo_neto = parseFloat(value) || 0;
-    item.costo = calcCostoFromEsquema(item);
-    patchItem('empleados', id, { sueldo_neto: item.sueldo_neto, costo: item.costo });
-    // Update costo empresa cell directly
-    var costoEl = document.getElementById('g-costo-emp-' + id);
-    if (costoEl) costoEl.textContent = fmt(item.costo);
-    var nuevoEl = document.getElementById('g-nuevo-empleados-' + id);
-    if (nuevoEl) nuevoEl.textContent = fmt(item.cortado ? 0 : item.costo);
-    calcKPIs();
-    updateFooter();
-  };
-
   /* ── Global handlers ── */
   window.__gToggle = function(collection, id) {
     var item = state[collection].find(function(i) { return i.id === id; });
@@ -929,8 +904,8 @@ window.GastosModule = (function() {
           html += '<td>' + editableCell('empleados', e, 'depto') + '</td>';
           html += '<td>' + esquemaSelect(e) + '</td>';
           html += '<td><input class="g-inline-number" type="number" value="' + (e.sueldo_neto || 0) + '" onchange="window.__gSueldoNetoChange(' + e.id + ',this.value)" style="width:90px"></td>';
-          html += '<td id="g-costo-emp-' + e.id + '">' + fmt(costoEmp) + '</td>';
-          html += '<td><span id="g-nuevo-empleados-' + e.id + '" class="' + (diff <= 0 ? 'var-pos' : 'var-neg') + '">' + (diff !== 0 ? fmt(diff) : '\u2014') + '</span></td>';
+          html += '<td id="g-costo-empleados-' + e.id + '">' + fmt(costoEmp) + '</td>';
+          html += '<td><span id="g-var-empleados-' + e.id + '" class="' + (diff <= 0 ? 'var-pos' : 'var-neg') + '">' + (diff !== 0 ? fmt(diff) : '\u2014') + '</span></td>';
           html += '<td>' + statusBadge(e) + '</td>';
           html += '<td class="g-nota">' + editableCell('empleados', e, 'nota', e.nota || '\u2014') + '</td>';
           html += '<td>' + categorySelect('empleados', e, 'nomina') + '</td>';

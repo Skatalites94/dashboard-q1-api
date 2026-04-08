@@ -14,7 +14,7 @@ window.SimuladorModule = (function() {
     leadsOverride: {},    // { tipo_id: [12 monthly values] }
     leadsOverrideActive: {} // { tipo_id: bool }
   };
-  var activeTab = 'marketing';
+  var activeTab = 'config';
   var simTimer = null;
   var editTimer = null;
 
@@ -36,6 +36,12 @@ window.SimuladorModule = (function() {
     if (n == null || isNaN(n)) return '0';
     return Math.round(n).toLocaleString('es-MX');
   };
+  var fmtNumRaw = function(n) {
+    var num = typeof n === 'string' ? parseFloat(n) : n;
+    if (num == null || isNaN(num)) return '0';
+    return Math.round(num).toLocaleString('es-MX');
+  };
+  window.__fmtNumRaw = fmtNumRaw;
 
   /* ── CSS Injection ── */
   function injectStyles() {
@@ -234,6 +240,7 @@ window.SimuladorModule = (function() {
 
   function renderTabs() {
     var tabs = [
+      { key: 'config', label: 'Configuracion' },
       { key: 'marketing', label: 'Marketing' },
       { key: 'equipo', label: 'Equipo de Ventas' },
       { key: 'pipeline', label: 'Pipeline de Clientes' },
@@ -289,11 +296,185 @@ window.SimuladorModule = (function() {
       return;
     }
     switch (activeTab) {
+      case 'config': renderConfig(el); break;
       case 'marketing': renderMarketing(el); break;
       case 'equipo': renderEquipo(el); break;
       case 'pipeline': renderPipeline(el); break;
       case 'proyeccion': renderProyeccion(el); break;
     }
+  }
+
+  /* ══════════════════════════════════════════════
+     TAB 0: CONFIGURACION
+     ══════════════════════════════════════════════ */
+  function renderConfig(el) {
+    var html = '';
+
+    // ── Section A: Account Types ──
+    html += '<div class="sim-section">Tipos de Cuenta</div>';
+    html += '<div class="sim-card-grid">';
+    var tipos = state.tipos_cliente || [];
+    tipos.forEach(function(tc) {
+      html += '<div class="sim-card">';
+      html += '<h4>' + escHtml(tc.nombre) + ' <span class="sim-badge sim-badge-blue">' + escHtml(tc.codigo) + '</span></h4>';
+      html += cfgField(tc.id, 'ticket_promedio', 'Ticket Promedio ($)', tc.ticket_promedio, 'money');
+      html += cfgField(tc.id, 'frecuencia_compra_meses', 'Frecuencia de Compra (meses)', tc.frecuencia_compra_meses, 'int');
+      html += cfgField(tc.id, 'deals_por_anio', 'Deals por Año', tc.deals_por_anio, 'int');
+      html += cfgField(tc.id, 'tasa_cierre', 'Tasa de Cierre', tc.tasa_cierre, 'pct');
+      html += cfgField(tc.id, 'tasa_retencion', 'Tasa de Retencion', tc.tasa_retencion, 'pct');
+      html += cfgField(tc.id, 'meses_cierre', 'Meses para Cerrar', tc.meses_cierre, 'int');
+      html += cfgField(tc.id, 'horas_cotizacion', 'Horas Cotizacion (por trato)', tc.horas_cotizacion, 'hours');
+      html += cfgField(tc.id, 'horas_seguimiento', 'Horas Seguimiento (por trato)', tc.horas_seguimiento, 'hours');
+      html += cfgField(tc.id, 'clientes_iniciales', 'Clientes Iniciales', tc.clientes_iniciales, 'int');
+      html += cfgField(tc.id, 'dias_credito', 'Dias de Credito', tc.dias_credito, 'int');
+      html += cfgField(tc.id, 'facturas_por_cliente', 'Facturas/Mes/Cliente', tc.facturas_por_cliente, 'float');
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<div style="margin-bottom:16px"><button class="sim-btn sim-btn-ghost" onclick="window.__simAddTipoCliente()">+ Agregar Tipo de Cuenta</button></div>';
+
+    // ── Section B: Advisor Type Defaults ──
+    html += '<div class="sim-section">Tipos de Asesor</div>';
+    var comisiones = getConfigVal('comisiones') || {};
+    var cuotas = getConfigVal('cuotas_default') || {};
+    var maduracion = getConfigVal('maduracion') || {};
+    var tiposAsesor = ['rookie', 'junior', 'senior'];
+    var tipoLabels = { rookie: 'Rookie', junior: 'Junior', senior: 'Senior' };
+    var tipoColors = { rookie: '#F59E0B', junior: '#4C6EF5', senior: '#22C55E' };
+
+    html += '<div class="sim-card-grid">';
+    tiposAsesor.forEach(function(tipo) {
+      var com = comisiones[tipo] || {};
+      html += '<div class="sim-card">';
+      html += '<h4><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + tipoColors[tipo] + ';margin-right:6px"></span>' + tipoLabels[tipo] + '</h4>';
+      html += cfgComField(tipo, 'cuota', 'Cuota Mensual ($)', cuotas[tipo] || 0, 'money');
+      html += cfgComField(tipo, 'sueldo', 'Sueldo ($)', com.sueldo || 0, 'money');
+      html += cfgComField(tipo, 'base_pct', 'Comision Base', com.base_pct || 0, 'pct');
+      html += cfgComField(tipo, 'accel_pct', 'Acelerador', com.accel_pct || 0, 'pct');
+      html += cfgComField(tipo, 'overhead', 'Overhead ($)', com.overhead || 0, 'money');
+      html += '</div>';
+    });
+    html += '</div>';
+
+    // Maturation config
+    html += '<div class="sim-card" style="margin-bottom:16px">';
+    html += '<h4>Maduracion</h4>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">';
+    html += '<div class="sim-field"><label>Rookie → Junior (meses) <span title="Meses que tarda un Rookie en madurar a Junior. Afecta la proyeccion de cuando alcanza mayor productividad." style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#E2E8F0;color:#64748B;font-size:10px;font-weight:700;font-style:italic;font-family:serif;vertical-align:middle;line-height:1">i</span></label><input class="sim-input" type="number" min="1" value="' + (maduracion.rookie_to_junior_meses || 12) + '" onchange="window.__simCfgMaduracion(\'rookie_to_junior_meses\',this.value)"></div>';
+    html += '<div class="sim-field"><label>Junior → Senior (meses) <span title="Meses adicionales que tarda un Junior en madurar a Senior. Se suma al tiempo de Rookie para calcular el total." style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#E2E8F0;color:#64748B;font-size:10px;font-weight:700;font-style:italic;font-family:serif;vertical-align:middle;line-height:1">i</span></label><input class="sim-input" type="number" min="1" value="' + (maduracion.junior_to_senior_meses || 24) + '" onchange="window.__simCfgMaduracion(\'junior_to_senior_meses\',this.value)"></div>';
+    html += '</div></div>';
+
+    // ── Section C: Global Parameters ──
+    html += '<div class="sim-section">Parametros Globales</div>';
+    var margen = getConfigVal('margen_bruto');
+    var friccion = getConfigVal('factor_friccion');
+    var diasLab = getConfigVal('dias_laborables_mes');
+    var factorMant = getConfigVal('factor_mantenimiento');
+
+    html += '<div class="sim-card" style="margin-bottom:16px">';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">';
+    html += '<div class="sim-field"><label>Margen Bruto <span title="Margen de utilidad sobre ventas. 28% = de cada $100 vendidos, $28 son utilidad bruta. Afecta comisiones y utilidad proyectada." style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#E2E8F0;color:#64748B;font-size:10px;font-weight:700;font-style:italic;font-family:serif;vertical-align:middle;line-height:1">i</span></label><div style="display:flex;align-items:center;gap:4px"><input class="sim-input sim-input-sm" type="number" step="1" min="0" max="100" value="' + pctDisplay(margen != null ? margen : 0.28) + '" onchange="window.__simCfgGlobal(\'margen_bruto\',pctParse(this.value))"><span style="font-size:12px;color:#94A3B8">%</span></div></div>';
+    html += '<div class="sim-field"><label>Factor de Friccion <span title="Ajuste de realidad: del 100% teorico, que % se concreta. 85% = pierdes 15% por ineficiencias, tratos perdidos, tiempos muertos" style="cursor:help;color:#94A3B8">&#9432;</span></label><div style="display:flex;align-items:center;gap:4px"><input class="sim-input sim-input-sm" type="number" step="1" min="0" max="100" value="' + pctDisplay(friccion != null ? friccion : 0.85) + '" onchange="window.__simCfgGlobal(\'factor_friccion\',pctParse(this.value))"><span style="font-size:12px;color:#94A3B8">%</span></div></div>';
+    html += '<div class="sim-field"><label>Dias Laborables/Mes <span title="Dias productivos al mes. Se multiplica por hrs/dia de cada asesor para calcular las horas disponibles del equipo." style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#E2E8F0;color:#64748B;font-size:10px;font-weight:700;font-style:italic;font-family:serif;vertical-align:middle;line-height:1">i</span></label><input class="sim-input sim-input-sm" type="number" min="1" max="31" value="' + (diasLab || 22) + '" onchange="window.__simCfgGlobal(\'dias_laborables_mes\',parseInt(this.value))"></div>';
+    html += '<div class="sim-field"><label>Factor Mantenimiento <span title="% del tiempo de seguimiento que se dedica a cuentas que NO estan comprando este mes (mantenimiento de relacion)" style="cursor:help;color:#94A3B8">&#9432;</span></label><div style="display:flex;align-items:center;gap:4px"><input class="sim-input sim-input-sm" type="number" step="1" min="0" max="100" value="' + pctDisplay(factorMant != null ? factorMant : 0.3) + '" onchange="window.__simCfgGlobal(\'factor_mantenimiento\',pctParse(this.value))"><span style="font-size:12px;color:#94A3B8">%</span></div></div>';
+    html += '</div></div>';
+
+    // Seasonality
+    var seasonality = getConfigVal('seasonality') || {};
+    html += '<div class="sim-card" style="margin-bottom:16px">';
+    html += '<h4>Estacionalidad (multiplicadores mensuales) <span title="Factor que ajusta las ventas por temporalidad. 1.0 = mes promedio, mayor a 1 = temporada alta, menor a 1 = temporada baja. Se aplica a la venta de cada asesor y al ingreso del pipeline." style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#E2E8F0;color:#64748B;font-size:10px;font-weight:700;font-style:italic;font-family:serif;vertical-align:middle;line-height:1">i</span></h4>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:8px">';
+    MESES.forEach(function(m) {
+      html += '<div class="sim-field"><label>' + m + '</label><input class="sim-input sim-input-sm" type="number" step="0.01" min="0" value="' + (seasonality[m] != null ? seasonality[m] : 1) + '" onchange="window.__simCfgSeasonality(\'' + m + '\',this.value)"></div>';
+    });
+    html += '</div></div>';
+
+    el.innerHTML = html;
+  }
+
+  // ── Tooltips informativos por campo ──
+  var FIELD_TIPS = {
+    ticket_promedio: 'Valor promedio de cada trato/factura de este tipo de cuenta. Afecta directamente el ingreso proyectado.',
+    frecuencia_compra_meses: 'Cada cuantos meses compra este tipo de cuenta. Ej: 6 = compra 2 veces al ano. Afecta la distribucion de ingresos mes a mes.',
+    deals_por_anio: 'Cantidad de tratos/proyectos que genera este tipo de cuenta al ano.',
+    tasa_cierre: 'De cada 100 leads, que % se convierte en cliente. Afecta cuantos clientes nuevos entran al pipeline.',
+    tasa_retencion: 'Que % de clientes activos se mantiene de un mes a otro. 80% = pierdes 20% de clientes cada mes.',
+    meses_cierre: 'Cuantos meses tarda desde que llega el lead hasta que cierra como cliente. Afecta el desfase entre marketing y ventas.',
+    horas_cotizacion: 'Horas que invierte un asesor en cotizar un trato de este tipo. Afecta la capacidad disponible del equipo.',
+    horas_seguimiento: 'Horas de seguimiento por trato. Se aplica completo si esta comprando, o parcial (segun factor mantenimiento) si no.',
+    clientes_iniciales: 'Con cuantos clientes activos de este tipo arranca la simulacion en Enero.',
+    dias_credito: 'Dias que tarda el cliente en pagar. Afecta el flujo de efectivo (cashflow), no el ingreso.',
+    facturas_por_cliente: 'Promedio de facturas que genera cada cliente activo por mes. Multiplicado por ticket promedio da el ingreso.',
+    cuota: 'Meta de venta mensual para este tipo de asesor. Se multiplica por madurez y estacionalidad para proyectar la venta real.',
+    sueldo: 'Sueldo fijo mensual. Se suma a comisiones y overhead para calcular el costo total del asesor.',
+    base_pct: 'Comision base sobre la utilidad generada. Ej: 6.5% de la utilidad bruta de sus ventas.',
+    accel_pct: 'Comision adicional sobre utilidad que exceda la meta. Incentivo por rebasar el objetivo.',
+    overhead: 'Costos fijos por asesor: CRM, telefonia, correo, celular, etc. Se suma al costo mensual.'
+  };
+
+  function tipIcon(field) {
+    var tip = FIELD_TIPS[field];
+    if (!tip) return '';
+    return ' <span title="' + tip + '" style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#E2E8F0;color:#64748B;font-size:10px;font-weight:700;font-style:italic;font-family:serif;vertical-align:middle;line-height:1">i</span>';
+  }
+
+  // ── Config helper: render a field for tipo_cliente ──
+  function cfgField(tipoId, field, label, value, type) {
+    var inputAttrs = 'class="sim-input sim-input-sm" ';
+    var displayVal = value != null ? value : 0;
+    var handler = 'window.__simPatchTipo(' + tipoId + ',\'' + field + '\',' + (type === 'pct' ? 'pctParse(this.value)' : 'this.value') + ')';
+    var lbl = label + tipIcon(field);
+
+    if (type === 'pct') {
+      displayVal = pctDisplay(value || 0);
+      return '<div class="sim-field"><label>' + lbl + '</label><div style="display:flex;align-items:center;gap:4px"><input ' + inputAttrs + 'type="number" step="1" min="0" max="100" value="' + displayVal + '" onchange="' + handler + '"><span style="font-size:12px;color:#94A3B8">%</span></div></div>';
+    }
+    if (type === 'money') {
+      return '<div class="sim-field"><label>' + lbl + '</label><div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#94A3B8;font-weight:600">$</span><input ' + inputAttrs + 'type="text" inputmode="numeric" value="' + fmtNumRaw(Math.round(displayVal)) + '" onfocus="this.value=this.value.replace(/,/g,\'\')" onblur="this.value=window.__fmtNumRaw(this.value.replace(/,/g,\'\'))" onchange="' + handler.replace('this.value', 'this.value.replace(/,/g,\'\')') + '"></div></div>';
+    }
+    if (type === 'int') {
+      return '<div class="sim-field"><label>' + lbl + '</label><input ' + inputAttrs + 'type="number" step="1" min="0" value="' + Math.round(displayVal) + '" onchange="' + handler + '"></div>';
+    }
+    if (type === 'hours') {
+      return '<div class="sim-field"><label>' + lbl + '</label><div style="display:flex;align-items:center;gap:4px"><input ' + inputAttrs + 'type="number" step="0.5" min="0" value="' + displayVal + '" onchange="' + handler + '"><span style="font-size:12px;color:#94A3B8">hrs</span></div></div>';
+    }
+    // float
+    return '<div class="sim-field"><label>' + lbl + '</label><input ' + inputAttrs + 'type="number" step="0.1" min="0" value="' + displayVal + '" onchange="' + handler + '"></div>';
+  }
+
+  // ── Config helper: render a field for comisiones/cuotas config ──
+  function cfgComField(tipo, field, label, value, type) {
+    var inputAttrs = 'class="sim-input sim-input-sm" ';
+    var displayVal = value != null ? value : 0;
+    var lbl = label + tipIcon(field);
+
+    if (type === 'pct') {
+      displayVal = pctDisplay(value || 0);
+      return '<div class="sim-field"><label>' + lbl + '</label><div style="display:flex;align-items:center;gap:4px"><input ' + inputAttrs + 'type="number" step="1" min="0" max="100" value="' + displayVal + '" onchange="window.__simCfgComision(\'' + tipo + '\',\'' + field + '\',pctParse(this.value))"><span style="font-size:12px;color:#94A3B8">%</span></div></div>';
+    }
+    if (field === 'cuota' || type === 'money') {
+      var onchangeHandler = field === 'cuota'
+        ? 'window.__simCfgCuota(\'' + tipo + '\',this.value.replace(/,/g,\'\'))'
+        : 'window.__simCfgComision(\'' + tipo + '\',\'' + field + '\',parseFloat(this.value.replace(/,/g,\'\')))';
+      return '<div class="sim-field"><label>' + lbl + '</label><div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#94A3B8;font-weight:600">$</span><input ' + inputAttrs + 'type="text" inputmode="numeric" value="' + fmtNumRaw(Math.round(displayVal)) + '" onfocus="this.value=this.value.replace(/,/g,\'\')" onblur="this.value=window.__fmtNumRaw(this.value.replace(/,/g,\'\'))" onchange="' + onchangeHandler + '"></div></div>';
+    }
+    return '<div class="sim-field"><label>' + lbl + '</label><input ' + inputAttrs + 'type="number" value="' + Math.round(displayVal) + '" onchange="window.__simCfgComision(\'' + tipo + '\',\'' + field + '\',parseFloat(this.value))"></div>';
+  }
+
+  // ── Percentage helpers (display as 65, store as 0.65) ──
+  function pctDisplay(v) { return Math.round((v || 0) * 100); }
+  function pctParse(v) { return parseFloat(v) / 100; }
+  // Make pctParse available in inline handlers
+  window.pctParse = pctParse;
+
+  // ── Config value getter (from state.config array) ──
+  function getConfigVal(clave) {
+    var configs = state.config;
+    if (Array.isArray(configs)) {
+      var entry = configs.find(function(c) { return c.clave === clave; });
+      return entry ? entry.valor : null;
+    }
+    return configs[clave] || null;
   }
 
   /* ══════════════════════════════════════════════
@@ -304,26 +485,68 @@ window.SimuladorModule = (function() {
     var mkt = sim.marketing;
     var cfg = mkt.config || {};
     var canales = cfg.canales || {};
+    var tipos = state.tipos_cliente || [];
 
-    var html = '<div class="sim-section">Configuracion Global</div>';
+    var html = '';
+
+    // ── Section 1: Lead Objectives (THE PRIMARY INPUT) ──
+    html += '<div class="sim-section">Objetivos de Leads por Tipo de Cuenta</div>';
+    html += '<div class="sim-card" style="margin-bottom:16px">';
+    html += '<p style="font-size:12px;color:#64748B;margin-bottom:12px">Define cuantos leads calificados mensuales buscas por cada tipo de cuenta. Estos alimentan directamente el pipeline de ventas.</p>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">';
+    var totalLeads = 0;
+    tipos.forEach(function(tc) {
+      var leads = tc.leads_objetivo || 0;
+      totalLeads += leads;
+      html += '<div>';
+      html += '<div style="font-size:12px;font-weight:600;color:#1E293B;margin-bottom:4px">' + escHtml(tc.nombre) + ' <span class="sim-badge sim-badge-blue">' + escHtml(tc.codigo) + '</span></div>';
+      html += '<input class="sim-input" type="number" min="0" value="' + leads + '" style="width:100%" onchange="window.__simPatchTipo(' + tc.id + ',\'leads_objetivo\',parseInt(this.value))">';
+      html += '<div style="font-size:11px;color:#94A3B8;margin-top:4px">leads/mes</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #E2E8F0;display:flex;gap:24px">';
+    html += '<div><span style="font-size:11px;color:#94A3B8">Total Leads/Mes</span><div style="font-size:20px;font-weight:700;color:#4C6EF5">' + fmtNum(totalLeads) + '</div></div>';
+    html += '<div><span style="font-size:11px;color:#94A3B8">Total Leads/Año</span><div style="font-size:20px;font-weight:700;color:#4C6EF5">' + fmtNum(totalLeads * 12) + '</div></div>';
+    html += '</div>';
+    html += '</div>';
+
+    // ── Section 2: Conversion Funnel (calculated, read-only) ──
+    html += '<div class="sim-section">Embudo de Conversion (estimado)</div>';
+    html += '<div class="sim-panel"><div class="sim-table-wrap"><table>';
+    html += '<thead><tr><th>Tipo</th><th>Leads/Mes</th><th>Tasa Cierre</th><th>Nuevos Clientes/Mes</th><th>Ticket Promedio</th><th>Ingreso Potencial/Mes</th></tr></thead>';
+    html += '<tbody>';
+    var totalIngPotencial = 0;
+    tipos.forEach(function(tc) {
+      var leads = tc.leads_objetivo || 0;
+      var nuevos = leads * (tc.tasa_cierre || 0.5);
+      var ingPot = nuevos * (tc.ticket_promedio || 0);
+      totalIngPotencial += ingPot;
+      html += '<tr>';
+      html += '<td style="font-weight:500">' + escHtml(tc.nombre) + '</td>';
+      html += '<td>' + fmtNum(leads) + '</td>';
+      html += '<td>' + pctDisplay(tc.tasa_cierre || 0) + '%</td>';
+      html += '<td style="font-weight:600">' + nuevos.toFixed(1) + '</td>';
+      html += '<td>' + fmt(tc.ticket_promedio || 0) + '</td>';
+      html += '<td style="color:#22C55E;font-weight:600">' + fmt(ingPot) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody>';
+    html += '<tfoot><tr><td colspan="4"></td><td>Total Potencial/Mes</td><td style="font-weight:700;color:#22C55E">' + fmt(totalIngPotencial) + '</td></tr></tfoot>';
+    html += '</table></div></div>';
+
+    // ── Section 3: Marketing Config (reference, secondary) ──
+    html += '<div class="sim-section">Configuracion de Canales (referencia)</div>';
     html += '<div class="sim-card-grid">';
     html += '<div class="sim-card"><div class="sim-field"><label>Presupuesto Mensual MKT</label>' +
-      '<input class="sim-input" type="number" value="' + (cfg.presupuesto_mensual || 0) + '" onchange="window.__simMktConfig(\'presupuesto_mensual\',this.value)"></div></div>';
+      '<input class="sim-input" type="number" value="' + (cfg.presupuesto_mensual || 0) + '" onchange="window.__simMktConfig(\'presupuesto_mensual\',parseFloat(this.value))"></div></div>';
     html += '<div class="sim-card"><div class="sim-field"><label>Tasa Calificacion MQL-SQL</label>' +
-      '<input class="sim-input" type="number" step="0.01" min="0" max="1" value="' + (cfg.tasa_calificacion || 0) + '" onchange="window.__simMktConfig(\'tasa_calificacion\',this.value)"></div></div>';
-
-    var dist = cfg.distribucion_calidad || {};
-    html += '<div class="sim-card"><h4>Distribucion de Calidad</h4>';
-    html += '<div class="sim-field"><label>AAAH %</label><input class="sim-input sim-input-sm" type="number" step="0.01" min="0" max="1" value="' + (dist.AAAH || 0) + '" onchange="window.__simMktDist(\'AAAH\',this.value)"></div>';
-    html += '<div class="sim-field"><label>AAAC %</label><input class="sim-input sim-input-sm" type="number" step="0.01" min="0" max="1" value="' + (dist.AAAC || 0) + '" onchange="window.__simMktDist(\'AAAC\',this.value)"></div>';
-    html += '<div class="sim-field"><label>A %</label><input class="sim-input sim-input-sm" type="number" step="0.01" min="0" max="1" value="' + (dist.A || 0) + '" onchange="window.__simMktDist(\'A\',this.value)"></div>';
-    html += '</div>';
+      '<div style="display:flex;align-items:center;gap:4px"><input class="sim-input sim-input-sm" type="number" step="1" min="0" max="100" value="' + pctDisplay(cfg.tasa_calificacion || 0) + '" onchange="window.__simMktConfig(\'tasa_calificacion\',pctParse(this.value))"><span style="font-size:12px;color:#94A3B8">%</span></div></div></div>';
     html += '</div>';
 
     // Channels table
-    html += '<div class="sim-section">Canales de Marketing</div>';
-    html += '<div class="sim-panel"><div class="sim-table-wrap"><table>';
-    html += '<thead><tr><th>Canal</th><th>Presupuesto (%)</th><th>CPL</th><th>Leads/Mes</th></tr></thead>';
+    html += '<div class="sim-panel" style="margin-bottom:16px"><div class="sim-table-wrap"><table>';
+    html += '<thead><tr><th>Canal</th><th>Presupuesto (%)</th><th>CPL</th><th>Leads/Mes (estimado)</th></tr></thead>';
     html += '<tbody>';
     var canalKeys = Object.keys(canales);
     canalKeys.forEach(function(key) {
@@ -331,8 +554,8 @@ window.SimuladorModule = (function() {
       var leadsPerMonth = cfg.presupuesto_mensual > 0 && c.cpl > 0 ? Math.round(cfg.presupuesto_mensual * c.pct / c.cpl) : 0;
       html += '<tr>';
       html += '<td style="font-weight:500">' + key + '</td>';
-      html += '<td><input class="sim-input sim-input-sm" type="number" step="0.01" min="0" max="1" value="' + (c.pct || 0) + '" onchange="window.__simMktCanal(\'' + key + '\',\'pct\',this.value)"></td>';
-      html += '<td><input class="sim-input sim-input-sm" type="number" value="' + (c.cpl || 0) + '" onchange="window.__simMktCanal(\'' + key + '\',\'cpl\',this.value)"></td>';
+      html += '<td><div style="display:flex;align-items:center;gap:4px"><input class="sim-input sim-input-sm" type="number" step="1" min="0" max="100" value="' + pctDisplay(c.pct || 0) + '" onchange="window.__simMktCanal(\'' + key + '\',\'pct\',pctParse(this.value))"><span style="font-size:11px;color:#94A3B8">%</span></div></td>';
+      html += '<td><input class="sim-input sim-input-sm" type="number" value="' + (c.cpl || 0) + '" onchange="window.__simMktCanal(\'' + key + '\',\'cpl\',parseFloat(this.value))"></td>';
       html += '<td>' + fmtNum(leadsPerMonth) + '</td>';
       html += '</tr>';
     });
@@ -340,10 +563,10 @@ window.SimuladorModule = (function() {
 
     // KPI cards
     html += '<div class="sim-card-row">';
-    html += '<div class="sim-card"><div class="kl">CPL Promedio</div><div class="kv">' + fmt(mkt.cpl_promedio) + '</div></div>';
-    html += '<div class="sim-card"><div class="kl">Total Leads/Mes</div><div class="kv">' + fmtNum(Math.round(mkt.total_leads_anual / 12)) + '</div></div>';
-    html += '<div class="sim-card"><div class="kl">CAC</div><div class="kv">' + fmt(mkt.cac) + '</div></div>';
-    html += '<div class="sim-card"><div class="kl">Inversion Anual</div><div class="kv">' + fmt(mkt.inversion_anual) + '</div></div>';
+    html += '<div class="sim-card"><div class="kl">Total Leads Objetivo/Mes</div><div class="kv blue">' + fmtNum(totalLeads) + '</div></div>';
+    html += '<div class="sim-card"><div class="kl">Ingreso Potencial/Mes</div><div class="kv green">' + fmt(totalIngPotencial) + '</div></div>';
+    html += '<div class="sim-card"><div class="kl">Ingreso Potencial/Año</div><div class="kv green">' + fmt(totalIngPotencial * 12) + '</div></div>';
+    html += '<div class="sim-card"><div class="kl">Inversion MKT Anual</div><div class="kv">' + fmt(mkt.inversion_anual) + '</div></div>';
     html += '</div>';
 
     // 12-month leads chart
@@ -363,11 +586,11 @@ window.SimuladorModule = (function() {
     var html = '<div class="sim-section">Asesores de Venta</div>';
     html += '<div style="margin-bottom:12px"><button class="sim-btn sim-btn-primary" onclick="window.__simAddAsesor()">+ Agregar Asesor</button></div>';
     html += '<div class="sim-panel"><div class="sim-table-wrap"><table>';
-    // BUG FIX: use cuota_mensual and madurez_pct field names; add max_tratos_mes and max_cartera_activa columns
-    html += '<thead><tr><th>Activo</th><th>Nombre</th><th>Tipo</th><th>Cuota ($)</th><th>Madurez (%)</th><th>Max Tratos/Mes</th><th>Max Cartera</th><th>Costo Mensual</th><th>Proyeccion Anual</th><th></th></tr></thead>';
+    html += '<thead><tr><th>Activo</th><th>Nombre</th><th>Tipo</th><th>Fecha Inicio</th><th>Cuota ($)</th><th>Madurez (%)</th><th>Hrs/Dia</th><th>Costo Mensual</th><th>Proyeccion Anual</th><th></th></tr></thead>';
     html += '<tbody>';
 
     var asesores = eq.por_asesor || [];
+    var tipos = state.tipos_cliente || [];
     asesores.forEach(function(a) {
       var asesorState = state.asesores.find(function(x) { return x.id === a.id; }) || {};
       var activo = asesorState.activo !== false;
@@ -379,19 +602,53 @@ window.SimuladorModule = (function() {
         '<option value="junior"' + (a.tipo === 'junior' ? ' selected' : '') + '>Junior</option>' +
         '<option value="senior"' + (a.tipo === 'senior' ? ' selected' : '') + '>Senior</option>' +
         '</select></td>';
-      // FIX: display cuota_mensual (fallback to cuota for compat)
+      html += '<td><input class="sim-input sim-input-sm" type="date" value="' + (a.fecha_inicio || asesorState.fecha_inicio || '') + '" onchange="window.__simPatchAsesor(' + a.id + ',\'fecha_inicio\',this.value)"></td>';
       html += '<td><input class="sim-input sim-input-sm" type="number" value="' + (a.cuota_mensual || a.cuota || 0) + '" onchange="window.__simPatchAsesor(' + a.id + ',\'cuota_mensual\',this.value)"></td>';
-      // FIX: display madurez_pct (fallback to madurez for compat)
-      html += '<td><input class="sim-input sim-input-sm" type="number" min="0" max="100" value="' + (a.madurez_pct != null ? a.madurez_pct : (a.madurez || 0)) + '" onchange="window.__simPatchAsesor(' + a.id + ',\'madurez_pct\',this.value)"></td>';
-      // NEW: max_tratos_mes column
-      html += '<td><input class="sim-input sim-input-sm" type="number" min="0" value="' + (a.max_tratos_mes || asesorState.max_tratos_mes || 0) + '" onchange="window.__simPatchAsesor(' + a.id + ',\'max_tratos_mes\',this.value)"></td>';
-      // NEW: max_cartera_activa column
-      html += '<td><input class="sim-input sim-input-sm" type="number" min="0" value="' + (a.max_cartera_activa || asesorState.max_cartera_activa || 0) + '" onchange="window.__simPatchAsesor(' + a.id + ',\'max_cartera_activa\',this.value)"></td>';
+      html += '<td><input class="sim-input sim-input-xs" type="number" min="0" max="100" value="' + (a.madurez_pct != null ? a.madurez_pct : (a.madurez || 0)) + '" onchange="window.__simPatchAsesor(' + a.id + ',\'madurez_pct\',this.value)"></td>';
+      html += '<td><input class="sim-input sim-input-xs" type="number" step="0.5" min="1" max="12" value="' + (a.horas_habiles_dia || asesorState.horas_habiles_dia || 6) + '" onchange="window.__simPatchAsesor(' + a.id + ',\'horas_habiles_dia\',this.value)"></td>';
       var costoMensual = a.costo_meses ? Math.round(a.costo_meses.reduce(function(s, v) { return s + v; }, 0) / 12) : 0;
       html += '<td>' + fmt(costoMensual) + '</td>';
       html += '<td style="font-weight:600">' + fmt(a.total) + '</td>';
       html += '<td><button class="sim-btn-danger" onclick="window.__simDeleteAsesor(' + a.id + ')">Eliminar</button></td>';
       html += '</tr>';
+
+      // ── Maturation Timeline ──
+      var tl = a.maturation_timeline || [];
+      if (tl.length && a.tipo !== 'senior') {
+        var juniorDate = null, seniorDate = null;
+        tl.forEach(function(t) {
+          if (t.transicion === 'rookie_to_junior' && !juniorDate) juniorDate = t.mes;
+          if (t.transicion === 'junior_to_senior' && !seniorDate) seniorDate = t.mes;
+        });
+        html += '<tr style="background:#F8FAFC"><td colspan="10" style="padding:6px 12px">';
+        html += '<div style="display:flex;align-items:center;gap:8px;font-size:11px">';
+        html += '<span style="color:#94A3B8">Proyeccion:</span>';
+        var tipoColors = { rookie: '#F59E0B', junior: '#4C6EF5', senior: '#22C55E' };
+        if (a.tipo === 'rookie') {
+          html += '<span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:9999px;font-weight:600">Rookie</span>';
+          if (juniorDate) html += '<span style="color:#94A3B8">→</span><span style="background:#EDF2FF;color:#4C6EF5;padding:2px 8px;border-radius:9999px;font-weight:600">Junior ' + juniorDate + '</span>';
+          if (seniorDate) html += '<span style="color:#94A3B8">→</span><span style="background:#F0FDF4;color:#15803D;padding:2px 8px;border-radius:9999px;font-weight:600">Senior ' + seniorDate + '</span>';
+        } else if (a.tipo === 'junior') {
+          html += '<span style="background:#EDF2FF;color:#4C6EF5;padding:2px 8px;border-radius:9999px;font-weight:600">Junior</span>';
+          if (seniorDate) html += '<span style="color:#94A3B8">→</span><span style="background:#F0FDF4;color:#15803D;padding:2px 8px;border-radius:9999px;font-weight:600">Senior ' + seniorDate + '</span>';
+        }
+        html += '</div></td></tr>';
+      }
+
+      // ── Portfolio per advisor ──
+      var cartera = a.cartera_actual || asesorState.cartera_actual || {};
+      html += '<tr style="background:#FAFBFC"><td colspan="10" style="padding:6px 12px">';
+      html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
+      html += '<span style="font-size:11px;color:#94A3B8;font-weight:600">Cartera actual:</span>';
+      tipos.forEach(function(tc) {
+        var count = cartera[tc.codigo] || 0;
+        html += '<div style="display:flex;align-items:center;gap:4px;font-size:11px"><span style="color:#64748B">' + tc.codigo + '</span>';
+        html += '<input class="sim-input sim-input-xs" type="number" min="0" value="' + count + '" onchange="window.__simPatchCartera(' + a.id + ',\'' + tc.codigo + '\',this.value)">';
+        html += '</div>';
+      });
+      var totalCartera = Object.values(cartera).reduce(function(s, v) { return s + (v || 0); }, 0);
+      html += '<span style="font-size:11px;color:#94A3B8">Total: <strong>' + totalCartera + '</strong></span>';
+      html += '</div></td></tr>';
     });
 
     html += '</tbody>';
@@ -429,21 +686,22 @@ window.SimuladorModule = (function() {
       });
       html += '</div>';
 
-      // Capacity detail table
-      html += '<div class="sim-panel"><div class="sim-panel-header"><span>Detalle de Capacidad</span></div>';
+      // Capacity detail table (hours-based)
+      html += '<div class="sim-panel"><div class="sim-panel-header"><span>Detalle de Capacidad por Horas</span></div>';
       html += '<div class="sim-table-wrap"><table>';
-      html += '<thead><tr><th>Mes</th><th>Clientes Activos</th><th>Max Cartera</th><th>Utilizacion</th><th>Asesores Necesarios</th><th>Asesores Actuales</th><th>Deficit</th></tr></thead>';
+      html += '<thead><tr><th>Mes</th><th>Hrs Disponibles</th><th>Hrs Ocupadas</th><th>Hrs Restantes</th><th>Utilizacion</th><th>Nuevos Tratos Posibles</th><th>Asesores Necesarios</th><th>Deficit</th></tr></thead>';
       html += '<tbody>';
       capacidad.forEach(function(c) {
         var pct = c.utilizacion_pct || 0;
         var color = pct > 90 ? '#EF4444' : pct > 70 ? '#F59E0B' : '#22C55E';
         html += '<tr>';
         html += '<td style="font-weight:500">' + c.mes + '</td>';
-        html += '<td>' + fmtNum(c.clientes_activos) + '</td>';
-        html += '<td>' + fmtNum(c.max_cartera_equipo) + '</td>';
+        html += '<td>' + fmtNum(c.horas_disponibles || 0) + '</td>';
+        html += '<td>' + fmtNum(c.horas_ocupadas || 0) + '</td>';
+        html += '<td style="font-weight:600;color:#4C6EF5">' + fmtNum(c.horas_restantes || 0) + '</td>';
         html += '<td style="color:' + color + ';font-weight:600">' + fmtPctRaw(pct) + '</td>';
+        html += '<td>' + fmtNum(c.nuevos_tratos_posibles || 0) + '</td>';
         html += '<td>' + fmtNum(c.asesores_necesarios) + '</td>';
-        html += '<td>' + fmtNum(c.asesores_actuales) + '</td>';
         html += '<td style="color:' + (c.deficit > 0 ? '#EF4444' : '#22C55E') + ';font-weight:600">' + (c.deficit > 0 ? '+' + c.deficit : '0') + '</td>';
         html += '</tr>';
       });
@@ -470,8 +728,8 @@ window.SimuladorModule = (function() {
 
       html += '<div class="sim-card">';
       html += '<h4>' + escHtml(t.nombre) + ' <span class="sim-badge sim-badge-blue">' + t.codigo + '</span></h4>';
-      html += '<div class="sim-field"><label>Tasa de Retencion %</label><input class="sim-input" type="number" step="0.01" min="0" max="1" value="' + (tc.tasa_retencion || 0) + '" onchange="window.__simPatchTipo(' + tc.id + ',\'tasa_retencion\',this.value)"></div>';
-      html += '<div class="sim-field"><label>Tasa de Cierre %</label><input class="sim-input" type="number" step="0.01" min="0" max="1" value="' + (tc.tasa_cierre || 0) + '" onchange="window.__simPatchTipo(' + tc.id + ',\'tasa_cierre\',this.value)"></div>';
+      html += '<div class="sim-field"><label>Tasa de Retencion</label><div style="display:flex;align-items:center;gap:4px"><input class="sim-input sim-input-sm" type="number" step="1" min="0" max="100" value="' + pctDisplay(tc.tasa_retencion || 0) + '" onchange="window.__simPatchTipo(' + tc.id + ',\'tasa_retencion\',pctParse(this.value))"><span style="font-size:12px;color:#94A3B8">%</span></div></div>';
+      html += '<div class="sim-field"><label>Tasa de Cierre</label><div style="display:flex;align-items:center;gap:4px"><input class="sim-input sim-input-sm" type="number" step="1" min="0" max="100" value="' + pctDisplay(tc.tasa_cierre || 0) + '" onchange="window.__simPatchTipo(' + tc.id + ',\'tasa_cierre\',pctParse(this.value))"><span style="font-size:12px;color:#94A3B8">%</span></div></div>';
       html += '<div class="sim-field"><label>Meses para Cerrar</label><input class="sim-input sim-input-sm" type="number" min="1" value="' + (tc.meses_cierre || 1) + '" onchange="window.__simPatchTipo(' + tc.id + ',\'meses_cierre\',this.value)"></div>';
       html += '<div class="sim-field"><label>Ticket Promedio $</label><input class="sim-input" type="number" value="' + (tc.ticket_promedio || 0) + '" onchange="window.__simPatchTipo(' + tc.id + ',\'ticket_promedio\',this.value)"></div>';
       // BUG FIX: use facturas_por_cliente instead of facturas_mes
@@ -934,7 +1192,7 @@ window.SimuladorModule = (function() {
   /* ── Marketing Config ── */
   window.__simMktConfig = function(key, val) {
     var cfg = state.simulation.marketing.config || {};
-    cfg[key] = parseFloat(val);
+    cfg[key] = typeof val === 'number' ? val : parseFloat(val);
     apiFireAndForget('PUT', '/api/simulador/config/marketing', { valor: cfg });
     runSimulationDebounced();
   };
@@ -942,7 +1200,7 @@ window.SimuladorModule = (function() {
   window.__simMktDist = function(key, val) {
     var cfg = state.simulation.marketing.config || {};
     if (!cfg.distribucion_calidad) cfg.distribucion_calidad = {};
-    cfg.distribucion_calidad[key] = parseFloat(val);
+    cfg.distribucion_calidad[key] = typeof val === 'number' ? val : parseFloat(val);
     apiFireAndForget('PUT', '/api/simulador/config/marketing', { valor: cfg });
     runSimulationDebounced();
   };
@@ -951,9 +1209,83 @@ window.SimuladorModule = (function() {
     var cfg = state.simulation.marketing.config || {};
     if (!cfg.canales) cfg.canales = {};
     if (!cfg.canales[canal]) cfg.canales[canal] = {};
-    cfg.canales[canal][field] = parseFloat(val);
+    cfg.canales[canal][field] = typeof val === 'number' ? val : parseFloat(val);
     apiFireAndForget('PUT', '/api/simulador/config/marketing', { valor: cfg });
     runSimulationDebounced();
+  };
+
+  /* ── Configuration Tab Handlers ── */
+  window.__simCfgComision = function(tipo, field, val) {
+    var configs = Array.isArray(state.config) ? state.config : [];
+    var entry = configs.find(function(c) { return c.clave === 'comisiones'; });
+    var comisiones = entry ? Object.assign({}, entry.valor) : {};
+    if (!comisiones[tipo]) comisiones[tipo] = {};
+    comisiones[tipo] = Object.assign({}, comisiones[tipo]);
+    comisiones[tipo][field] = val;
+    if (entry) entry.valor = comisiones;
+    apiFireAndForget('PUT', '/api/simulador/config/comisiones', { valor: comisiones });
+    runSimulationDebounced();
+  };
+
+  window.__simCfgCuota = function(tipo, val) {
+    var configs = Array.isArray(state.config) ? state.config : [];
+    var entry = configs.find(function(c) { return c.clave === 'cuotas_default'; });
+    var cuotas = entry ? Object.assign({}, entry.valor) : {};
+    cuotas[tipo] = parseFloat(val) || 0;
+    if (entry) entry.valor = cuotas;
+    apiFireAndForget('PUT', '/api/simulador/config/cuotas_default', { valor: cuotas });
+    runSimulationDebounced();
+  };
+
+  window.__simCfgMaduracion = function(field, val) {
+    var configs = Array.isArray(state.config) ? state.config : [];
+    var entry = configs.find(function(c) { return c.clave === 'maduracion'; });
+    var mad = entry ? Object.assign({}, entry.valor) : {};
+    mad[field] = parseInt(val) || 12;
+    if (entry) entry.valor = mad;
+    apiFireAndForget('PUT', '/api/simulador/config/maduracion', { valor: mad });
+    runSimulationDebounced();
+  };
+
+  window.__simCfgGlobal = function(clave, val) {
+    var configs = Array.isArray(state.config) ? state.config : [];
+    var entry = configs.find(function(c) { return c.clave === clave; });
+    if (entry) entry.valor = val;
+    apiFireAndForget('PUT', '/api/simulador/config/' + clave, { valor: val });
+    runSimulationDebounced();
+  };
+
+  window.__simCfgSeasonality = function(mes, val) {
+    var configs = Array.isArray(state.config) ? state.config : [];
+    var entry = configs.find(function(c) { return c.clave === 'seasonality'; });
+    var seas = entry ? Object.assign({}, entry.valor) : {};
+    seas[mes] = parseFloat(val) || 1;
+    if (entry) entry.valor = seas;
+    apiFireAndForget('PUT', '/api/simulador/config/seasonality', { valor: seas });
+    runSimulationDebounced();
+  };
+
+  window.__simAddTipoCliente = function() {
+    showModal('Agregar Tipo de Cuenta', [
+      '<div class="sim-field"><label>Codigo</label><input class="sim-input" style="width:100%;text-align:left" id="sim-new-tc-codigo" placeholder="Ej: C"></div>',
+      '<div class="sim-field"><label>Nombre</label><input class="sim-input" style="width:100%;text-align:left" id="sim-new-tc-nombre" placeholder="Nombre descriptivo"></div>',
+      '<div class="sim-field"><label>Ticket Promedio ($)</label><input class="sim-input" type="number" id="sim-new-tc-ticket" value="50000" style="width:100%"></div>',
+      '<div class="sim-field"><label>Frecuencia de Compra (meses)</label><input class="sim-input" type="number" id="sim-new-tc-freq" value="3" min="1" style="width:100%"></div>'
+    ].join(''), function() {
+      var codigo = document.getElementById('sim-new-tc-codigo').value || 'X';
+      var nombre = document.getElementById('sim-new-tc-nombre').value || 'Nuevo Tipo';
+      var ticket = parseFloat(document.getElementById('sim-new-tc-ticket').value) || 50000;
+      var freq = parseInt(document.getElementById('sim-new-tc-freq').value) || 3;
+      api('POST', '/api/simulador/tipos-cliente/', {
+        codigo: codigo, nombre: nombre, ticket_promedio: ticket, frecuencia_compra_meses: freq
+      }).then(function(newTC) {
+        state.tipos_cliente.push(newTC);
+        if (window.__toast) window.__toast('Tipo de cuenta agregado', 'success');
+        renderContent();
+      }).catch(function() {
+        if (window.__toast) window.__toast('Error al agregar tipo', 'error');
+      });
+    });
   };
 
   /* ── Equipo (Asesores) ── */
@@ -1022,10 +1354,21 @@ window.SimuladorModule = (function() {
     });
   };
 
+  /* ── Cartera (Portfolio per Advisor) ── */
+  window.__simPatchCartera = function(id, tipoCodigo, val) {
+    var a = state.asesores.find(function(x) { return x.id === id; });
+    if (a) {
+      if (!a.cartera_actual) a.cartera_actual = {};
+      a.cartera_actual[tipoCodigo] = parseInt(val) || 0;
+      apiFireAndForget('PATCH', '/api/simulador/asesores/' + id, { cartera_actual: a.cartera_actual });
+      runSimulationDebounced();
+    }
+  };
+
   /* ── Pipeline (Tipos de Cliente) ── */
   window.__simPatchTipo = function(id, field, val) {
     var data = {};
-    data[field] = parseFloat(val);
+    data[field] = typeof val === 'number' ? val : parseFloat(val);
     var t = state.tipos_cliente.find(function(x) { return x.id === id; });
     if (t) t[field] = data[field];
     apiFireAndForget('PATCH', '/api/simulador/tipos-cliente/' + id, data);
@@ -1216,7 +1559,7 @@ window.SimuladorModule = (function() {
         leadsOverride: {},
         leadsOverrideActive: {}
       };
-      activeTab = 'marketing';
+      activeTab = 'config';
       simTimer = null;
       editTimer = null;
       renderShell();
@@ -1241,6 +1584,15 @@ window.SimuladorModule = (function() {
       delete window.__simViewScenario;
       delete window.__simToggleLeadsOverride;
       delete window.__simSetLeadMonth;
+      delete window.__simPatchCartera;
+      delete window.__simCfgComision;
+      delete window.__simCfgCuota;
+      delete window.__simCfgMaduracion;
+      delete window.__simCfgGlobal;
+      delete window.__simCfgSeasonality;
+      delete window.__simAddTipoCliente;
+      delete window.pctParse;
+      delete window.__fmtNumRaw;
       container = null;
     }
   };

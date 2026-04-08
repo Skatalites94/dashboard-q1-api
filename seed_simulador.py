@@ -8,13 +8,13 @@ from app.database import Base, SessionLocal, engine
 from app.models import EscenarioIngreso, SimAsesor, SimConfig, SimTipoCliente
 
 asesores = [
-    {"nombre": "Ivette García", "tipo": "senior", "fecha_inicio": "2024-01-01", "cuota_mensual": 2500000, "madurez_pct": 80},
-    {"nombre": "Ulises Arias", "tipo": "junior", "fecha_inicio": "2025-01-01", "cuota_mensual": 1200000, "madurez_pct": 70},
-    {"nombre": "Margarita González", "tipo": "junior", "fecha_inicio": "2025-01-01", "cuota_mensual": 1200000, "madurez_pct": 80},
-    {"nombre": "Elba Karina Hernández", "tipo": "rookie", "fecha_inicio": "2026-01-01", "cuota_mensual": 1200000, "madurez_pct": 60},
-    {"nombre": "Ángel Escamilla", "tipo": "junior", "fecha_inicio": "2026-01-01", "cuota_mensual": 1200000, "madurez_pct": 50},
-    {"nombre": "Irma Ibarra", "tipo": "rookie", "fecha_inicio": "2025-11-01", "cuota_mensual": 1200000, "madurez_pct": 0, "activo": False, "nota": "Cortada en escenario actual"},
-    {"nombre": "Lorena Durán", "tipo": "rookie", "fecha_inicio": "2025-11-01", "cuota_mensual": 1200000, "madurez_pct": 0, "activo": False, "nota": "Cortada en escenario actual"},
+    {"nombre": "Ivette García", "tipo": "senior", "fecha_inicio": "2024-01-01", "cuota_mensual": 2500000, "madurez_pct": 80, "horas_habiles_dia": 6.0, "cartera_actual": {"AAAH": 4, "AAAC": 6, "A": 12, "B": 3}},
+    {"nombre": "Ulises Arias", "tipo": "junior", "fecha_inicio": "2025-01-01", "cuota_mensual": 1200000, "madurez_pct": 70, "horas_habiles_dia": 6.0, "cartera_actual": {"AAAH": 2, "AAAC": 4, "A": 8, "B": 2}},
+    {"nombre": "Margarita González", "tipo": "junior", "fecha_inicio": "2025-01-01", "cuota_mensual": 1200000, "madurez_pct": 80, "horas_habiles_dia": 6.0, "cartera_actual": {"AAAH": 3, "AAAC": 5, "A": 10, "B": 2}},
+    {"nombre": "Elba Karina Hernández", "tipo": "rookie", "fecha_inicio": "2026-01-01", "cuota_mensual": 1200000, "madurez_pct": 60, "horas_habiles_dia": 6.0, "cartera_actual": {"AAAH": 1, "AAAC": 2, "A": 5, "B": 1}},
+    {"nombre": "Ángel Escamilla", "tipo": "junior", "fecha_inicio": "2026-01-01", "cuota_mensual": 1200000, "madurez_pct": 50, "horas_habiles_dia": 6.0, "cartera_actual": {"AAAH": 1, "AAAC": 3, "A": 6, "B": 2}},
+    {"nombre": "Irma Ibarra", "tipo": "rookie", "fecha_inicio": "2025-11-01", "cuota_mensual": 1200000, "madurez_pct": 0, "activo": False, "nota": "Cortada en escenario actual", "cartera_actual": {}},
+    {"nombre": "Lorena Durán", "tipo": "rookie", "fecha_inicio": "2025-11-01", "cuota_mensual": 1200000, "madurez_pct": 0, "activo": False, "nota": "Cortada en escenario actual", "cartera_actual": {}},
 ]
 
 config_entries = [
@@ -39,14 +39,22 @@ config_entries = [
             "Referidos": {"pct": 0.15, "cpl": 0},
         },
         "tasa_calificacion": 0.40,
-        "distribucion_calidad": {"AAAH": 0.10, "AAAC": 0.20, "A": 0.70},
+        "distribucion_calidad": {"AAAH": 0.08, "AAAC": 0.17, "A": 0.55, "B": 0.20},
     }),
+    ("maduracion", {
+        "rookie_to_junior_meses": 12,
+        "junior_to_senior_meses": 24,
+        "umbrales": {"junior": 0.70, "senior": 0.85},
+    }),
+    ("dias_laborables_mes", 22),
+    ("factor_mantenimiento", 0.3),
 ]
 
 tipos_cliente = [
-    {"codigo": "AAAH", "nombre": "Alto Valor Histórico", "leads_mensuales": 0, "tasa_retencion": 0.80, "tasa_cierre": 0.50, "meses_cierre": 3, "ticket_promedio": 688198, "facturas_por_cliente": 0.34},
-    {"codigo": "AAAC", "nombre": "Alto Valor Cierre", "leads_mensuales": 0, "tasa_retencion": 0.80, "tasa_cierre": 0.50, "meses_cierre": 3, "ticket_promedio": 213723, "facturas_por_cliente": 1.35},
-    {"codigo": "A", "nombre": "Regular", "leads_mensuales": 0, "tasa_retencion": 0.70, "tasa_cierre": 0.50, "meses_cierre": 1, "ticket_promedio": 72869, "facturas_por_cliente": 0.46},
+    {"codigo": "AAAH", "nombre": "Alto Valor Histórico", "leads_mensuales": 0, "tasa_retencion": 0.80, "tasa_cierre": 0.50, "meses_cierre": 3, "ticket_promedio": 688198, "facturas_por_cliente": 0.34, "frecuencia_compra_meses": 6, "deals_por_anio": 2, "horas_cotizacion": 4.0, "horas_seguimiento": 2.0, "leads_objetivo": 3},
+    {"codigo": "AAAC", "nombre": "Alto Valor Cierre", "leads_mensuales": 0, "tasa_retencion": 0.80, "tasa_cierre": 0.50, "meses_cierre": 3, "ticket_promedio": 213723, "facturas_por_cliente": 1.35, "frecuencia_compra_meses": 4, "deals_por_anio": 3, "horas_cotizacion": 3.0, "horas_seguimiento": 1.5, "leads_objetivo": 5},
+    {"codigo": "A", "nombre": "Regular", "leads_mensuales": 0, "tasa_retencion": 0.70, "tasa_cierre": 0.50, "meses_cierre": 1, "ticket_promedio": 72869, "facturas_por_cliente": 0.46, "frecuencia_compra_meses": 3, "deals_por_anio": 4, "horas_cotizacion": 1.5, "horas_seguimiento": 0.5, "leads_objetivo": 15},
+    {"codigo": "B", "nombre": "Básico Transaccional", "leads_mensuales": 0, "tasa_retencion": 0.60, "tasa_cierre": 0.65, "meses_cierre": 1, "ticket_promedio": 25000, "facturas_por_cliente": 0.8, "frecuencia_compra_meses": 3, "deals_por_anio": 4, "horas_cotizacion": 1.0, "horas_seguimiento": 0.5, "leads_objetivo": 20, "clientes_iniciales": 10, "dias_credito": 15},
 ]
 
 
@@ -67,6 +75,8 @@ def seed_simulador(clear=True):
                 madurez_pct=a.get("madurez_pct", 0),
                 activo=a.get("activo", True),
                 nota=a.get("nota", ""),
+                horas_habiles_dia=a.get("horas_habiles_dia", 6.0),
+                cartera_actual=a.get("cartera_actual", {}),
             ))
 
         for clave, valor in config_entries:

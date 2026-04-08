@@ -131,6 +131,8 @@ def sim_asesor_out(row: SimAsesor) -> dict:
         "madurez_pct": row.madurez_pct, "max_tratos_mes": row.max_tratos_mes,
         "max_cartera_activa": row.max_cartera_activa,
         "activo": row.activo, "nota": row.nota,
+        "horas_habiles_dia": row.horas_habiles_dia,
+        "cartera_actual": row.cartera_actual or {},
     }
 
 
@@ -145,6 +147,11 @@ def sim_tipo_cliente_out(row: SimTipoCliente) -> dict:
         "tasa_cierre": row.tasa_cierre, "meses_cierre": row.meses_cierre,
         "ticket_promedio": row.ticket_promedio, "facturas_por_cliente": row.facturas_por_cliente,
         "clientes_iniciales": row.clientes_iniciales, "dias_credito": row.dias_credito,
+        "frecuencia_compra_meses": row.frecuencia_compra_meses,
+        "deals_por_anio": row.deals_por_anio,
+        "horas_cotizacion": row.horas_cotizacion,
+        "horas_seguimiento": row.horas_seguimiento,
+        "leads_objetivo": row.leads_objetivo,
     }
 
 

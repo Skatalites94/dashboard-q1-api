@@ -81,6 +81,57 @@ def _calc_madurez(tipo: str, fecha_inicio: str, today: date = None) -> float:
     return round(max(10, min(madurez, p["meta"])), 1)
 
 
+def _project_maturation(tipo: str, fecha_inicio: str, config_mad: dict = None) -> list:
+    """Project maturation timeline for 24 months."""
+    if not fecha_inicio:
+        return []
+    try:
+        inicio = datetime.strptime(fecha_inicio[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return []
+
+    today = date.today()
+    mad_cfg = config_mad or {}
+    umbrales = mad_cfg.get("umbrales", {"junior": 0.70, "senior": 0.85})
+    rookie_to_junior = mad_cfg.get("rookie_to_junior_meses", 12)
+    junior_to_senior = mad_cfg.get("junior_to_senior_meses", 24)
+
+    params = {
+        "rookie": {"meta": 70, "mid": 120, "k": 0.025},
+        "junior": {"meta": 85, "mid": 180, "k": 0.02},
+        "senior": {"meta": 95, "mid": 90, "k": 0.03},
+    }
+
+    timeline = []
+    current_tipo = tipo
+    for m in range(24):
+        proj_date = date(today.year, today.month, 1)
+        proj_date = date(proj_date.year + (proj_date.month + m - 1) // 12,
+                         (proj_date.month + m - 1) % 12 + 1, 1)
+        dias = (proj_date - inicio).days
+        p = params.get(current_tipo, params["junior"])
+        madurez = p["meta"] / (1 + math.exp(-p["k"] * (dias - p["mid"])))
+        madurez = max(10, min(madurez, p["meta"]))
+        madurez_pct = round(madurez, 1)
+
+        transicion = None
+        if current_tipo == "rookie" and dias >= rookie_to_junior * 30:
+            current_tipo = "junior"
+            transicion = "rookie_to_junior"
+        elif current_tipo == "junior" and dias >= (rookie_to_junior + junior_to_senior) * 30:
+            current_tipo = "senior"
+            transicion = "junior_to_senior"
+
+        timeline.append({
+            "mes": MESES[proj_date.month - 1] + " " + str(proj_date.year),
+            "tipo": current_tipo,
+            "madurez_pct": madurez_pct,
+            "transicion": transicion,
+        })
+
+    return timeline
+
+
 def _run_simulation(db: Session) -> dict:
     """Run the full 12-month simulation."""
     config = _get_config(db)
@@ -96,24 +147,40 @@ def _run_simulation(db: Session) -> dict:
 
     today = date.today()
 
-    # ── Marketing → Leads ──────────────────────────────
+    # ── Marketing → Leads (objective-driven) ─────────────
     mkt_presupuesto = mkt_config.get("presupuesto_mensual", 0)
     canales = mkt_config.get("canales", {})
     tasa_calif = mkt_config.get("tasa_calificacion", 0.4)
     dist_calidad = mkt_config.get("distribucion_calidad", {"AAAH": 0.1, "AAAC": 0.2, "A": 0.7})
 
+    # Build leads_objetivo map from tipos_cliente
+    leads_objetivo_total = sum(tc.get("leads_objetivo", 0) for tc in tipos_cliente)
+    use_objective_mode = leads_objetivo_total > 0
+
     mkt_leads_por_mes = []
-    mkt_detalle_canales = []
     for i, mes in enumerate(MESES):
-        leads_brutos = 0
+        if use_objective_mode:
+            # Objective mode: leads come directly from tipo targets
+            leads_calificados = leads_objetivo_total
+            leads_brutos = int(leads_calificados / tasa_calif) if tasa_calif > 0 else leads_calificados
+        else:
+            # Legacy budget mode
+            leads_brutos = 0
+            for canal_name, canal_data in canales.items():
+                ppto_canal = mkt_presupuesto * canal_data.get("pct", 0)
+                cpl = canal_data.get("cpl", 0)
+                leads_canal = int(ppto_canal / cpl) if cpl > 0 else 15
+                leads_brutos += leads_canal
+            leads_calificados = int(leads_brutos * tasa_calif)
+
+        # Channel breakdown (informational)
         canal_detalle = {}
         for canal_name, canal_data in canales.items():
             ppto_canal = mkt_presupuesto * canal_data.get("pct", 0)
             cpl = canal_data.get("cpl", 0)
-            leads_canal = int(ppto_canal / cpl) if cpl > 0 else 15  # referidos = ~15/mes
-            leads_brutos += leads_canal
+            leads_canal = int(ppto_canal / cpl) if cpl > 0 else 15
             canal_detalle[canal_name] = {"presupuesto": round(ppto_canal), "leads": leads_canal, "cpl": cpl}
-        leads_calificados = int(leads_brutos * tasa_calif)
+
         mkt_leads_por_mes.append({
             "mes": mes, "leads_brutos": leads_brutos,
             "leads_calificados": leads_calificados,
@@ -153,11 +220,20 @@ def _run_simulation(db: Session) -> dict:
             equipo_total_mensual[i] += venta
             costo_equipo_mensual[i] += costo_mes
 
+        mad_config = config.get("maduracion", {})
+        maturation_tl = _project_maturation(tipo, a["fecha_inicio"], mad_config)
+
         equipo_por_asesor.append({
             "id": a["id"], "nombre": a["nombre"], "tipo": tipo,
-            "cuota": cuota, "madurez": round(mad, 1),
+            "fecha_inicio": a.get("fecha_inicio", ""),
+            "cuota_mensual": cuota, "cuota": cuota, "madurez_pct": round(mad, 1), "madurez": round(mad, 1),
+            "max_tratos_mes": a.get("max_tratos_mes", 25),
+            "max_cartera_activa": a.get("max_cartera_activa", 40),
+            "horas_habiles_dia": a.get("horas_habiles_dia", 6.0),
+            "cartera_actual": a.get("cartera_actual", {}),
             "meses": meses_venta, "total": sum(meses_venta),
             "costo_meses": meses_costo, "costo_total": sum(meses_costo),
+            "maturation_timeline": maturation_tl,
         })
 
     # ── Pipeline → Demanda ────────────────────────────
@@ -166,16 +242,17 @@ def _run_simulation(db: Session) -> dict:
 
     for tc in tipos_cliente:
         codigo = tc["codigo"]
-        # Get leads from MKT calculation
         dist_pct = dist_calidad.get(codigo, 0.3)
 
         leads_nuevos = []
         for i in range(12):
-            leads_cal = mkt_leads_por_mes[i]["leads_calificados"] if i < len(mkt_leads_por_mes) else 0
-            # Allow override from tipo_cliente.leads_mensuales
-            if tc["leads_mensuales"] > 0:
+            # Priority: leads_objetivo > leads_mensuales > marketing distribution
+            if tc.get("leads_objetivo", 0) > 0:
+                leads_nuevos.append(tc["leads_objetivo"])
+            elif tc["leads_mensuales"] > 0:
                 leads_nuevos.append(tc["leads_mensuales"])
             else:
+                leads_cal = mkt_leads_por_mes[i]["leads_calificados"] if i < len(mkt_leads_por_mes) else 0
                 leads_nuevos.append(int(leads_cal * dist_pct))
 
         retencion = tc["tasa_retencion"]
@@ -234,27 +311,71 @@ def _run_simulation(db: Session) -> dict:
             "utilidad_bruta": round(proj * margen - costo_equipo_mensual[i]),
         })
 
-    # ── Capacidad y Cartera ─────────────────────────────
-    total_max_tratos = sum(a.get("max_tratos_mes", 25) for a in asesores if a.get("activo", True))
-    total_max_cartera = sum(a.get("max_cartera_activa", 40) for a in asesores if a.get("activo", True))
+    # ── Capacidad por Horas ─────────────────────────────
+    dias_lab = config.get("dias_laborables_mes", 22)
+    factor_mant = config.get("factor_mantenimiento", 0.3)
+    tipos_dict = {tc["codigo"]: tc for tc in tipos_cliente}
+
+    # Compute total clients active per month
     total_clientes_activos_mes = []
     for i in range(12):
-        activos_mes = sum(t["activos"][i] if i < len(t.get("activos", [])) else 0 for t in [pt for pt in pipeline_por_tipo])
+        activos_mes = sum(t["activos"][i] if i < len(t.get("activos", [])) else 0 for t in pipeline_por_tipo)
         total_clientes_activos_mes.append(round(activos_mes, 1))
 
     capacidad_info = []
     for i, mes in enumerate(MESES):
-        cli_activos = total_clientes_activos_mes[i] if i < len(total_clientes_activos_mes) else 0
-        utilizacion = cli_activos / total_max_cartera * 100 if total_max_cartera > 0 else 0
-        necesidad_asesores = math.ceil(cli_activos / 40) if cli_activos > 0 else 1
+        horas_disp_equipo = 0
+        horas_ocup_equipo = 0
+
+        for a in asesores:
+            horas_dia = a.get("horas_habiles_dia", 6.0)
+            horas_disp = horas_dia * dias_lab
+            horas_disp_equipo += horas_disp
+
+            cartera = a.get("cartera_actual", {}) or {}
+            horas_ocup = 0
+            for tipo_codigo, num_cuentas in cartera.items():
+                tipo = tipos_dict.get(tipo_codigo, {})
+                freq = tipo.get("frecuencia_compra_meses", 6)
+                h_cot = tipo.get("horas_cotizacion", 2.0)
+                h_seg = tipo.get("horas_seguimiento", 1.0)
+                if freq > 0:
+                    cuentas_comprando = num_cuentas / freq
+                else:
+                    cuentas_comprando = num_cuentas
+                cuentas_mant = num_cuentas - cuentas_comprando
+                horas_ocup += cuentas_comprando * (h_cot + h_seg)
+                horas_ocup += cuentas_mant * (h_seg * factor_mant)
+
+            horas_ocup_equipo += horas_ocup
+
+        horas_rest_equipo = max(0, horas_disp_equipo - horas_ocup_equipo)
+        utilizacion = (horas_ocup_equipo / horas_disp_equipo * 100) if horas_disp_equipo > 0 else 0
+
+        # Estimate new deals possible with remaining hours
+        avg_h_deal = 0
+        n_tipos = len(tipos_dict)
+        if n_tipos > 0:
+            avg_h_deal = sum(t.get("horas_cotizacion", 2) + t.get("horas_seguimiento", 1) for t in tipos_dict.values()) / n_tipos
+        nuevos_tratos = horas_rest_equipo / avg_h_deal if avg_h_deal > 0 else 0
+
+        # Asesores needed: based on hours occupied growing with new clients
+        cli_activos = total_clientes_activos_mes[i]
+        max_cartera_equipo = sum(a.get("max_cartera_activa", 40) for a in asesores)
+        necesidad = math.ceil(cli_activos / 40) if cli_activos > 0 else 1
+
         capacidad_info.append({
             "mes": mes,
             "clientes_activos": cli_activos,
-            "max_cartera_equipo": total_max_cartera,
+            "max_cartera_equipo": max_cartera_equipo,
+            "horas_disponibles": round(horas_disp_equipo, 1),
+            "horas_ocupadas": round(horas_ocup_equipo, 1),
+            "horas_restantes": round(horas_rest_equipo, 1),
             "utilizacion_pct": round(min(utilizacion, 200), 1),
-            "asesores_necesarios": necesidad_asesores,
+            "nuevos_tratos_posibles": round(nuevos_tratos, 1),
+            "asesores_necesarios": necesidad,
             "asesores_actuales": len(asesores),
-            "deficit": max(0, necesidad_asesores - len(asesores)),
+            "deficit": max(0, necesidad - len(asesores)),
         })
 
     # ── Cashflow (considerando días de crédito) ───────
@@ -337,7 +458,7 @@ def _run_simulation(db: Session) -> dict:
 def sim_bootstrap(db: Session = Depends(get_db)):
     return {
         "asesores": [sim_asesor_out(r) for r in db.query(SimAsesor).order_by(SimAsesor.id).all()],
-        "config": {r.clave: r.valor for r in db.query(SimConfig).all()},
+        "config": [sim_config_out(r) for r in db.query(SimConfig).all()],
         "tipos_cliente": [sim_tipo_cliente_out(r) for r in db.query(SimTipoCliente).order_by(SimTipoCliente.id).all()],
     }
 

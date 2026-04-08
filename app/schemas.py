@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -293,6 +293,8 @@ class SimAsesorCreate(BaseModel):
     max_cartera_activa: int = 40
     activo: bool = True
     nota: str = ""
+    horas_habiles_dia: float = 6.0
+    cartera_actual: Optional[dict] = None
 
 class SimAsesorUpdate(BaseModel):
     nombre: Optional[str] = None
@@ -304,9 +306,11 @@ class SimAsesorUpdate(BaseModel):
     max_cartera_activa: Optional[int] = None
     activo: Optional[bool] = None
     nota: Optional[str] = None
+    horas_habiles_dia: Optional[float] = None
+    cartera_actual: Optional[dict] = None
 
 class SimConfigUpdate(BaseModel):
-    valor: dict
+    valor: Any
 
 class SimTipoClienteCreate(BaseModel):
     codigo: str
@@ -319,6 +323,11 @@ class SimTipoClienteCreate(BaseModel):
     facturas_por_cliente: float = 0.5
     clientes_iniciales: int = 6
     dias_credito: int = 30
+    frecuencia_compra_meses: int = 6
+    deals_por_anio: int = 2
+    horas_cotizacion: float = 2.0
+    horas_seguimiento: float = 1.0
+    leads_objetivo: int = 0
 
 class SimTipoClienteUpdate(BaseModel):
     nombre: Optional[str] = None
@@ -330,6 +339,11 @@ class SimTipoClienteUpdate(BaseModel):
     facturas_por_cliente: Optional[float] = None
     clientes_iniciales: Optional[int] = None
     dias_credito: Optional[int] = None
+    frecuencia_compra_meses: Optional[int] = None
+    deals_por_anio: Optional[int] = None
+    horas_cotizacion: Optional[float] = None
+    horas_seguimiento: Optional[float] = None
+    leads_objetivo: Optional[int] = None
 
 class EscenarioIngresoCreate(BaseModel):
     nombre: str

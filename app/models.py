@@ -190,6 +190,8 @@ class SimAsesor(Base):
     max_cartera_activa: Mapped[int] = mapped_column(Integer, default=40)  # max active clients
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     nota: Mapped[str] = mapped_column(String(400), default="")
+    horas_habiles_dia: Mapped[float] = mapped_column(Float, default=6.0)  # productive hours/day
+    cartera_actual = mapped_column(JSON, default={})  # {"AAAH": 3, "AAAC": 5, "A": 10, "B": 2}
 
 
 class SimConfig(Base):
@@ -214,6 +216,11 @@ class SimTipoCliente(Base):
     facturas_por_cliente: Mapped[float] = mapped_column(Float, default=0.5)
     clientes_iniciales: Mapped[int] = mapped_column(Integer, default=6)
     dias_credito: Mapped[int] = mapped_column(Integer, default=30)
+    frecuencia_compra_meses: Mapped[int] = mapped_column(Integer, default=6)  # purchase every N months
+    deals_por_anio: Mapped[int] = mapped_column(Integer, default=2)  # deals/projects per year
+    horas_cotizacion: Mapped[float] = mapped_column(Float, default=2.0)  # quoting hours per deal
+    horas_seguimiento: Mapped[float] = mapped_column(Float, default=1.0)  # follow-up hours per deal
+    leads_objetivo: Mapped[int] = mapped_column(Integer, default=0)  # target monthly leads
 
 
 class EscenarioIngreso(Base):

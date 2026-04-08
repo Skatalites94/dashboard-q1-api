@@ -531,24 +531,17 @@ window.GastosModule = (function() {
     item.cortado = !item.cortado;
     patchItem(endpointMap[collection], id, { cortado: item.cortado });
 
-    // Targeted DOM update: update the row styling, nuevo value, and footer
-    var row = container.querySelector('#g-nuevo-' + collection + '-' + id);
-    if (row) {
-      var tr = row.closest('tr');
+    // Find the row element — empleados uses g-var-*, others use g-nuevo-*
+    var marker = document.getElementById('g-nuevo-' + collection + '-' + id)
+              || document.getElementById('g-var-' + collection + '-' + id);
+    if (marker) {
+      var tr = marker.closest('tr');
       if (tr) {
         tr.classList.toggle('cut', item.cortado);
-      }
-      var costoMXN = collection === 'suscripciones' ? calcCostoMXN(item) : item.costo;
-      var nuevoVal = item.cortado ? 0 : costoMXN;
-      row.textContent = fmt(nuevoVal);
-    }
-    // Update the status badge
-    var badgeCell = container.querySelector('#g-nuevo-' + collection + '-' + id);
-    if (badgeCell) {
-      var tr = badgeCell.closest('tr');
-      if (tr) {
+        // Update status badges in this row
         var badges = tr.querySelectorAll('.g-badge');
         badges.forEach(function(b) {
+          if (b.closest('select')) return; // skip badges inside selects
           if (item.cortado) {
             b.className = 'g-badge b-red';
             b.textContent = 'SALE';
@@ -561,6 +554,16 @@ window.GastosModule = (function() {
           }
         });
       }
+    }
+    // Update the nuevo/var value
+    var costoMXN = collection === 'suscripciones' ? calcCostoMXN(item) : item.costo;
+    var nuevoEl = document.getElementById('g-nuevo-' + collection + '-' + id);
+    if (nuevoEl) nuevoEl.textContent = fmt(item.cortado ? 0 : costoMXN);
+    var varEl = document.getElementById('g-var-' + collection + '-' + id);
+    if (varEl) {
+      var diff = (item.cortado ? 0 : item.costo) - item._originalCosto;
+      varEl.textContent = diff !== 0 ? fmt(diff) : '\u2014';
+      varEl.className = diff <= 0 ? 'var-pos' : 'var-neg';
     }
     updateFooter(collection);
     calcKPIs();

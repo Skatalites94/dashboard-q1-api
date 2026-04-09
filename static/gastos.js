@@ -790,26 +790,25 @@ window.GastosModule = (function() {
       var cost = collection === 'suscripciones' ? calcCostoMXN(i) : i.costo;
       sumNew += i.cortado ? 0 : cost;
     });
-    var fOrig = container.querySelector('#g-foot-orig-' + collection);
-    var fNew = container.querySelector('#g-foot-new-' + collection);
+    var fOrig = document.getElementById('g-foot-orig-' + collection);
+    var fNew = document.getElementById('g-foot-new-' + collection);
     if (fOrig) fOrig.textContent = fmt(sumOrig);
     if (fNew) fNew.textContent = fmt(sumNew);
 
     // Update empleados-specific footer fields
     if (collection === 'empleados') {
-      var sumSueldo = 0;
-      var activeCount = 0;
+      var sumSueldo = 0, sumCostoAll = 0;
       items.forEach(function(i) {
+        sumCostoAll += (i.costo || 0);
         if (!i.cortado) {
           sumSueldo += (i.sueldo_neto || 0);
-          activeCount++;
         }
       });
-      var fSueldo = container.querySelector('#g-foot-sueldo-empleados');
+      var fSueldo = document.getElementById('g-foot-neto-empleados');
       if (fSueldo) fSueldo.textContent = fmt(sumSueldo);
-      var fCount = container.querySelector('#g-foot-count-empleados');
-      if (fCount) fCount.textContent = 'TOTAL (' + items.length + ' personas)';
-      var fVar = container.querySelector('#g-foot-var-empleados');
+      var fCosto = document.getElementById('g-foot-costo-empleados');
+      if (fCosto) fCosto.textContent = fmt(sumCostoAll);
+      var fVar = document.getElementById('g-foot-var-empleados');
       if (fVar) {
         var varVal = sumNew - sumOrig;
         fVar.innerHTML = '<span class="' + (varVal <= 0 ? 'var-pos' : 'var-neg') + '">' + fmt(varVal) + '</span>';
@@ -830,7 +829,7 @@ window.GastosModule = (function() {
 
   function costInput(collection, item) {
     var changed = item.costo !== item._originalCosto;
-    return '<input class="g-cost-input' + (changed ? ' changed' : '') + '" id="g-input-' + collection + '-' + item.id + '" type="number" value="' + item.costo + '" onchange="window.__gCostChange(\'' + collection + '\',' + item.id + ',this.value)">';
+    return '<input class="g-cost-input' + (changed ? ' changed' : '') + '" id="g-input-' + collection + '-' + item.id + '" type="number" value="' + item.costo + '" onfocus="this.select()" onchange="window.__gCostChange(\'' + collection + '\',' + item.id + ',this.value)">';
   }
 
   function nuevoCell(collection, item) {
@@ -925,7 +924,7 @@ window.GastosModule = (function() {
           html += '<td>' + editableCell('empleados', e, 'nombre') + '</td>';
           html += '<td>' + editableCell('empleados', e, 'depto') + '</td>';
           html += '<td>' + esquemaSelect(e) + '</td>';
-          html += '<td><input class="g-inline-number" type="number" value="' + (e.sueldo_neto || 0) + '" onchange="window.__gSueldoNetoChange(' + e.id + ',this.value)" style="width:90px"></td>';
+          html += '<td><input class="g-inline-number" type="number" value="' + (e.sueldo_neto || 0) + '" onfocus="this.select()" onchange="window.__gSueldoNetoChange(' + e.id + ',this.value)" style="width:90px"></td>';
           html += '<td id="g-costo-empleados-' + e.id + '">' + fmt(costoEmp) + '</td>';
           html += '<td><span id="g-var-empleados-' + e.id + '" class="' + (diff <= 0 ? 'var-pos' : 'var-neg') + '">' + (diff !== 0 ? fmt(diff) : '\u2014') + '</span></td>';
           html += '<td>' + statusBadge(e) + '</td>';
@@ -935,10 +934,12 @@ window.GastosModule = (function() {
           html += '</tr>';
         }
       });
+      var sumCostoAll = 0;
+      state.empleados.forEach(function(e) { sumCostoAll += (e.costo || 0); });
       html += '</tbody><tfoot><tr>';
       html += '<td colspan="4" style="text-align:right">TOTAL (' + state.empleados.length + ' personas)</td>';
       html += '<td id="g-foot-neto-empleados">' + fmt(sumNeto) + '</td>';
-      html += '<td id="g-foot-orig-empleados">' + fmt(sumNew) + '</td>';
+      html += '<td id="g-foot-costo-empleados">' + fmt(sumCostoAll) + '</td>';
       html += '<td id="g-foot-var-empleados"><span class="' + (sumNew - sumOrig <= 0 ? 'var-pos' : 'var-neg') + '">' + fmt(sumNew - sumOrig) + '</span></td>';
       html += '<td colspan="4"></td>';
       html += '</tr></tfoot></table></div></div>';
@@ -1010,10 +1011,10 @@ window.GastosModule = (function() {
           html += '<td>' + toggleHTML('suscripciones', s) + '</td>';
           html += '<td>' + editableCell('suscripciones', s, 'nombre') + '</td>';
           // Usuarios
-          html += '<td><input class="g-inline-number" type="number" min="1" value="' + (s.usuarios || 1) + '" onchange="window.__gUsuariosChange(' + s.id + ',this.value)"></td>';
+          html += '<td><input class="g-inline-number" type="number" min="1" value="' + (s.usuarios || 1) + '" onfocus="this.select()" onchange="window.__gUsuariosChange(' + s.id + ',this.value)"></td>';
           // $/Usuario (only visible if es_por_usuario)
           if (s.es_por_usuario) {
-            html += '<td><input class="g-inline-number" type="number" step="0.01" value="' + (s.costo_por_usuario || 0) + '" onchange="window.__gCostoPorUsuarioChange(' + s.id + ',this.value)"></td>';
+            html += '<td><input class="g-inline-number" type="number" step="0.01" value="' + (s.costo_por_usuario || 0) + '" onfocus="this.select()" onchange="window.__gCostoPorUsuarioChange(' + s.id + ',this.value)"></td>';
           } else {
             html += '<td style="color:#94A3B8;font-size:11px;text-align:center">\u2014</td>';
           }

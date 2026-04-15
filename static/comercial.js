@@ -2749,8 +2749,9 @@ window.ComercialModule = (function() {
       html += '<div class="cm-person-card" data-person-id="' + p.id + '">';
       html += '<div class="cm-person-header">';
       html += personAvatar(p.id, 40);
-      html += '<div><div class="cm-person-name">' + escHtml(p.name) + '</div>';
+      html += '<div style="flex:1"><div class="cm-person-name">' + escHtml(p.name) + '</div>';
       html += '<div class="cm-person-role">' + escHtml(p.role) + ' &middot; ' + escHtml(p.area) + '</div></div>';
+      html += '<button class="cm-icon-btn cm-edit-person" data-person-id="' + p.id + '" title="Editar" style="align-self:flex-start">&#9998;</button>';
       html += '</div>';
 
       html += '<div class="cm-person-stats">';
@@ -2777,6 +2778,13 @@ window.ComercialModule = (function() {
       card.addEventListener('click', function() {
         var pid = parseInt(this.dataset.personId);
         renderPersonDetail(el, pid);
+      });
+    });
+
+    el.querySelectorAll('.cm-edit-person').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showEditPersonModal(parseInt(this.dataset.personId), el);
       });
     });
 
@@ -2907,6 +2915,56 @@ window.ComercialModule = (function() {
           if (main) renderEquipo(main);
         });
       }).catch(function() { toast('Error al crear persona', 'error'); });
+    });
+  }
+
+  function showEditPersonModal(personId, parentEl) {
+    var p = state.people.find(function(pp) { return pp.id === personId; });
+    if (!p) return;
+
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
+    html += '<div class="cm-modal">';
+    html += '<div class="cm-modal-title">Editar Persona</div>';
+
+    html += '<div class="cm-modal-field"><label>Nombre</label>';
+    html += '<input type="text" class="cm-input" id="cm-ep-name" value="' + escHtml(p.name) + '"></div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Rol</label>';
+    html += '<input type="text" class="cm-input" id="cm-ep-role" value="' + escHtml(p.role || '') + '"></div>';
+    html += '<div class="cm-modal-field"><label>Area</label>';
+    html += '<input type="text" class="cm-input" id="cm-ep-area" value="' + escHtml(p.area || '') + '"></div>';
+    html += '</div>';
+
+    html += '<div class="cm-modal-field"><label>Email</label>';
+    html += '<input type="email" class="cm-input" id="cm-ep-email" value="' + escHtml(p.email || '') + '"></div>';
+
+    html += '<div class="cm-modal-actions">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-ep-cancel">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-ep-save">Guardar</button>';
+    html += '</div>';
+    html += '</div></div>';
+
+    var modalDiv = document.createElement('div');
+    modalDiv.innerHTML = html;
+    document.body.appendChild(modalDiv.firstChild);
+
+    document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+    document.querySelector('#cm-ep-cancel').addEventListener('click', closeModal);
+    document.querySelector('#cm-ep-save').addEventListener('click', function() {
+      var data = {
+        name: document.querySelector('#cm-ep-name').value.trim(),
+        role: document.querySelector('#cm-ep-role').value.trim(),
+        area: document.querySelector('#cm-ep-area').value.trim(),
+        email: document.querySelector('#cm-ep-email').value.trim() || null,
+      };
+      if (!data.name) { toast('El nombre es requerido', 'error'); return; }
+      apiPatch('people', personId, data).then(function() {
+        state.people = state.people.map(function(pp) { return pp.id === personId ? Object.assign(pp, data) : pp; });
+        closeModal();
+        toast('Persona actualizada', 'success');
+        renderEquipo(parentEl);
+      }).catch(function() { toast('Error al actualizar', 'error'); });
     });
   }
 
@@ -3194,7 +3252,10 @@ window.ComercialModule = (function() {
 
     // Header with toggles
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">';
+    html += '<div style="display:flex;align-items:center;gap:10px">';
     html += '<div class="cm-section-title" style="margin:0">KPI Board \u2014 Seguimiento ' + year + '</div>';
+    html += '<button class="cm-btn cm-btn-primary cm-btn-sm" id="cm-new-kpi">+ Crear KPI</button>';
+    html += '</div>';
     html += '<div style="display:flex;gap:8px;align-items:center">';
 
     // Tracked toggle
@@ -3328,6 +3389,106 @@ window.ComercialModule = (function() {
     var weeklyBtn = el.querySelector('#cm-kb-weekly');
     if (monthlyBtn) monthlyBtn.addEventListener('click', function() { kpiBoardView = 'monthly'; renderKpisSeguimiento(el); });
     if (weeklyBtn) weeklyBtn.addEventListener('click', function() { kpiBoardView = 'weekly'; renderKpisSeguimiento(el); });
+
+    var newKpiBtn = el.querySelector('#cm-new-kpi');
+    if (newKpiBtn) newKpiBtn.addEventListener('click', function() { showCreateKpiModal(el); });
+  }
+
+  function showCreateKpiModal(parentEl) {
+    var units = [
+      {v: '', l: 'Sin unidad'}, {v: '%', l: 'Porcentaje (%)'}, {v: '#', l: 'Numero (#)'},
+      {v: 'MXN', l: 'Pesos (MXN)'}, {v: 'USD', l: 'Dolares (USD)'}, {v: 'dias', l: 'Dias'},
+      {v: 'hrs', l: 'Horas'}, {v: 'leads', l: 'Leads'}, {v: 'pts', l: 'Puntos/Score'},
+    ];
+
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
+    html += '<div class="cm-modal" style="max-width:550px">';
+    html += '<div class="cm-modal-title">Crear KPI</div>';
+
+    html += '<div class="cm-modal-field"><label>Nombre <span style="color:var(--danger)">*</span></label>';
+    html += '<input type="text" class="cm-input" id="cm-nk-name" placeholder="Ej: Tasa de conversion, Leads por semana..."></div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Unidad</label>';
+    html += '<select class="cm-select" id="cm-nk-unit" style="width:100%">';
+    units.forEach(function(u) { html += '<option value="' + u.v + '">' + u.l + '</option>'; });
+    html += '</select></div>';
+    html += '<div class="cm-modal-field"><label>Fase (opcional)</label>';
+    html += '<select class="cm-select" id="cm-nk-phase" style="width:100%">';
+    html += '<option value="">Sin fase</option>';
+    state.phases.forEach(function(ph) { html += '<option value="' + escHtml(ph.id) + '">' + escHtml(ph.name) + '</option>'; });
+    html += '</select></div>';
+    html += '</div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Responsable</label>';
+    html += personSelect(null, 'cm-nk-owner');
+    html += '</div>';
+    html += '<div class="cm-modal-field"><label>Frecuencia</label>';
+    html += '<select class="cm-select" id="cm-nk-freq" style="width:100%">';
+    html += '<option value="monthly">Mensual</option><option value="biweekly">Quincenal</option>';
+    html += '<option value="weekly">Semanal</option><option value="daily">Diario</option>';
+    html += '</select></div>';
+    html += '</div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Meta (target)</label>';
+    html += '<input type="number" class="cm-input" id="cm-nk-target" placeholder="Valor objetivo" step="any"></div>';
+    html += '<div class="cm-modal-field"><label>Direccion</label>';
+    html += '<select class="cm-select" id="cm-nk-dir" style="width:100%">';
+    html += '<option value="higher">Mayor es mejor</option><option value="lower">Menor es mejor</option>';
+    html += '</select></div>';
+    html += '</div>';
+
+    html += '<div class="cm-modal-field"><label>Pregunta orientadora</label>';
+    html += '<input type="text" class="cm-input" id="cm-nk-question" placeholder="Ej: Cuantos prospectos se convierten en clientes?"></div>';
+
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:10px 0">';
+    html += '<input type="checkbox" id="cm-nk-tracked" checked>';
+    html += '<label for="cm-nk-tracked" style="font-size:.82rem;cursor:pointer">Marcar para seguimiento activo</label>';
+    html += '</div>';
+
+    html += '<div class="cm-modal-actions">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-nk-cancel">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-nk-create">Crear KPI</button>';
+    html += '</div>';
+    html += '</div></div>';
+
+    var modalDiv = document.createElement('div');
+    modalDiv.innerHTML = html;
+    document.body.appendChild(modalDiv.firstChild);
+
+    document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+    document.querySelector('#cm-nk-cancel').addEventListener('click', closeModal);
+    document.querySelector('#cm-nk-create').addEventListener('click', function() {
+      var name = document.querySelector('#cm-nk-name').value.trim();
+      if (!name) { toast('El nombre es requerido', 'error'); return; }
+      var slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      var targetVal = document.querySelector('#cm-nk-target').value.trim();
+      var data = {
+        id: slug,
+        name: name,
+        unit: document.querySelector('#cm-nk-unit').value,
+        phase_id: document.querySelector('#cm-nk-phase').value || null,
+        owner_id: parseInt(document.querySelector('#cm-nk-owner').value) || null,
+        question: document.querySelector('#cm-nk-question').value.trim(),
+      };
+      apiPost('kpis', data).then(function(created) {
+        // Set additional fields via PATCH
+        var patchData = {
+          frequency: document.querySelector('#cm-nk-freq').value,
+          direction: document.querySelector('#cm-nk-dir').value,
+          is_tracked: document.querySelector('#cm-nk-tracked').checked,
+        };
+        if (targetVal) patchData.target_value = parseFloat(targetVal);
+        return apiPatch('kpis', created.id, patchData).then(function(updated) { return updated; });
+      }).then(function(final) {
+        state.kpis.push(final);
+        closeModal();
+        toast('KPI "' + name + '" creado', 'success');
+        renderKpisSeguimiento(parentEl);
+      }).catch(function() { toast('Error al crear KPI', 'error'); });
+    });
   }
 
   function bindKpiBoardEvents(el) {

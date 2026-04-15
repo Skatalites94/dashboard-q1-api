@@ -45,7 +45,16 @@ def _create_sqlite_engine():
     return create_engine(sqlite_url, connect_args={"check_same_thread": False})
 
 
-_engine = _create_engine_from_env() or _create_sqlite_engine()
+def _force_sqlite() -> bool:
+    """Migraciones o scripts locales: FORCE_SQLITE=1 ignora DATABASE_URL (evita apuntar a Supabase por error)."""
+    return os.environ.get("FORCE_SQLITE", "").strip().lower() in ("1", "true", "yes")
+
+
+_engine = (
+    _create_sqlite_engine()
+    if _force_sqlite()
+    else (_create_engine_from_env() or _create_sqlite_engine())
+)
 
 engine = _engine
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -62,4 +71,6 @@ def get_db():
 
 def is_postgres() -> bool:
     """True si la app está usando DATABASE_URL (Postgres), False si SQLite local."""
+    if _force_sqlite():
+        return False
     return bool(os.environ.get("DATABASE_URL", "").strip())

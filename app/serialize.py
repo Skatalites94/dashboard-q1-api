@@ -1,5 +1,8 @@
 from app.models import (
-    AreaResumen, CategoriaGasto, Consultoria, Deal, Empleado, Escenario,
+    AreaResumen, CategoriaGasto, ComercialActivityLog, ComercialComment,
+    ComercialFriction, ComercialKpi, ComercialKpiFriction, ComercialKpiHistory,
+    ComercialPerson, ComercialPhase, ComercialTouchpoint, ComercialTrustPillar,
+    Consultoria, Deal, Empleado, Escenario,
     EscenarioIngreso, GastoFinanciero, GastoOperativo, Iniciativa, KpiMeta,
     Semaforo, SimAsesor, SimConfig, SimTipoCliente, Suscripcion,
 )
@@ -169,3 +172,113 @@ def escenario_ingreso_full_out(row: EscenarioIngreso) -> dict:
     d = escenario_ingreso_out(row)
     d["snapshot"] = row.snapshot
     return d
+
+
+# ── Módulo Arquitectura Comercial ────────────────────────────
+
+def comercial_phase_out(row: ComercialPhase) -> dict:
+    return {
+        "id": row.id, "name": row.name, "icon": row.icon,
+        "color": row.color, "description": row.description, "order": row.order,
+    }
+
+
+def comercial_touchpoint_out(row: ComercialTouchpoint) -> dict:
+    return {
+        "id": row.id, "phase_id": row.phase_id, "name": row.name,
+        "canal": row.canal, "responsable": row.responsable,
+        "responsable_id": row.responsable_id, "kpi": row.kpi,
+        "friction_text": row.friction_text, "has_friction": row.has_friction,
+        "order": row.order, "notes": row.notes,
+    }
+
+
+def comercial_friction_out(row: ComercialFriction) -> dict:
+    from datetime import date
+    days_remaining = None
+    is_overdue = False
+    if row.deadline:
+        days_remaining = (row.deadline - date.today()).days
+        is_overdue = row.status != "completed" and row.deadline < date.today()
+    return {
+        "id": row.id, "phase_id": row.phase_id, "name": row.name,
+        "impact": row.impact, "solution": row.solution,
+        "expected_outcome": row.expected_outcome, "status": row.status,
+        "deadline": row.deadline.isoformat() if row.deadline else None,
+        "notes": row.notes,
+        "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "days_remaining": days_remaining,
+        "is_overdue": is_overdue,
+        "responsable": row.responsable or "",
+        "responsable_id": row.responsable_id,
+        "touchpoint_id": row.touchpoint_id,
+        "priority": row.priority or 0,
+        "resolution_checklist": row.resolution_checklist if row.resolution_checklist is not None else [],
+    }
+
+
+def comercial_trust_pillar_out(row: ComercialTrustPillar) -> dict:
+    return {
+        "id": row.id, "name": row.name, "icon": row.icon,
+        "current_state": row.current_state, "target_state": row.target_state,
+        "actions": row.actions, "status": row.status, "order": row.order,
+    }
+
+
+def comercial_kpi_out(row: ComercialKpi) -> dict:
+    return {
+        "id": row.id, "name": row.name, "question": row.question,
+        "current_value": row.current_value, "target_value": row.target_value,
+        "unit": row.unit, "phase_id": row.phase_id, "owner_id": row.owner_id,
+        "tracking_mode": row.tracking_mode or "global_only",
+        "frequency": row.frequency or "monthly",
+        "grace_days": row.grace_days if row.grace_days is not None else 3,
+        "threshold_super_green": getattr(row, "threshold_super_green", None),
+        "threshold_green": getattr(row, "threshold_green", None),
+        "threshold_yellow": getattr(row, "threshold_yellow", None),
+        "direction": getattr(row, "direction", "higher"),
+        "is_tracked": getattr(row, "is_tracked", False),
+        "desc_super_green": getattr(row, "desc_super_green", "") or "",
+        "desc_green": getattr(row, "desc_green", "") or "",
+        "desc_yellow": getattr(row, "desc_yellow", "") or "",
+        "desc_red": getattr(row, "desc_red", "") or "",
+    }
+
+
+def comercial_person_out(row: ComercialPerson) -> dict:
+    return {
+        "id": row.id, "name": row.name, "role": row.role,
+        "area": row.area, "email": row.email,
+        "avatar_color": row.avatar_color, "is_active": row.is_active,
+        "order": row.order,
+    }
+
+
+def comercial_kpi_history_out(row: ComercialKpiHistory) -> dict:
+    return {
+        "id": row.id, "kpi_id": row.kpi_id, "value": row.value,
+        "period": getattr(row, "period", "") or "",
+        "recorded_at": row.recorded_at.isoformat() if row.recorded_at else None,
+        "notes": row.notes,
+    }
+
+
+def comercial_comment_out(row: ComercialComment) -> dict:
+    return {
+        "id": row.id, "entity_type": row.entity_type,
+        "entity_id": row.entity_id, "text": row.text,
+        "author": row.author, "link": row.link,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def comercial_activity_log_out(row: ComercialActivityLog) -> dict:
+    return {
+        "id": row.id, "entity_type": row.entity_type,
+        "entity_id": row.entity_id, "action": row.action,
+        "old_value": row.old_value, "new_value": row.new_value,
+        "detail": row.detail,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }

@@ -18,6 +18,19 @@ python3 seed.py --no-clear   # append only
 # Seed expense data
 python3 seed_gastos.py
 
+# Seed commercial architecture data (55 touchpoints, 19 frictions, 6 phases)
+python3 seed_comercial.py
+
+# Migración comercial v3 (columna resolution_checklist en fricciones)
+python3 migrate_comercial_v3.py
+
+# Migración comercial v4 (KPI hybrid tracking + tp_kpi config + tp_kpi_history)
+python3 migrate_comercial_v4.py
+# Solo SQLite local (ignora DATABASE_URL del .env):
+python3 migrate_comercial_v3.py --sqlite
+# URI explícita (p. ej. pooler Supabase para IPv4):
+python3 migrate_comercial_v3.py --database-url 'postgresql://...'
+
 # Deploy to Railway
 railway up --detach
 
@@ -31,22 +44,24 @@ railway service status
 
 - `app/main.py` — FastAPI app, CORS, health check, startup table creation, static file mount
 - `app/database.py` — Dual-mode: Supabase PostgreSQL (if `DATABASE_URL` set) or SQLite fallback (`data/dashboard.db`)
-- `app/models.py` — All ORM models (12 tables across 2 modules)
+- `app/models.py` — All ORM models (19 tables across 4 modules)
 - `app/schemas.py` — Pydantic Create/Update schemas for validation
 - `app/serialize.py` — ORM-to-dict conversion functions
 - `app/routers/` — One file per resource, all follow identical CRUD pattern (GET list, GET by id, POST, PATCH, DELETE)
 
 **Frontend:** Vanilla JS app shell with hash routing, no build step
 
-- `static/index.html` — App shell with sidebar, topbar, hash router (`#/dashboard`, `#/gastos`, `#/escenarios`)
+- `static/index.html` — App shell with sidebar, topbar, hash router (`#/dashboard`, `#/gastos`, `#/escenarios`, `#/comercial`)
 - `static/app.js` — React 18 (CDN) dashboard. Loaded via `fetch() + new Function()` to allow re-mounting. **Do not modify** unless changing dashboard logic.
 - `static/gastos.js` — Expense configurator module. Exports `window.GastosModule.init(container)` / `.destroy()`
 - `static/escenarios.js` — Scenario manager module. Exports `window.EscenariosModule.init(container)` / `.destroy()`
+- `static/comercial.js` — Commercial architecture / strategic project manager module. Exports `window.ComercialModule.init(container)` / `.destroy()`
 
-**Database:** 2 modules
+**Database:** 4 modules
 
 - Dashboard: `deals`, `iniciativas`, `kpis_meta`, `semaforo`, `area_resumen`
 - Gastos: `gastos_empleados`, `gastos_operativos`, `gastos_suscripciones`, `gastos_consultorias`, `gastos_financieros`, `escenarios`
+- Comercial: `comercial_phases`, `comercial_touchpoints`, `comercial_frictions`, `comercial_trust_pillars`, `comercial_kpis`, `comercial_kpi_touchpoint`, `comercial_tp_kpi_history`, `comercial_kpi_friction`, `comercial_kpi_history`, `comercial_comments`, `comercial_activity_log`, `comercial_people`
 
 ## Key Conventions
 
@@ -58,13 +73,28 @@ railway service status
 
 **app.js React re-execution:** The shell loads `app.js` via `fetch + new Function()` (not `<script src>`), because `app.js` uses top-level `const` declarations that would throw on re-execution. This is intentional.
 
-**Bootstrap endpoints:** `/api/bootstrap` loads all dashboard data in one call. `/api/gastos/bootstrap` loads all expense data. Frontend uses these for initial page load, then PATCH/POST/DELETE for mutations.
+**Bootstrap endpoints:** `/api/bootstrap` loads all dashboard data in one call. `/api/gastos/bootstrap` loads all expense data. `/api/comercial/bootstrap` loads all commercial architecture data. Frontend uses these for initial page load, then PATCH/POST/DELETE for mutations.
+
+**Comercial module:** Operational system for commercial architecture. 6 tabs: Dashboard, Mapa de Proceso, Fricciones & Tareas, Linea de Tiempo, Equipo, KPIs Seguimiento. Hybrid KPI model: global KPIs + critical touchpoint-level measurement with configurable frequency. Full CRUD on frictions with 5-state workflow (pending→analysis→in_progress→validation→completed), responsable assignment, comments, and activity logging.
 
 **Design system:** Before creating any UI component, read `docs/design-system/tokens.md` for CSS variables and `docs/design-system/components.md` for component patterns (Perdoo-inspired light theme with dark navy sidebar).
 
 **Calculations in frontend:** Aggregations (totals, percentages, KPIs) are computed client-side. The backend only persists individual rows.
 
 **Escenarios snapshot:** Scenarios store a full JSON snapshot of all expense data at save time. No foreign keys to expense tables — snapshots are self-contained.
+
+## CRITICAL: Database Migration Rules
+
+**SQLAlchemy `create_all` only creates NEW tables — it does NOT add columns to existing tables.** When modifying models:
+
+1. **Every new column on an existing table MUST have a migration script.** Create or update `migrate_*.py` with the `ALTER TABLE ADD COLUMN` statement.
+2. **Run the migration immediately** after modifying `models.py` — do NOT leave it for later.
+3. **Always verify the change works** by hitting the affected API endpoint (e.g., `curl /api/comercial/bootstrap`) after the migration.
+4. **For Postgres**, use `ADD COLUMN IF NOT EXISTS` to make migrations idempotent.
+5. **For SQLite**, `ALTER TABLE ADD COLUMN` (no `IF NOT EXISTS` — catch the exception instead).
+6. **Test the full cycle**: model change → migration → seed → API call → UI loads without errors.
+
+**Never commit model changes without the corresponding migration.** This breaks the live Postgres database.
 
 ## Deploy
 

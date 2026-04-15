@@ -348,3 +348,149 @@ class SimTipoClienteUpdate(BaseModel):
 class EscenarioIngresoCreate(BaseModel):
     nombre: str
     descripcion: str = ""
+
+
+# ── Módulo Arquitectura Comercial ─────────────────────────────
+
+class ComercialTouchpointUpdate(BaseModel):
+    name: Optional[str] = None
+    canal: Optional[str] = None
+    responsable: Optional[str] = None
+    responsable_id: Optional[int] = None
+    kpi: Optional[str] = None
+    friction_text: Optional[str] = None
+    has_friction: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class ComercialPersonCreate(BaseModel):
+    name: str
+    role: str = ""
+    area: str = ""
+    email: Optional[str] = None
+    avatar_color: str = "#4C6EF5"
+    is_active: bool = True
+    order: int = 0
+
+
+class ComercialPersonUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    area: Optional[str] = None
+    email: Optional[str] = None
+    avatar_color: Optional[str] = None
+    is_active: Optional[bool] = None
+    order: Optional[int] = None
+
+
+class ComercialTouchpointCreate(BaseModel):
+    phase_id: str
+    name: str
+    canal: str = ""
+    responsable: str = ""
+    responsable_id: Optional[int] = None
+    kpi: str = ""
+    friction_text: Optional[str] = None
+    has_friction: bool = False
+    order: int = 0
+    notes: str = ""
+
+
+class ComercialFrictionCreate(BaseModel):
+    id: str
+    phase_id: str
+    name: str
+    impact: str = "medium"
+    solution: str = ""
+    expected_outcome: str = ""
+    status: str = "pending"
+    deadline: Optional[str] = None
+    notes: str = ""
+    responsable: str = ""
+    responsable_id: Optional[int] = None
+    touchpoint_id: Optional[int] = None
+    priority: int = 0
+    resolution_checklist: Optional[list] = None
+
+
+class ComercialFrictionUpdate(BaseModel):
+    name: Optional[str] = None
+    phase_id: Optional[str] = None
+    status: Optional[str] = None
+    deadline: Optional[str] = None
+    notes: Optional[str] = None
+    impact: Optional[str] = None
+    solution: Optional[str] = None
+    expected_outcome: Optional[str] = None
+    responsable: Optional[str] = None
+    responsable_id: Optional[int] = None
+    touchpoint_id: Optional[int] = None
+    priority: Optional[int] = None
+    resolution_checklist: Optional[list] = None
+
+
+class ComercialTrustPillarUpdate(BaseModel):
+    status: Optional[str] = None
+    actions: Optional[str] = None
+    current_state: Optional[str] = None
+    target_state: Optional[str] = None
+
+
+class ComercialKpiCreate(BaseModel):
+    id: str
+    name: str
+    question: str = ""
+    unit: str = ""
+    phase_id: Optional[str] = None
+    owner_id: Optional[int] = None
+
+
+class ComercialKpiUpdate(BaseModel):
+    name: Optional[str] = None
+    unit: Optional[str] = None
+    current_value: Optional[float] = None
+    target_value: Optional[float] = None
+    phase_id: Optional[str] = None
+    owner_id: Optional[int] = None
+    tracking_mode: Optional[str] = None
+    frequency: Optional[str] = None
+    grace_days: Optional[int] = None
+    threshold_super_green: Optional[float] = None
+    threshold_green: Optional[float] = None
+    threshold_yellow: Optional[float] = None
+    direction: Optional[str] = None
+    is_tracked: Optional[bool] = None
+    desc_super_green: Optional[str] = None
+    desc_green: Optional[str] = None
+    desc_yellow: Optional[str] = None
+    desc_red: Optional[str] = None
+
+
+class ComercialTpKpiConfigUpdate(BaseModel):
+    is_critical: Optional[bool] = None
+    target_value_local: Optional[float] = None
+    responsable_id: Optional[int] = None
+
+
+class ComercialTpKpiMeasurement(BaseModel):
+    value: float
+    notes: str = ""
+    author: str = ""
+
+
+class ComercialKpiHistoryCreate(BaseModel):
+    value: float
+    period: str = ""  # "2026-04" format, auto-filled if empty
+    notes: str = ""
+
+
+class ComercialKpiFrictionLink(BaseModel):
+    friction_id: str
+
+
+class ComercialCommentCreate(BaseModel):
+    entity_type: str
+    entity_id: str
+    text: str
+    author: str = ""
+    link: str = ""

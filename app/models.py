@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -235,3 +235,183 @@ class EscenarioIngreso(Base):
     ingreso_anual: Mapped[float] = mapped_column(Float, default=0)
     costo_equipo_anual: Mapped[float] = mapped_column(Float, default=0)
     utilidad_bruta: Mapped[float] = mapped_column(Float, default=0)
+
+
+# ── Módulo Arquitectura Comercial ─────────────────────────────
+
+class ComercialPhase(Base):
+    __tablename__ = "comercial_phases"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    icon: Mapped[str] = mapped_column(String(10), default="")
+    color: Mapped[str] = mapped_column(String(20), default="#6366f1")
+    description: Mapped[str] = mapped_column(Text, default="")
+    order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ComercialTouchpoint(Base):
+    __tablename__ = "comercial_touchpoints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    phase_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(400), nullable=False)
+    canal: Mapped[str] = mapped_column(String(300), default="")
+    responsable: Mapped[str] = mapped_column(String(200), default="")
+    responsable_id = mapped_column(Integer, nullable=True)
+    kpi: Mapped[str] = mapped_column(String(400), default="")
+    friction_text: Mapped[str] = mapped_column(Text, nullable=True)
+    has_friction: Mapped[bool] = mapped_column(Boolean, default=False)
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ComercialFriction(Base):
+    __tablename__ = "comercial_frictions"
+
+    id: Mapped[str] = mapped_column(String(10), primary_key=True)
+    phase_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(400), nullable=False)
+    impact: Mapped[str] = mapped_column(String(20), default="high")
+    solution: Mapped[str] = mapped_column(Text, default="")
+    expected_outcome: Mapped[str] = mapped_column(String(400), default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    deadline = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    responsable: Mapped[str] = mapped_column(String(200), default="")
+    responsable_id = mapped_column(Integer, nullable=True)
+    touchpoint_id = mapped_column(Integer, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    # Checklist de resolución: [{ "text": str, "done": bool }, ...]
+    resolution_checklist = mapped_column(JSON, default=list)
+    completed_at = mapped_column(DateTime, nullable=True)
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ComercialTrustPillar(Base):
+    __tablename__ = "comercial_trust_pillars"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    icon: Mapped[str] = mapped_column(String(10), default="")
+    current_state: Mapped[str] = mapped_column(Text, default="")
+    target_state: Mapped[str] = mapped_column(Text, default="")
+    actions: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ComercialKpi(Base):
+    __tablename__ = "comercial_kpis"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    question: Mapped[str] = mapped_column(Text, default="")
+    current_value = mapped_column(Float, nullable=True)
+    target_value = mapped_column(Float, nullable=True)
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    phase_id: Mapped[str] = mapped_column(String(50), nullable=True)
+    owner_id = mapped_column(Integer, nullable=True)
+    # Hybrid tracking fields
+    tracking_mode: Mapped[str] = mapped_column(String(30), default="global_only")
+    frequency: Mapped[str] = mapped_column(String(20), default="monthly")
+    grace_days: Mapped[int] = mapped_column(Integer, default=3)
+    # Semaphore thresholds (4 levels: super_green >= green >= yellow >= red)
+    # "higher_is_better" means value >= threshold_super_green is best
+    # thresholds define boundaries: >= super_green = super_green, >= green = green, >= yellow = yellow, < yellow = red
+    threshold_super_green = mapped_column(Float, nullable=True)
+    threshold_green = mapped_column(Float, nullable=True)
+    threshold_yellow = mapped_column(Float, nullable=True)
+    direction: Mapped[str] = mapped_column(String(20), default="higher")
+    is_tracked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Descriptions per semaphore level
+    desc_super_green: Mapped[str] = mapped_column(String(400), default="")
+    desc_green: Mapped[str] = mapped_column(String(400), default="")
+    desc_yellow: Mapped[str] = mapped_column(String(400), default="")
+    desc_red: Mapped[str] = mapped_column(String(400), default="")
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ComercialPerson(Base):
+    __tablename__ = "comercial_people"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(200), default="")
+    area: Mapped[str] = mapped_column(String(200), default="")
+    email: Mapped[str] = mapped_column(String(300), nullable=True)
+    avatar_color: Mapped[str] = mapped_column(String(20), default="#4C6EF5")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at = mapped_column(DateTime, server_default=func.now())
+
+
+class ComercialKpiHistory(Base):
+    __tablename__ = "comercial_kpi_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    period: Mapped[str] = mapped_column(String(10), default="")  # "2026-01", "2026-02", etc.
+    recorded_at = mapped_column(DateTime, server_default=func.now())
+    notes: Mapped[str] = mapped_column(String(400), default="")
+
+
+class ComercialKpiFriction(Base):
+    __tablename__ = "comercial_kpi_friction"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    friction_id: Mapped[str] = mapped_column(String(10), nullable=False)
+
+
+class ComercialKpiTouchpoint(Base):
+    __tablename__ = "comercial_kpi_touchpoint"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    touchpoint_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_critical: Mapped[bool] = mapped_column(Boolean, default=False)
+    target_value_local = mapped_column(Float, nullable=True)
+    responsable_id = mapped_column(Integer, nullable=True)
+
+
+class ComercialTpKpiHistory(Base):
+    """Medición periódica de un KPI en el contexto de un touchpoint crítico."""
+    __tablename__ = "comercial_tp_kpi_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    touchpoint_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    notes: Mapped[str] = mapped_column(String(400), default="")
+    author: Mapped[str] = mapped_column(String(200), default="")
+    recorded_at = mapped_column(DateTime, server_default=func.now())
+
+
+class ComercialComment(Base):
+    __tablename__ = "comercial_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "friction", "touchpoint", "pillar"
+    entity_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    author: Mapped[str] = mapped_column(String(200), default="")
+    link: Mapped[str] = mapped_column(Text, default="")  # URL to evidence/screenshot
+    created_at = mapped_column(DateTime, server_default=func.now())
+
+
+class ComercialActivityLog(Base):
+    __tablename__ = "comercial_activity_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    old_value: Mapped[str] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str] = mapped_column(Text, nullable=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at = mapped_column(DateTime, server_default=func.now())

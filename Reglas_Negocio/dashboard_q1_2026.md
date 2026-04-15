@@ -16,6 +16,10 @@
 
 - `data/initial.json` se genera a partir del mismo contenido que el archivo `Dashboard_Q1_2026_Interactivo_v2.html` (arrays constantes).
 
+## Otros módulos
+
+- **Arquitectura comercial** (touchpoints, fricciones, KPIs operativos): ver [`modulo_comercial_arquitectura.md`](modulo_comercial_arquitectura.md).
+
 ## Postgres (Supabase) — camino A
 
 - Si existe la variable de entorno **`DATABASE_URL`** (URI de Supabase con contraseña real), la app usa **Postgres** en lugar de SQLite.

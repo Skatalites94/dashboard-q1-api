@@ -726,6 +726,59 @@ window.ComercialModule = (function() {
       .cm-canvas-drawer-item{padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:6px}
       .cm-canvas-drawer-empty{font-size:.78rem;color:#94A3B8;font-style:italic;padding:8px}
       .cm-canvas-drawer-actions{display:flex;flex-direction:column;gap:6px;margin-top:18px;padding-top:14px;border-top:1px solid #E2E8F0}
+      /* Drawer-ficha: KPIs detallados, ítems editables */
+      .cm-drawer-kpi{padding:10px 12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:8px}
+      .cm-drawer-kpi-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+      .cm-drawer-kpi-name{font-size:.82rem;font-weight:600;color:#1E293B;flex:1}
+      .cm-drawer-kpi-crit{font-size:.6rem;font-weight:700;background:#FEF2F2;color:#DC2626;padding:1px 6px;border-radius:4px;letter-spacing:.4px}
+      .cm-drawer-kpi-meta{font-size:.7rem;color:#64748B;margin-bottom:2px}
+      .cm-drawer-kpi-actual{font-size:.78rem;color:#1E293B;margin-bottom:2px}
+      .cm-drawer-kpi-trend{font-size:.7rem;color:#64748B;font-family:ui-monospace,monospace}
+      .cm-drawer-kpi-empty{font-size:.72rem;color:#94A3B8;font-style:italic;margin-bottom:4px}
+      .cm-drawer-kpi-record{margin-top:6px;font-size:.72rem;background:transparent;border:1px dashed #C7D2FE;color:#4F46E5;padding:4px 8px;border-radius:6px;cursor:pointer;font-weight:600}
+      .cm-drawer-kpi-record:hover{background:#EEF2FF}
+      .cm-drawer-kpi-form{margin-top:8px;padding:10px;background:#fff;border:1px solid #C7D2FE;border-radius:8px}
+      .cm-drawer-kpi-form .cm-input{width:100%;font-size:.78rem;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit}
+      .cm-drawer-kpi-form .cm-input:focus{outline:none;border-color:#4F46E5}
+      /* Drawer item: fricción / iniciativa con acciones */
+      .cm-drawer-list-item{padding:10px 12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:6px}
+      .cm-drawer-list-item-row{display:flex;align-items:center;gap:6px}
+      .cm-drawer-inline-btn{font-size:.7rem;background:transparent;border:1px dashed #C7D2FE;color:#4F46E5;padding:3px 8px;border-radius:6px;cursor:pointer;font-weight:600}
+      .cm-drawer-inline-btn:hover{background:#EEF2FF}
+      .cm-drawer-section-add{margin-top:8px;display:flex;justify-content:flex-start}
+      /* Link al drawer desde la tabla Mapa de Procesos */
+      .cm-tp-name-link{color:#1E293B;text-decoration:none;border-bottom:1px dashed transparent;cursor:pointer}
+      .cm-tp-name-link:hover{color:#4F46E5;border-bottom-color:#C7D2FE}
+      /* Edición inline en el header del drawer */
+      .cm-drawer-edit-title{width:100%;font-size:1.05rem;font-weight:700;color:#1E293B;line-height:1.3;border:1px solid transparent;background:transparent;padding:6px 8px;margin-bottom:10px;border-radius:6px;font-family:inherit;transition:border-color .12s,background .12s}
+      .cm-drawer-edit-title:hover{border-color:#E2E8F0;background:#F8FAFC}
+      .cm-drawer-edit-title:focus{outline:none;border-color:#4F46E5;background:#fff;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+      .cm-drawer-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+      .cm-drawer-edit-cell{display:flex;flex-direction:column;gap:3px}
+      .cm-drawer-edit-cell:first-child{grid-column:1 / -1}
+      .cm-drawer-edit-cell label{font-size:.66rem;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+      .cm-drawer-edit-input{width:100%;font-size:.78rem;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;background:#fff;font-family:inherit;color:#1E293B;transition:border-color .12s,background .12s}
+      .cm-drawer-edit-input:hover{border-color:#CBD5E1}
+      .cm-drawer-edit-input:focus{outline:none;border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+      /* Sección Secuencia */
+      .cm-drawer-seq-block{margin-bottom:10px}
+      .cm-drawer-seq-block:last-child{margin-bottom:0}
+      .cm-drawer-seq-label{font-size:.68rem;color:#475569;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+      .cm-drawer-seq-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:4px;cursor:pointer;transition:background .12s,border-color .12s}
+      .cm-drawer-seq-item:hover{background:#EEF2FF;border-color:#C7D2FE}
+      .cm-drawer-seq-item--parallel{cursor:pointer;background:#FAFBFC}
+      .cm-drawer-seq-item--parallel:hover{background:#F1F5F9;border-color:#E2E8F0}
+      .cm-drawer-seq-arrow{font-size:1rem;color:#4F46E5;font-weight:700;line-height:1.2;margin-top:1px}
+      .cm-drawer-seq-content{flex:1;min-width:0}
+      .cm-drawer-seq-name{font-size:.76rem;font-weight:600;color:#1E293B;line-height:1.3}
+      .cm-drawer-seq-meta{font-size:.66rem;color:#64748B;margin-top:2px}
+      .cm-drawer-seq-flowlabel{font-size:.68rem;color:#475569;font-style:italic;margin-top:2px}
+      .cm-drawer-seq-del{width:22px;height:22px;border:none;background:transparent;color:#94A3B8;cursor:pointer;border-radius:4px;font-size:1rem;line-height:1;flex-shrink:0}
+      .cm-drawer-seq-del:hover{background:#FEE2E2;color:#DC2626}
+      .cm-drawer-seq-form{margin-top:8px;padding:10px;background:#fff;border:1px solid #C7D2FE;border-radius:8px}
+      /* KPI card clickeable (Fricciones sin iniciativa) */
+      .cm-kpi-card-clickable{cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s}
+      .cm-kpi-card-clickable:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(15,23,42,.08);border-color:#C7D2FE}
 
       /* Canvas v2 — toolbar, filtros, links, banners */
       .cm-canvas-toolbar{position:sticky;top:0;z-index:50;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
@@ -1908,7 +1961,7 @@ window.ComercialModule = (function() {
           html += '<tr data-tp-id="' + escHtml(tp.id) + '" draggable="true"' + (hasFriction ? ' style="border-left:4px solid var(--warning)"' : '') + '>';
           html += '<td class="cm-tp-drag-handle" title="Arrastra para reordenar (display only)">⠿</td>';
           html += '<td>' + tp.id + '</td>';
-          html += '<td style="font-weight:600">' + escHtml(tp.name) + _badgesHTML(badges) + '</td>';
+          html += '<td style="font-weight:600"><a href="#" class="cm-tp-name-link" data-tp-id="' + escHtml(tp.id) + '" title="Ver ficha del touchpoint">' + escHtml(tp.name) + '</a>' + _badgesHTML(badges) + '</td>';
           html += '<td>' + escHtml(tp.canal || '') + '</td>';
           html += '<td>' + (tp.responsable_id ? personAvatar(tp.responsable_id, 20) + ' ' : '') + escHtml(respName) + '</td>';
           var tpKpis = getLinkedKpisForTouchpoint(tp.id);
@@ -1941,7 +1994,6 @@ window.ComercialModule = (function() {
           html += '<td style="text-align:center">';
           html += '<button class="cm-icon-btn cm-tp-view-canvas" data-tp-id="' + escHtml(tp.id) + '" title="Ver en Mapa Visual">&#128065;</button>';
           if (!isAll) {
-            html += '<button class="cm-icon-btn cm-edit-tp" data-tp-id="' + escHtml(tp.id) + '" title="Editar">&#9998;</button>';
             html += '<button class="cm-icon-btn danger cm-delete-tp" data-tp-id="' + escHtml(tp.id) + '" title="Eliminar">&#128465;</button>';
           }
           html += '</td>';
@@ -2052,10 +2104,11 @@ window.ComercialModule = (function() {
       });
     });
 
-    // Edit touchpoint buttons
-    el.querySelectorAll('.cm-edit-tp').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        showEditTouchpointRow(this.dataset.tpId, el);
+    // Click en el nombre del touchpoint → abre la ficha (drawer) con KPIs, fricciones, iniciativas, secuencia, edición inline
+    el.querySelectorAll('.cm-tp-name-link').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        e.preventDefault();
+        _showCanvasDrawerTouchpoint(this.dataset.tpId);
       });
     });
 
@@ -3898,6 +3951,8 @@ window.ComercialModule = (function() {
       if (btn) btn.classList.toggle('active', canvasState.fullscreen);
       var root = document.querySelector('#comercial-module');
       if (root) root.classList.toggle('cm-fullscreen-mode', canvasState.fullscreen);
+      // Re-anclar el drawer dentro del módulo para que sea visible en fullscreen
+      _ensureCanvasDrawerDOM();
     });
   }
 
@@ -4168,61 +4223,318 @@ window.ComercialModule = (function() {
     canvasState.selectedKey = null;
   }
 
+  function _ensureCanvasDrawerDOM() {
+    // El drawer debe vivir dentro de #comercial-module para que sea visible
+    // también cuando el canvas entra en modo pantalla completa (fullscreen
+    // aplica al módulo, todo lo que esté fuera no se renderiza).
+    // Fallback: document.body si por alguna razón no existe el módulo.
+    var moduleEl = document.querySelector('#comercial-module');
+    var targetParent = moduleEl || document.body;
+    var existing = document.querySelector('#cm-canvas-drawer');
+    if (existing) {
+      if (existing.parentNode !== targetParent) {
+        targetParent.appendChild(existing);
+      }
+      return;
+    }
+    var div = document.createElement('div');
+    div.className = 'cm-canvas-drawer';
+    div.id = 'cm-canvas-drawer';
+    div.innerHTML = '<div class="cm-canvas-drawer-content" id="cm-canvas-drawer-content"></div>';
+    targetParent.appendChild(div);
+  }
+
+  function _renderDrawerKPIsHTML(tp) {
+    var tpKpiLinks = state.kpi_touchpoints.filter(function(lk){ return lk.touchpoint_id === tp.id; });
+    if (tpKpiLinks.length === 0) {
+      return '<div class="cm-canvas-drawer-empty">Sin KPIs vinculados a este touchpoint.</div>';
+    }
+    var html = '';
+    tpKpiLinks.forEach(function(lk) {
+      var k = state.kpis.find(function(x){ return x.id === lk.kpi_id; });
+      if (!k) return;
+      var hist = (state.tp_kpi_history || []).filter(function(h){
+        return h.touchpoint_id === tp.id && h.kpi_id === k.id;
+      });
+      hist.sort(function(a,b){ return (b.recorded_at || '').localeCompare(a.recorded_at || ''); });
+      var lastVal = hist.length > 0 ? hist[0].value : null;
+      var lastDate = hist.length > 0 ? hist[0].recorded_at : null;
+      var target = lk.target_value_local != null ? lk.target_value_local : k.target_value;
+      var unit = k.unit || '';
+      var sem = _kpiSemColor(k);
+      var semCfgKey = sem === 'green' ? 'green' : sem === 'yellow' ? 'yellow' : sem === 'red' ? 'red' : 'gray';
+      var semColor = _healthCfg[semCfgKey].dot;
+
+      html += '<div class="cm-drawer-kpi" data-kpi-id="' + escHtml(k.id) + '">';
+      html += '<div class="cm-drawer-kpi-head">';
+      html += '<span class="cm-mv-dot" style="background:' + semColor + ';width:8px;height:8px"></span>';
+      html += '<span class="cm-drawer-kpi-name">' + escHtml(k.name) + '</span>';
+      if (lk.is_critical) html += '<span class="cm-drawer-kpi-crit">CRÍTICO</span>';
+      html += '</div>';
+      html += '<div class="cm-drawer-kpi-meta">Meta: <b>' + (target != null ? target + unit : '—') + '</b>';
+      if (lk.frequency) html += ' · Frecuencia: ' + escHtml(lk.frequency);
+      html += '</div>';
+      if (lastVal != null) {
+        var diffStr = '';
+        var diffColor = '#64748B';
+        if (target != null) {
+          var diff = lastVal - target;
+          var sign = diff > 0 ? '+' : '';
+          diffStr = ' (' + sign + diff.toFixed(2).replace(/\.?0+$/, '') + unit + ')';
+          diffColor = diff >= 0 ? '#10B981' : '#EF4444';
+        }
+        html += '<div class="cm-drawer-kpi-actual">Actual: <b style="color:' + semColor + '">' + lastVal + unit + '</b>';
+        if (diffStr) html += '<span style="color:' + diffColor + '">' + diffStr + '</span>';
+        if (lastDate) html += ' · ' + lastDate.slice(0, 10);
+        html += '</div>';
+        if (hist.length > 1) {
+          var trendVals = hist.slice(0, 4).reverse().map(function(h){ return h.value + unit; }).join(' → ');
+          html += '<div class="cm-drawer-kpi-trend">Tendencia: ' + trendVals + '</div>';
+        }
+      } else {
+        html += '<div class="cm-drawer-kpi-empty">Sin medición todavía</div>';
+      }
+      html += '<button class="cm-drawer-kpi-record" data-tp-id="' + tp.id + '" data-kpi-id="' + escHtml(k.id) + '">+ Registrar valor</button>';
+      html += '</div>';
+    });
+    return html;
+  }
+
+  function _bindDrawerKpiRecord(tpId) {
+    document.querySelectorAll('.cm-drawer-kpi-record').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        _showRecordKpiInline(this.dataset.tpId, this.dataset.kpiId, this);
+      });
+    });
+  }
+
+  function _showRecordKpiInline(tpId, kpiId, anchorBtn) {
+    var k = state.kpis.find(function(x){ return x.id === kpiId; });
+    if (!k) return;
+    var unit = k.unit || '';
+    var html = '<div class="cm-drawer-kpi-form">';
+    html += '<div style="font-size:.76rem;font-weight:600;margin-bottom:6px;color:#1E293B">Registrar ' + escHtml(k.name) + '</div>';
+    html += '<input type="number" step="any" class="cm-input cm-drawer-kpi-input" placeholder="Valor' + (unit ? ' (' + escHtml(unit) + ')' : '') + '">';
+    html += '<input type="text" class="cm-input cm-drawer-kpi-notes" placeholder="Notas (opcional)" style="margin-top:6px">';
+    html += '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">';
+    html += '<button class="cm-btn cm-btn-ghost cm-drawer-kpi-cancel" style="font-size:.74rem;padding:4px 10px">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary cm-drawer-kpi-submit" style="font-size:.74rem;padding:4px 10px">Guardar</button>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    var formEl = div.firstChild;
+    anchorBtn.parentNode.appendChild(formEl);
+    anchorBtn.style.display = 'none';
+
+    formEl.querySelector('.cm-drawer-kpi-cancel').addEventListener('click', function() {
+      formEl.remove();
+      anchorBtn.style.display = '';
+    });
+    formEl.querySelector('.cm-drawer-kpi-submit').addEventListener('click', function() {
+      var input = formEl.querySelector('.cm-drawer-kpi-input');
+      var val = parseFloat(input.value);
+      if (isNaN(val)) { toast('Valor inválido', 'error'); input.focus(); return; }
+      var notes = formEl.querySelector('.cm-drawer-kpi-notes').value;
+      fetch('/api/comercial/touchpoints/' + tpId + '/kpis/' + encodeURIComponent(kpiId) + '/history', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: val, notes: notes || null, author: null })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(row) {
+          if (!Array.isArray(state.tp_kpi_history)) state.tp_kpi_history = [];
+          state.tp_kpi_history.push(row);
+          toast('Valor registrado', 'success');
+          _showCanvasDrawerTouchpoint(tpId);
+        }).catch(function(){ toast('Error al guardar', 'error'); });
+    });
+    var ipt = formEl.querySelector('.cm-drawer-kpi-input');
+    if (ipt) ipt.focus();
+  }
+
   function _showCanvasDrawerTouchpoint(tpId) {
+    _ensureCanvasDrawerDOM();
     var tp = state.touchpoints.find(function(x){ return String(x.id) === String(tpId); });
     if (!tp) return;
     var fricts = _frictionsForTouchpoint(tp.id);
     var inis = _initiativesForTouchpoint(tp.id);
     var h = computeTouchpointHealth(tp);
     var cfg = _healthCfg[h.level];
-    var resp = personName(tp.responsable_id) || tp.responsable || 'Sin responsable';
 
     var html = '';
     html += '<div class="cm-canvas-drawer-header">';
-    html += '<div style="display:flex;align-items:center;gap:10px"><span class="cm-mv-dot" style="background:' + cfg.dot + ';width:12px;height:12px"></span><span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Touchpoint #' + tp.id + '</span></div>';
+    html += '<div style="display:flex;align-items:center;gap:10px"><span class="cm-mv-dot" style="background:' + cfg.dot + ';width:12px;height:12px"></span><span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Touchpoint #' + tp.id + '</span><span class="cm-mv-tag" style="background:' + cfg.bg + ';color:' + cfg.dot + ';border-color:' + cfg.border + '">' + cfg.label + '</span></div>';
     html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close">×</button>';
     html += '</div>';
-    html += '<div class="cm-canvas-drawer-title">' + escHtml(tp.name) + '</div>';
-    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
-    if (tp.canal) html += '<span class="cm-mv-tag">' + escHtml(tp.canal) + '</span>';
-    html += '<span class="cm-mv-tag cm-mv-tag-resp">' + escHtml(resp) + '</span>';
-    html += '<span class="cm-mv-tag" style="background:' + cfg.bg + ';color:' + cfg.dot + ';border-color:' + cfg.border + '">' + cfg.label + '</span>';
+
+    // Nombre editable inline
+    html += '<input type="text" class="cm-drawer-edit-title" data-field="name" value="' + escHtml(tp.name) + '" placeholder="Nombre del touchpoint">';
+
+    // Fila de campos editables: fase, canal, responsable
+    html += '<div class="cm-drawer-edit-grid">';
+    html += '<div class="cm-drawer-edit-cell"><label>Fase</label>';
+    html += '<select class="cm-drawer-edit-input" data-field="phase_id">';
+    state.phases.slice().sort(function(a,b){ return (a.order||0)-(b.order||0); }).forEach(function(p) {
+      html += '<option value="' + escHtml(p.id) + '"' + (String(p.id) === String(tp.phase_id) ? ' selected' : '') + '>' + escHtml(p.name) + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="cm-drawer-edit-cell"><label>Canal</label>';
+    html += '<input type="text" class="cm-drawer-edit-input" data-field="canal" value="' + escHtml(tp.canal || '') + '" placeholder="Llamada, email...">';
+    html += '</div>';
+    html += '<div class="cm-drawer-edit-cell"><label>Responsable</label>';
+    html += '<select class="cm-drawer-edit-input" data-field="responsable_id">';
+    html += '<option value="">Sin asignar</option>';
+    state.people.forEach(function(p) {
+      html += '<option value="' + p.id + '"' + (String(p.id) === String(tp.responsable_id) ? ' selected' : '') + '>' + escHtml(p.name) + '</option>';
+    });
+    html += '</select></div>';
     html += '</div>';
 
+    // ── Secuencia (predecesores, sucesores, paralelos)
+    html += _renderDrawerSequenceHTML(tp);
+
+    // ── KPIs (estado: meta vs actual + tendencia + registrar)
+    var tpKpiCount = state.kpi_touchpoints.filter(function(lk){ return lk.touchpoint_id === tp.id; }).length;
     html += '<div class="cm-canvas-drawer-section">';
-    html += '<div class="cm-canvas-drawer-section-title">Iniciativas (' + inis.length + ')</div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<div class="cm-canvas-drawer-section-title" style="margin-bottom:0">KPIs (' + tpKpiCount + ')</div>';
+    html += '<button class="cm-drawer-inline-btn" data-act="link-kpi" data-tp-id="' + tp.id + '">+ Vincular KPI</button>';
+    html += '</div>';
+    html += _renderDrawerKPIsHTML(tp);
+    html += '</div>';
+
+    // ── Fricciones (causa)
+    html += '<div class="cm-canvas-drawer-section">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap">';
+    html += '<div class="cm-canvas-drawer-section-title" style="margin-bottom:0">Fricciones (' + fricts.length + ')</div>';
+    html += '<div style="display:flex;gap:6px">';
+    html += '<button class="cm-drawer-inline-btn" data-act="link-friction" data-tp-id="' + tp.id + '">+ Vincular</button>';
+    html += '<button class="cm-drawer-inline-btn" data-act="add-friction" data-tp-id="' + tp.id + '">+ Crear</button>';
+    html += '</div>';
+    html += '</div>';
+    if (fricts.length === 0) {
+      html += '<div class="cm-canvas-drawer-empty">Sin fricciones reportadas</div>';
+    } else {
+      fricts.forEach(function(f) {
+        var icfg = _impactCfg[f.impact||'medium'] || _impactCfg.medium;
+        var fInis = _initiativesForFriction(f.id);
+        html += '<div class="cm-canvas-drawer-item" style="border-left:3px solid ' + icfg.color + '">';
+        html += '<div style="font-size:.78rem"><b>' + escHtml(f.id) + '</b> · ' + escHtml(f.name) + '</div>';
+        html += '<div style="font-size:.66rem;color:' + icfg.color + ';font-weight:700;text-transform:uppercase;margin-top:3px">' + icfg.label + ' · ' + escHtml(f.status||'pending') + '</div>';
+        if (fInis.length === 0) {
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:6px">';
+          html += '<span style="font-size:.7rem;color:#DC2626;font-style:italic">⚠ Sin iniciativa que la atienda</span>';
+          html += '<button class="cm-drawer-inline-btn" data-act="add-ini-for-friction" data-fr-id="' + escHtml(f.id) + '" data-tp-id="' + tp.id + '">+ Iniciativa</button>';
+          html += '</div>';
+        } else {
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:6px">';
+          html += '<span style="font-size:.7rem;color:#64748B">' + fInis.length + ' iniciativa' + (fInis.length===1?'':'s') + ' atacándola</span>';
+          html += '<button class="cm-drawer-inline-btn" data-act="add-ini-for-friction" data-fr-id="' + escHtml(f.id) + '" data-tp-id="' + tp.id + '">+ Iniciativa</button>';
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+
+    // ── Iniciativas (cura)
+    html += '<div class="cm-canvas-drawer-section">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<div class="cm-canvas-drawer-section-title" style="margin-bottom:0">Iniciativas (' + inis.length + ')</div>';
+    html += '<button class="cm-drawer-inline-btn" data-act="add-ini-for-tp" data-tp-id="' + tp.id + '">+ Iniciativa</button>';
+    html += '</div>';
     if (inis.length === 0) {
       html += '<div class="cm-canvas-drawer-empty">Sin iniciativas vinculadas</div>';
     } else {
       inis.forEach(function(ii) {
         var prog = ii.progress || 0;
         var col = prog >= 100 ? '#10B981' : (prog >= 50 ? '#6366F1' : (prog > 0 ? '#F59E0B' : '#94A3B8'));
+        var iniResp = personName(ii.responsable_id) || ii.responsable || '';
+        // Show which fricciones this iniciativa attacks (for trazabilidad)
+        var attackedFrIds = (ii.friction_ids || []).filter(function(fid){
+          return fricts.some(function(f){ return String(f.id) === String(fid); });
+        });
+        var attackedFrLabels = attackedFrIds.map(function(fid){
+          var ff = (state.frictions || []).find(function(f){ return String(f.id) === String(fid); });
+          return ff ? ff.name : fid;
+        });
         html += '<div class="cm-canvas-drawer-item">';
-        html += '<div style="font-size:.78rem;font-weight:600">' + escHtml(ii.title) + ' ' + statusBadge(ii.status||'pending') + '</div>';
+        html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">';
+        html += '<div style="font-size:.78rem;font-weight:600;flex:1">' + escHtml(ii.title) + ' ' + statusBadge(ii.status||'pending') + '</div>';
+        html += '<button class="cm-drawer-inline-btn" data-act="edit-ini" data-ini-id="' + ii.id + '" style="font-size:.66rem">Editar</button>';
+        html += '</div>';
+        if (iniResp || ii.due_date) {
+          html += '<div style="font-size:.68rem;color:#64748B;margin-top:2px">';
+          if (iniResp) html += escHtml(iniResp);
+          if (iniResp && ii.due_date) html += ' · ';
+          if (ii.due_date) html += 'Entrega: ' + ii.due_date.slice(0, 10);
+          html += '</div>';
+        }
+        if (attackedFrLabels.length > 0) {
+          html += '<div style="font-size:.66rem;color:#64748B;margin-top:2px;font-style:italic">Ataca: ' + escHtml(attackedFrLabels.join(', ')) + '</div>';
+        }
         html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div style="flex:1;height:4px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + prog + '%;background:' + col + '"></div></div><span style="font-size:.7rem;font-weight:700;color:' + col + '">' + prog + '%</span></div>';
         html += '</div>';
       });
     }
     html += '</div>';
 
+    // ── Comentarios (evidencia humana)
+    var tpComments = (state.comments || []).filter(function(c) {
+      return c.entity_type === 'touchpoint' && String(c.entity_id) === String(tp.id);
+    });
+    tpComments.sort(function(a, b) { return (b.created_at || '').localeCompare(a.created_at || ''); });
+    var visibleComments = tpComments.slice(0, 3);
     html += '<div class="cm-canvas-drawer-section">';
-    html += '<div class="cm-canvas-drawer-section-title">Fricciones (' + fricts.length + ')</div>';
-    if (fricts.length === 0) {
-      html += '<div class="cm-canvas-drawer-empty">Sin fricciones reportadas</div>';
+    html += '<div class="cm-canvas-drawer-section-title">Comentarios (' + tpComments.length + ')</div>';
+    if (visibleComments.length === 0) {
+      html += '<div class="cm-canvas-drawer-empty">Sin comentarios todavía</div>';
     } else {
-      fricts.forEach(function(f) {
-        var icfg = _impactCfg[f.impact||'medium'] || _impactCfg.medium;
-        html += '<div class="cm-canvas-drawer-item" style="border-left:3px solid ' + icfg.color + '">';
-        html += '<div style="font-size:.78rem"><b>' + escHtml(f.id) + '</b> · ' + escHtml(f.name) + '</div>';
-        html += '<div style="font-size:.66rem;color:' + icfg.color + ';font-weight:700;text-transform:uppercase;margin-top:3px">' + icfg.label + ' · ' + escHtml(f.status||'pending') + '</div>';
+      visibleComments.forEach(function(c) {
+        html += '<div class="cm-canvas-drawer-item">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:3px">';
+        html += '<span style="font-size:.72rem;font-weight:700;color:#1E293B">' + escHtml(c.author || 'Usuario') + '</span>';
+        html += '<span style="font-size:.66rem;color:#94A3B8">' + (typeof relativeTime === 'function' ? relativeTime(c.created_at) : (c.created_at ? c.created_at.slice(0, 10) : '')) + '</span>';
+        html += '</div>';
+        html += '<div style="font-size:.74rem;color:#475569;line-height:1.35">' + escHtml(c.text) + '</div>';
         html += '</div>';
       });
+      if (tpComments.length > 3) {
+        html += '<div style="font-size:.7rem;color:#94A3B8;font-style:italic;padding:4px">+ ' + (tpComments.length - 3) + ' más</div>';
+      }
     }
+    html += '<div style="display:flex;gap:6px;margin-top:8px">';
+    html += '<input type="text" class="cm-input cm-drawer-comment-author" placeholder="Tu nombre" style="font-size:.74rem;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;width:100px;font-family:inherit">';
+    html += '<input type="text" class="cm-input cm-drawer-comment-text" placeholder="Comentario..." style="font-size:.74rem;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;flex:1;font-family:inherit">';
+    html += '<button class="cm-drawer-inline-btn cm-drawer-comment-submit" data-tp-id="' + tp.id + '" style="white-space:nowrap">Enviar</button>';
+    html += '</div>';
     html += '</div>';
 
+    // ── Historial (audit log)
+    var tpLog = (state.activity_log || []).filter(function(e) {
+      return e.entity_type === 'touchpoint' && String(e.entity_id) === String(tp.id);
+    });
+    tpLog.sort(function(a, b) { return (b.created_at || '').localeCompare(a.created_at || ''); });
+    var visibleLog = tpLog.slice(0, 5);
+    if (visibleLog.length > 0) {
+      html += '<div class="cm-canvas-drawer-section">';
+      html += '<div class="cm-canvas-drawer-section-title">Historial</div>';
+      visibleLog.forEach(function(e) {
+        var when = e.created_at ? e.created_at.slice(0, 10) : '';
+        html += '<div style="font-size:.7rem;color:#64748B;padding:4px 0;border-bottom:1px solid #F1F5F9">';
+        html += '<span style="color:#94A3B8">' + when + '</span> · ';
+        html += '<b>' + escHtml(e.action || '') + '</b>';
+        if (e.detail) html += ' — ' + escHtml(e.detail.slice(0, 80));
+        html += '</div>';
+      });
+      if (tpLog.length > 5) {
+        html += '<div style="font-size:.7rem;color:#94A3B8;font-style:italic;padding:4px">+ ' + (tpLog.length - 5) + ' eventos más</div>';
+      }
+      html += '</div>';
+    }
+
     html += '<div class="cm-canvas-drawer-actions">';
-    html += '<button class="cm-btn cm-btn-ghost" id="cm-canvas-goto-proceso">Editar en Mapa de Procesos</button>';
-    html += '<button class="cm-btn cm-btn-primary" id="cm-canvas-goto-fricciones">Ver fricciones</button>';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-canvas-goto-canvas">Ver en Mapa Visual</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-canvas-goto-fricciones">Ver todas las fricciones</button>';
     html += '</div>';
 
     var drawer = document.querySelector('#cm-canvas-drawer');
@@ -4232,14 +4544,435 @@ window.ComercialModule = (function() {
       drawer.classList.add('open');
       var btnClose = document.querySelector('#cm-canvas-drawer-close');
       if (btnClose) btnClose.addEventListener('click', _closeCanvasDrawer);
-      var btn1 = document.querySelector('#cm-canvas-goto-proceso');
-      if (btn1) btn1.addEventListener('click', function() { activeTab = 'proceso'; render(); });
+      var btnCanvas = document.querySelector('#cm-canvas-goto-canvas');
+      if (btnCanvas) btnCanvas.addEventListener('click', function() {
+        _closeCanvasDrawer();
+        _canvasFocusOn('touchpoint', tp.id);
+      });
       var btn2 = document.querySelector('#cm-canvas-goto-fricciones');
       if (btn2) btn2.addEventListener('click', function() { activeTab = 'fricciones'; render(); });
+      _bindDrawerEditFields(tp);
+      _bindDrawerSequenceActions(tp);
+      _bindDrawerKpiRecord(tp.id);
+      _bindDrawerInlineActions(tp);
+      _bindDrawerCommentSubmit(tp);
     }
   }
 
+  /* ── Drawer: edición inline (auto-save al blur/change) ── */
+  function _bindDrawerEditFields(tp) {
+    var content = document.querySelector('#cm-canvas-drawer-content');
+    if (!content) return;
+    // Title
+    var titleIpt = content.querySelector('.cm-drawer-edit-title');
+    if (titleIpt) {
+      titleIpt.addEventListener('blur', function() {
+        var v = this.value.trim();
+        if (!v || v === tp.name) { this.value = tp.name; return; }
+        _patchTouchpointField(tp.id, 'name', v);
+      });
+      titleIpt.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        if (e.key === 'Escape') { this.value = tp.name; this.blur(); }
+      });
+    }
+    // Selects e inputs
+    content.querySelectorAll('.cm-drawer-edit-input').forEach(function(el) {
+      var field = el.dataset.field;
+      var origVal = el.tagName === 'SELECT' ? el.value : (el.value || '');
+      el.addEventListener('change', function() { _commitDrawerField(tp, this, field); });
+      if (el.tagName === 'INPUT') {
+        el.addEventListener('blur', function() {
+          if (this.value !== origVal) _commitDrawerField(tp, this, field);
+        });
+      }
+    });
+  }
+
+  function _commitDrawerField(tp, el, field) {
+    var v = el.value;
+    if (field === 'responsable_id') {
+      v = v ? parseInt(v) : null;
+    } else if (field === 'canal') {
+      v = v.trim() || null;
+    }
+    _patchTouchpointField(tp.id, field, v);
+  }
+
+  function _patchTouchpointField(tpId, field, value) {
+    var data = {}; data[field] = value;
+    apiPatch('touchpoints', tpId, data).then(function(updated) {
+      var idx = state.touchpoints.findIndex(function(t){ return String(t.id) === String(tpId); });
+      if (idx >= 0) state.touchpoints[idx] = Object.assign({}, state.touchpoints[idx], updated);
+      toast('Guardado', 'success');
+    }).catch(function() {
+      toast('Error al guardar', 'error');
+      _showCanvasDrawerTouchpoint(tpId);
+    });
+  }
+
+  /* ── Drawer: sección Secuencia ── */
+  function _renderDrawerSequenceHTML(tp) {
+    var flows = state.touchpoint_flows || [];
+    var preds = flows.filter(function(f){ return String(f.to_touchpoint_id) === String(tp.id); });
+    var succs = flows.filter(function(f){ return String(f.from_touchpoint_id) === String(tp.id); });
+    var sameFasePeers = state.touchpoints.filter(function(t) {
+      if (String(t.id) === String(tp.id)) return false;
+      return String(t.phase_id) === String(tp.phase_id);
+    });
+    var connectedIds = {};
+    preds.forEach(function(f){ connectedIds[String(f.from_touchpoint_id)] = true; });
+    succs.forEach(function(f){ connectedIds[String(f.to_touchpoint_id)] = true; });
+    var parallels = sameFasePeers.filter(function(t){ return !connectedIds[String(t.id)]; });
+
+    var hasSequence = preds.length > 0 || succs.length > 0;
+
+    var html = '<div class="cm-canvas-drawer-section">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+    html += '<div class="cm-canvas-drawer-section-title" style="margin-bottom:0">Secuencia</div>';
+    html += '<button class="cm-drawer-inline-btn" data-act="seq-connect" data-tp-id="' + tp.id + '">+ Conectar</button>';
+    html += '</div>';
+
+    if (!hasSequence) {
+      html += '<div class="cm-canvas-drawer-empty">Sin secuencia definida — touchpoint paralelo o aislado</div>';
+    } else {
+      // Predecesores
+      if (preds.length > 0) {
+        html += '<div class="cm-drawer-seq-block">';
+        html += '<div class="cm-drawer-seq-label">Llega de (' + preds.length + ')</div>';
+        preds.forEach(function(f) {
+          var other = state.touchpoints.find(function(t){ return String(t.id) === String(f.from_touchpoint_id); });
+          if (!other) return;
+          var otherPhase = state.phases.find(function(p){ return String(p.id) === String(other.phase_id); });
+          html += '<div class="cm-drawer-seq-item" data-act="seq-goto" data-tp-id="' + other.id + '">';
+          html += '<span class="cm-drawer-seq-arrow">←</span>';
+          html += '<div class="cm-drawer-seq-content">';
+          html += '<div class="cm-drawer-seq-name">#' + other.id + ' ' + escHtml(other.name) + '</div>';
+          if (otherPhase) html += '<div class="cm-drawer-seq-meta">' + escHtml(otherPhase.name) + '</div>';
+          if (f.label) html += '<div class="cm-drawer-seq-flowlabel">"' + escHtml(f.label) + '"</div>';
+          html += '</div>';
+          html += '<button class="cm-drawer-seq-del" data-flow-id="' + f.id + '" title="Quitar conexión">×</button>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+      // Sucesores
+      if (succs.length > 0) {
+        html += '<div class="cm-drawer-seq-block">';
+        html += '<div class="cm-drawer-seq-label">Va a (' + succs.length + ')</div>';
+        succs.forEach(function(f) {
+          var other = state.touchpoints.find(function(t){ return String(t.id) === String(f.to_touchpoint_id); });
+          if (!other) return;
+          var otherPhase = state.phases.find(function(p){ return String(p.id) === String(other.phase_id); });
+          html += '<div class="cm-drawer-seq-item" data-act="seq-goto" data-tp-id="' + other.id + '">';
+          html += '<span class="cm-drawer-seq-arrow">→</span>';
+          html += '<div class="cm-drawer-seq-content">';
+          html += '<div class="cm-drawer-seq-name">#' + other.id + ' ' + escHtml(other.name) + '</div>';
+          if (otherPhase) html += '<div class="cm-drawer-seq-meta">' + escHtml(otherPhase.name) + '</div>';
+          if (f.label) html += '<div class="cm-drawer-seq-flowlabel">"' + escHtml(f.label) + '"</div>';
+          html += '</div>';
+          html += '<button class="cm-drawer-seq-del" data-flow-id="' + f.id + '" title="Quitar conexión">×</button>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+    }
+
+    // Paralelos siempre van al final (informativo)
+    if (parallels.length > 0) {
+      var phaseObj = state.phases.find(function(p){ return String(p.id) === String(tp.phase_id); });
+      var phaseName = phaseObj ? phaseObj.name : '';
+      html += '<div class="cm-drawer-seq-block">';
+      html += '<div class="cm-drawer-seq-label" style="color:#94A3B8">Paralelos en ' + escHtml(phaseName) + ' (' + parallels.length + ')</div>';
+      parallels.slice(0, 5).forEach(function(other) {
+        html += '<div class="cm-drawer-seq-item cm-drawer-seq-item--parallel" data-act="seq-goto" data-tp-id="' + other.id + '">';
+        html += '<span class="cm-drawer-seq-arrow" style="color:#94A3B8">⏱</span>';
+        html += '<div class="cm-drawer-seq-content">';
+        html += '<div class="cm-drawer-seq-name" style="color:#64748B">#' + other.id + ' ' + escHtml(other.name) + '</div>';
+        html += '<div class="cm-drawer-seq-meta" style="color:#94A3B8">sin dependencia directa</div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      if (parallels.length > 5) {
+        html += '<div style="font-size:.7rem;color:#94A3B8;font-style:italic;padding:4px">+ ' + (parallels.length - 5) + ' más en esta fase</div>';
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function _bindDrawerSequenceActions(tp) {
+    var content = document.querySelector('#cm-canvas-drawer-content');
+    if (!content) return;
+    content.querySelectorAll('[data-act="seq-goto"]').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        if (e.target.classList.contains('cm-drawer-seq-del')) return;
+        _showCanvasDrawerTouchpoint(this.dataset.tpId);
+      });
+    });
+    content.querySelectorAll('.cm-drawer-seq-del').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var flowId = this.dataset.flowId;
+        if (!confirm('¿Quitar esta conexión del journey?')) return;
+        fetch('/api/comercial/touchpoint-flows/' + flowId, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function() {
+            state.touchpoint_flows = (state.touchpoint_flows || []).filter(function(f){ return String(f.id) !== String(flowId); });
+            toast('Conexión eliminada', 'success');
+            _showCanvasDrawerTouchpoint(tp.id);
+          }).catch(function(){ toast('Error al eliminar conexión', 'error'); });
+      });
+    });
+    var btnConnect = content.querySelector('[data-act="seq-connect"]');
+    if (btnConnect) {
+      btnConnect.addEventListener('click', function() {
+        _showSeqConnectInline(tp, this);
+      });
+    }
+  }
+
+  function _showSeqConnectInline(tp, anchorBtn) {
+    var existingFlows = state.touchpoint_flows || [];
+    var connectedIds = {};
+    existingFlows.forEach(function(f) {
+      if (String(f.from_touchpoint_id) === String(tp.id)) connectedIds[String(f.to_touchpoint_id)] = 'out';
+      if (String(f.to_touchpoint_id) === String(tp.id)) connectedIds[String(f.from_touchpoint_id)] = 'in';
+    });
+    var available = state.touchpoints.filter(function(t) {
+      if (String(t.id) === String(tp.id)) return false;
+      return true;
+    });
+    if (available.length === 0) { toast('No hay otros touchpoints', 'info'); return; }
+
+    var html = '<div class="cm-drawer-seq-form">';
+    html += '<div style="font-size:.74rem;font-weight:600;margin-bottom:6px;color:#1E293B">Conectar este touchpoint con...</div>';
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">';
+    html += '<select class="cm-drawer-seq-dir" style="font-size:.74rem;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit">';
+    html += '<option value="out">Va a → (sucesor)</option>';
+    html += '<option value="in">← Llega de (predecesor)</option>';
+    html += '</select>';
+    html += '</div>';
+    html += '<select class="cm-drawer-seq-target" style="width:100%;font-size:.74rem;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit;margin-bottom:6px">';
+    html += '<option value="">— Selecciona un touchpoint —</option>';
+    available.forEach(function(t) {
+      var ph = state.phases.find(function(p){ return String(p.id) === String(t.phase_id); });
+      var phName = ph ? ph.name : '';
+      var marker = connectedIds[String(t.id)] ? ' (ya conectado)' : '';
+      html += '<option value="' + t.id + '">#' + t.id + ' ' + escHtml(t.name) + ' · ' + escHtml(phName) + escHtml(marker) + '</option>';
+    });
+    html += '</select>';
+    html += '<input type="text" class="cm-drawer-seq-flow-label" placeholder="Etiqueta opcional (ej. \'si califica\')" style="width:100%;font-size:.74rem;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit;margin-bottom:8px">';
+    html += '<div style="display:flex;gap:6px;justify-content:flex-end">';
+    html += '<button class="cm-btn cm-btn-ghost cm-drawer-seq-cancel" style="font-size:.72rem;padding:4px 10px">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary cm-drawer-seq-submit" style="font-size:.72rem;padding:4px 10px">Conectar</button>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    var formEl = div.firstChild;
+    anchorBtn.parentNode.appendChild(formEl);
+    anchorBtn.style.display = 'none';
+
+    formEl.querySelector('.cm-drawer-seq-cancel').addEventListener('click', function() {
+      formEl.remove();
+      anchorBtn.style.display = '';
+    });
+    formEl.querySelector('.cm-drawer-seq-submit').addEventListener('click', function() {
+      var dir = formEl.querySelector('.cm-drawer-seq-dir').value;
+      var targetId = formEl.querySelector('.cm-drawer-seq-target').value;
+      var flowLabel = formEl.querySelector('.cm-drawer-seq-flow-label').value.trim();
+      if (!targetId) { toast('Selecciona un touchpoint', 'error'); return; }
+      var fromId = dir === 'out' ? tp.id : parseInt(targetId);
+      var toId = dir === 'out' ? parseInt(targetId) : tp.id;
+      fetch('/api/comercial/touchpoint-flows/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_touchpoint_id: fromId, to_touchpoint_id: toId,
+          label: flowLabel || null
+        })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(created) {
+          if (!Array.isArray(state.touchpoint_flows)) state.touchpoint_flows = [];
+          state.touchpoint_flows.push(created);
+          toast('Conexión creada', 'success');
+          _showCanvasDrawerTouchpoint(tp.id);
+        }).catch(function(){ toast('Error al crear conexión', 'error'); });
+    });
+  }
+
+  function _bindDrawerCommentSubmit(tp) {
+    var btn = document.querySelector('.cm-drawer-comment-submit[data-tp-id="' + tp.id + '"]');
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+      var content = document.querySelector('#cm-canvas-drawer-content');
+      var authorIpt = content.querySelector('.cm-drawer-comment-author');
+      var textIpt = content.querySelector('.cm-drawer-comment-text');
+      var author = (authorIpt.value || '').trim();
+      var text = (textIpt.value || '').trim();
+      if (!text) { textIpt.focus(); return; }
+      fetch('/api/comercial/comments/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entity_type: 'touchpoint',
+          entity_id: String(tp.id),
+          author: author || 'Anónimo',
+          text: text,
+        })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(created) {
+          if (!Array.isArray(state.comments)) state.comments = [];
+          state.comments.push(created);
+          toast('Comentario agregado', 'success');
+          _showCanvasDrawerTouchpoint(tp.id);
+        }).catch(function(){ toast('Error al guardar comentario', 'error'); });
+    });
+  }
+
+  function _bindDrawerInlineActions(tp) {
+    var content = document.querySelector('#cm-canvas-drawer-content');
+    if (!content) return;
+    content.querySelectorAll('[data-act="add-ini-for-tp"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var main = document.querySelector('#cm-main');
+        showInitiativeModal(null, main, { touchpoint_ids: [tp.id] });
+      });
+    });
+    content.querySelectorAll('[data-act="add-ini-for-friction"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var frId = this.dataset.frId;
+        var main = document.querySelector('#cm-main');
+        showInitiativeModal(null, main, { touchpoint_ids: [tp.id], friction_ids: [frId] });
+      });
+    });
+    content.querySelectorAll('[data-act="edit-ini"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var iniId = this.dataset.iniId;
+        var main = document.querySelector('#cm-main');
+        showInitiativeModal(iniId, main);
+      });
+    });
+    content.querySelectorAll('[data-act="add-friction"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        activeTab = 'fricciones';
+        render();
+        setTimeout(function() {
+          var b = document.querySelector('#cm-new-friction');
+          if (b) b.click();
+        }, 50);
+      });
+    });
+    content.querySelectorAll('[data-act="link-kpi"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _showLinkKpiInline(tp, this);
+      });
+    });
+    content.querySelectorAll('[data-act="link-friction"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _showLinkFrictionInline(tp, this);
+      });
+    });
+  }
+
+  function _showLinkKpiInline(tp, anchorBtn) {
+    var linkedIds = state.kpi_touchpoints
+      .filter(function(lk){ return lk.touchpoint_id === tp.id; })
+      .map(function(lk){ return lk.kpi_id; });
+    var available = state.kpis.filter(function(k){ return linkedIds.indexOf(k.id) < 0; });
+    if (available.length === 0) { toast('Todos los KPIs ya están vinculados', 'info'); return; }
+
+    var html = '<div class="cm-drawer-seq-form">';
+    html += '<div style="font-size:.74rem;font-weight:600;margin-bottom:6px;color:#1E293B">Vincular KPI existente</div>';
+    html += '<select class="cm-drawer-link-kpi-select" style="width:100%;font-size:.74rem;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit;margin-bottom:8px">';
+    html += '<option value="">— Selecciona un KPI —</option>';
+    available.forEach(function(k) {
+      html += '<option value="' + escHtml(k.id) + '">' + escHtml(k.name) + (k.unit ? ' (' + escHtml(k.unit) + ')' : '') + '</option>';
+    });
+    html += '</select>';
+    html += '<div style="display:flex;gap:6px;justify-content:flex-end">';
+    html += '<button class="cm-btn cm-btn-ghost cm-drawer-link-kpi-cancel" style="font-size:.72rem;padding:4px 10px">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary cm-drawer-link-kpi-submit" style="font-size:.72rem;padding:4px 10px">Vincular</button>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    var formEl = div.firstChild;
+    anchorBtn.parentNode.appendChild(formEl);
+    anchorBtn.style.display = 'none';
+
+    formEl.querySelector('.cm-drawer-link-kpi-cancel').addEventListener('click', function() {
+      formEl.remove();
+      anchorBtn.style.display = '';
+    });
+    formEl.querySelector('.cm-drawer-link-kpi-submit').addEventListener('click', function() {
+      var kpiId = formEl.querySelector('.cm-drawer-link-kpi-select').value;
+      if (!kpiId) { toast('Selecciona un KPI', 'error'); return; }
+      var newList = linkedIds.concat([kpiId]);
+      fetch('/api/comercial/touchpoints/' + tp.id + '/kpis', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newList)
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(rows) {
+          state.kpi_touchpoints = (state.kpi_touchpoints || []).filter(function(lk){ return lk.touchpoint_id !== tp.id; });
+          rows.forEach(function(r){ state.kpi_touchpoints.push(r); });
+          toast('KPI vinculado', 'success');
+          _showCanvasDrawerTouchpoint(tp.id);
+        }).catch(function(){ toast('Error al vincular KPI', 'error'); });
+    });
+  }
+
+  function _showLinkFrictionInline(tp, anchorBtn) {
+    var available = (state.frictions || []).filter(function(f) {
+      return f.touchpoint_id == null || String(f.touchpoint_id) !== String(tp.id);
+    });
+    if (available.length === 0) { toast('No hay fricciones disponibles', 'info'); return; }
+
+    var html = '<div class="cm-drawer-seq-form">';
+    html += '<div style="font-size:.74rem;font-weight:600;margin-bottom:6px;color:#1E293B">Vincular fricción existente</div>';
+    html += '<select class="cm-drawer-link-fr-select" style="width:100%;font-size:.74rem;padding:5px 8px;border:1px solid #E2E8F0;border-radius:6px;font-family:inherit;margin-bottom:8px">';
+    html += '<option value="">— Selecciona una fricción —</option>';
+    available.forEach(function(f) {
+      var marker = f.touchpoint_id ? ' (mover desde otro TP)' : '';
+      html += '<option value="' + escHtml(f.id) + '">' + escHtml(f.id) + ' · ' + escHtml(f.name) + escHtml(marker) + '</option>';
+    });
+    html += '</select>';
+    html += '<div style="display:flex;gap:6px;justify-content:flex-end">';
+    html += '<button class="cm-btn cm-btn-ghost cm-drawer-link-fr-cancel" style="font-size:.72rem;padding:4px 10px">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary cm-drawer-link-fr-submit" style="font-size:.72rem;padding:4px 10px">Vincular</button>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    var formEl = div.firstChild;
+    anchorBtn.parentNode.appendChild(formEl);
+    anchorBtn.style.display = 'none';
+
+    formEl.querySelector('.cm-drawer-link-fr-cancel').addEventListener('click', function() {
+      formEl.remove();
+      anchorBtn.style.display = '';
+    });
+    formEl.querySelector('.cm-drawer-link-fr-submit').addEventListener('click', function() {
+      var frId = formEl.querySelector('.cm-drawer-link-fr-select').value;
+      if (!frId) { toast('Selecciona una fricción', 'error'); return; }
+      apiPatch('frictions', frId, { touchpoint_id: tp.id }).then(function(updated) {
+        var idx = state.frictions.findIndex(function(f){ return String(f.id) === String(frId); });
+        if (idx >= 0) state.frictions[idx] = Object.assign({}, state.frictions[idx], updated);
+        toast('Fricción vinculada', 'success');
+        _showCanvasDrawerTouchpoint(tp.id);
+      }).catch(function() { toast('Error al vincular fricción', 'error'); });
+    });
+  }
+
   function _showCanvasDrawerFriction(fId) {
+    _ensureCanvasDrawerDOM();
     var f = (state.frictions || []).find(function(x){ return String(x.id) === String(fId); });
     if (!f) return;
     var fInis = _initiativesForFriction(f.id);
@@ -4300,6 +5033,7 @@ window.ComercialModule = (function() {
   }
 
   function _showCanvasDrawerNote(noteId) {
+    _ensureCanvasDrawerDOM();
     var n = (state.canvas_notes || []).find(function(x){ return String(x.id) === String(noteId); });
     if (!n) return;
     var palette = { yellow:'#FEF3C7', blue:'#DBEAFE', pink:'#FCE7F3', green:'#D1FAE5' };
@@ -4440,6 +5174,14 @@ window.ComercialModule = (function() {
     var noOwner = state.iniciativas.filter(function(i) { return !i.responsable_id; }).length;
     var avgProgress = total > 0 ? Math.round(state.iniciativas.reduce(function(s, ii){ return s + (ii.progress || 0); }, 0) / total) : 0;
     var highPending = state.iniciativas.filter(function(i){ return (i.priority||'medium') === 'high' && i.status !== 'completed'; }).length;
+    // Fricciones huérfanas: activas que NINGUNA iniciativa ataca → señal de cobertura para el arquitecto
+    var orphanFrictions = (state.frictions || []).filter(function(f) {
+      if (f.status === 'completed') return false;
+      return !state.iniciativas.some(function(ii) {
+        var fids = ii.friction_ids || (ii.friction_id ? [ii.friction_id] : []);
+        return fids.some(function(x){ return String(x) === String(f.id); });
+      });
+    });
     var html = '';
     html += '<div class="cm-kpi-grid">';
     html += '<div class="cm-kpi-card"><div class="label">Total iniciativas</div><div class="value">' + total + '</div><div class="sub">Backlog comercial</div></div>';
@@ -4447,6 +5189,7 @@ window.ComercialModule = (function() {
     html += '<div class="cm-kpi-card"><div class="label">Alta prioridad activas</div><div class="value' + (highPending > 0 ? ' danger' : '') + '">' + highPending + '</div><div class="sub">Foco semanal</div></div>';
     html += '<div class="cm-kpi-card"><div class="label">Completadas</div><div class="value success">' + completed + '</div><div class="sub">Cierre operativo</div></div>';
     html += '<div class="cm-kpi-card"><div class="label">Vencidas</div><div class="value' + (overdue > 0 ? ' danger' : '') + '">' + overdue + '</div><div class="sub">Requieren atención</div></div>';
+    html += '<div class="cm-kpi-card cm-kpi-card-clickable" data-act="show-orphan-frictions" title="Ver fricciones sin iniciativa"><div class="label">Fricciones sin iniciativa</div><div class="value' + (orphanFrictions.length > 0 ? ' danger' : '') + '">' + orphanFrictions.length + '</div><div class="sub">Cobertura — clic para ver</div></div>';
     html += '<div class="cm-kpi-card"><div class="label">Sin responsable</div><div class="value">' + noOwner + '</div><div class="sub">Asignación pendiente</div></div>';
     html += '</div>';
 
@@ -4548,11 +5291,11 @@ window.ComercialModule = (function() {
       });
       tIds.forEach(function(tid) {
         var tp = state.touchpoints.find(function(x){ return x.id === tid; });
-        if (tp) html += '<span class="cm-ini-scope-tag" style="background:#F0F9FF;color:#0284C7;border-color:#BAE6FD" title="Touchpoint: ' + escHtml(tp.name) + '">TP #' + tp.id + '</span>';
+        if (tp) html += '<span class="cm-ini-scope-tag cm-ini-scope-tp" data-tp-id="' + tp.id + '" style="background:#F0F9FF;color:#0284C7;border-color:#BAE6FD;cursor:pointer" title="Abrir ficha de: ' + escHtml(tp.name) + '">TP #' + tp.id + ' ' + escHtml(tp.name) + '</span>';
       });
       fIds.forEach(function(fid) {
         var f = (state.frictions || []).find(function(x){ return String(x.id) === String(fid); });
-        if (f) html += '<span class="cm-ini-scope-tag" style="background:#FEF2F2;color:#DC2626;border-color:#FECACA" title="' + escHtml(f.name) + '">' + escHtml(fid) + '</span>';
+        if (f) html += '<span class="cm-ini-scope-tag cm-ini-scope-fr" data-fr-id="' + escHtml(fid) + '" data-tp-id="' + escHtml(f.touchpoint_id || '') + '" style="background:#FEF2F2;color:#DC2626;border-color:#FECACA;cursor:pointer" title="' + escHtml(f.name) + '">' + escHtml(fid) + '</span>';
       });
       if (pIds.length === 0 && tIds.length === 0 && fIds.length === 0) {
         html += '<span style="font-size:.7rem;color:var(--text-muted);font-style:italic">Sin vincular</span>';
@@ -4615,11 +5358,102 @@ window.ComercialModule = (function() {
         deb = setTimeout(function() { iniciativasFilter.text = v; renderIniciativas(el); }, 200);
       });
     }
+    function _showOrphanFrictionsModal(parentEl) {
+      var orphans = (state.frictions || []).filter(function(f) {
+        if (f.status === 'completed') return false;
+        return !state.iniciativas.some(function(ii) {
+          var fids = ii.friction_ids || (ii.friction_id ? [ii.friction_id] : []);
+          return fids.some(function(x){ return String(x) === String(f.id); });
+        });
+      });
+      orphans.sort(function(a,b) {
+        var rank = { high: 0, medium: 1, low: 2 };
+        return (rank[a.impact] || 1) - (rank[b.impact] || 1);
+      });
+
+      var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
+      html += '<div class="cm-modal" style="max-width:680px">';
+      html += '<div class="cm-modal-title">Fricciones sin iniciativa que las atienda (' + orphans.length + ')</div>';
+      html += '<div style="font-size:.82rem;color:#64748B;margin-bottom:14px">Estas fricciones están activas pero ninguna iniciativa las cubre. Cada una es un hueco en la cobertura del journey — diseña una iniciativa que la ataque.</div>';
+      if (orphans.length === 0) {
+        html += '<div class="cm-empty"><div class="cm-empty-icon">&#10003;</div>Cobertura completa: todas las fricciones tienen al menos una iniciativa</div>';
+      } else {
+        html += '<div style="max-height:420px;overflow-y:auto">';
+        orphans.forEach(function(f) {
+          var icfg = _impactCfg[f.impact || 'medium'] || _impactCfg.medium;
+          var tp = state.touchpoints.find(function(t){ return String(t.id) === String(f.touchpoint_id); });
+          html += '<div class="cm-canvas-drawer-item" style="border-left:3px solid ' + icfg.color + ';margin-bottom:8px">';
+          html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">';
+          html += '<div style="flex:1;min-width:0">';
+          html += '<div style="font-size:.82rem;font-weight:600;color:#1E293B"><b>' + escHtml(f.id) + '</b> · ' + escHtml(f.name) + '</div>';
+          html += '<div style="font-size:.7rem;color:' + icfg.color + ';font-weight:700;text-transform:uppercase;margin-top:3px">' + icfg.label + ' · ' + escHtml(f.status||'pending') + '</div>';
+          if (tp) {
+            html += '<div style="font-size:.7rem;color:#64748B;margin-top:3px">Touchpoint: <a href="#" data-tp-id="' + tp.id + '" class="cm-orphan-tp-link" style="color:#4F46E5;text-decoration:none">#' + tp.id + ' ' + escHtml(tp.name) + '</a></div>';
+          } else {
+            html += '<div style="font-size:.7rem;color:#94A3B8;font-style:italic;margin-top:3px">Sin touchpoint asociado</div>';
+          }
+          html += '</div>';
+          html += '<button class="cm-btn cm-btn-primary cm-orphan-create-ini" data-fr-id="' + escHtml(f.id) + '" data-tp-id="' + escHtml(f.touchpoint_id || '') + '" style="font-size:.72rem;padding:5px 10px;white-space:nowrap">+ Iniciativa</button>';
+          html += '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+      html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-orphan-close">Cerrar</button></div>';
+      html += '</div></div>';
+
+      var div = document.createElement('div');
+      div.innerHTML = html;
+      document.body.appendChild(div.firstChild);
+      document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+      });
+      document.querySelector('#cm-orphan-close').addEventListener('click', closeModal);
+      document.querySelectorAll('.cm-orphan-tp-link').forEach(function(a) {
+        a.addEventListener('click', function(e) {
+          e.preventDefault();
+          closeModal();
+          _showCanvasDrawerTouchpoint(this.dataset.tpId);
+        });
+      });
+      document.querySelectorAll('.cm-orphan-create-ini').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var frId = this.dataset.frId;
+          var tpId = this.dataset.tpId;
+          var defaults = { friction_ids: [frId] };
+          if (tpId) defaults.touchpoint_ids = [parseInt(tpId)];
+          closeModal();
+          showInitiativeModal(null, parentEl, defaults);
+        });
+      });
+    }
+
     var createBtn = el.querySelector('#cm-new-initiative');
     if (createBtn) createBtn.addEventListener('click', function() { showInitiativeModal(null, el); });
     el.querySelectorAll('.cm-edit-initiative').forEach(function(btn) {
       btn.addEventListener('click', function() { showInitiativeModal(this.dataset.id, el); });
     });
+    // Click en chip TP → abre drawer
+    el.querySelectorAll('.cm-ini-scope-tp').forEach(function(span) {
+      span.addEventListener('click', function() {
+        _showCanvasDrawerTouchpoint(this.dataset.tpId);
+      });
+    });
+    // Click en chip de fricción → abre drawer del touchpoint asociado, o navega a Fricciones si no tiene
+    el.querySelectorAll('.cm-ini-scope-fr').forEach(function(span) {
+      span.addEventListener('click', function() {
+        var tpId = this.dataset.tpId;
+        if (tpId) {
+          _showCanvasDrawerTouchpoint(tpId);
+        } else {
+          activeTab = 'fricciones';
+          render();
+        }
+      });
+    });
+    // Click en "Fricciones sin iniciativa" card → muestra modal con lista accionable
+    var orphanCard = el.querySelector('[data-act="show-orphan-frictions"]');
+    if (orphanCard) orphanCard.addEventListener('click', function() { _showOrphanFrictionsModal(el); });
     el.querySelectorAll('.cm-delete-initiative').forEach(function(btn) {
       btn.addEventListener('click', function() { deleteInitiative(this.dataset.id, el); });
     });
@@ -5069,101 +5903,8 @@ window.ComercialModule = (function() {
     });
   }
 
-  function showEditTouchpointRow(tpId, parentEl) {
-    var tp = state.touchpoints.find(function(t) { return String(t.id) === String(tpId); });
-    if (!tp) return;
-
-    var linkedKpis = getLinkedKpisForTouchpoint(tp.id);
-
-    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
-    html += '<div class="cm-modal" style="max-width:600px">';
-    html += '<div class="cm-modal-title">Editar Touchpoint #' + tp.id + '</div>';
-
-    html += '<div class="cm-modal-field"><label>Nombre</label>';
-    html += '<input type="text" class="cm-input" id="cm-etp-name" value="' + escHtml(tp.name) + '"></div>';
-
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
-    html += '<div class="cm-modal-field"><label>Canal</label>';
-    html += '<input type="text" class="cm-input" id="cm-etp-canal" value="' + escHtml(tp.canal || '') + '"></div>';
-    html += '<div class="cm-modal-field"><label>Responsable</label>';
-    html += personSelect(tp.responsable_id, 'cm-etp-resp');
-    html += '</div>';
-    html += '</div>';
-
-    html += '<div class="cm-modal-field"><label>KPIs</label>';
-    html += kpiChipInputHtml('cm-etp-kpis', linkedKpis, tp.kpi || '');
-    html += '</div>';
-
-    html += '<div class="cm-modal-field"><label>Fricciones</label>';
-    html += frictionChipInputHtml('cm-etp-frictions', tp.id, tp.phase_id);
-    html += '</div>';
-
-    html += '<div class="cm-modal-actions">';
-    html += '<button class="cm-btn cm-btn-ghost" id="cm-etp-cancel">Cancelar</button>';
-    html += '<button class="cm-btn cm-btn-primary" id="cm-etp-save">Guardar</button>';
-    html += '</div>';
-
-    html += '</div></div>';
-
-    var modalDiv = document.createElement('div');
-    modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
-
-    document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) {
-      if (e.target === this) closeModal();
-    });
-    document.querySelector('#cm-etp-cancel').addEventListener('click', closeModal);
-    bindKpiChipInput('cm-etp-kpis');
-    bindFrictionChipInput('cm-etp-frictions', tp.phase_id, tp.id);
-    document.querySelector('#cm-etp-save').addEventListener('click', function() {
-      var linkedFrictionIds = getFrictionChipIds('cm-etp-frictions');
-      var allKpiIds = getChipMasterIds('cm-etp-kpis');
-      var kpiNames = allKpiIds.map(function(kid) { var k = state.kpis.find(function(kk) { return kk.id === kid; }); return k ? k.name : kid; });
-      var data = {
-        name: document.querySelector('#cm-etp-name').value.trim(),
-        canal: document.querySelector('#cm-etp-canal').value.trim(),
-        responsable_id: parseInt(document.querySelector('#cm-etp-resp').value) || null,
-        kpi: kpiNames.join(', '),
-        friction_text: linkedFrictionIds.length > 0 ? linkedFrictionIds.join(', ') : null,
-        has_friction: linkedFrictionIds.length > 0,
-      };
-
-      var selectedKpis = allKpiIds;
-
-      // Save touchpoint fields
-      apiPatch('touchpoints', tpId, data).then(function() {
-        var promises = [];
-        // Save KPI links via PUT
-        promises.push(fetch('/api/comercial/touchpoints/' + tpId + '/kpis', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(selectedKpis)
-        }));
-        // Update friction touchpoint_id links
-        // Unlink frictions that were removed
-        var prevLinked = state.frictions.filter(function(f) { return f.touchpoint_id == tpId; });
-        prevLinked.forEach(function(f) {
-          if (linkedFrictionIds.indexOf(f.id) < 0) {
-            promises.push(apiPatch('frictions', f.id, { touchpoint_id: null }));
-          }
-        });
-        // Link newly added frictions
-        linkedFrictionIds.forEach(function(fid) {
-          var already = prevLinked.some(function(f) { return f.id === fid; });
-          if (!already) {
-            promises.push(apiPatch('frictions', fid, { touchpoint_id: parseInt(tpId) }));
-          }
-        });
-        return Promise.all(promises);
-      }).then(function() {
-        closeModal();
-        toast('Touchpoint actualizado', 'success');
-        return refreshAll().then(function() {
-          renderProceso(parentEl);
-        });
-      }).catch(function() { toast('Error al actualizar', 'error'); });
-    });
-  }
+  // showEditTouchpointRow eliminado: la edición vive ahora 100% en el drawer
+  // (nombre/canal/responsable/fase inline, KPIs y fricciones con "+ Vincular").
 
   function deleteTouchpoint(tpId, parentEl) {
     var tp = state.touchpoints.find(function(t) { return String(t.id) === String(tpId); });

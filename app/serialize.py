@@ -1,11 +1,46 @@
 from app.models import (
-    AreaResumen, CategoriaGasto, ComercialActivityLog, ComercialComment,
-    ComercialFriction, ComercialKpi, ComercialKpiFriction, ComercialKpiHistory,
+    AreaResumen, CategoriaGasto, ComercialActivityLog, ComercialCanvasLayout,
+    ComercialCanvasNote, ComercialComment, ComercialTouchpointFlow,
+    ComercialFriction, ComercialInitiative, ComercialKpi, ComercialKpiFriction, ComercialKpiHistory,
     ComercialPerson, ComercialPhase, ComercialTouchpoint, ComercialTrustPillar,
     Consultoria, Deal, Empleado, Escenario,
     EscenarioIngreso, GastoFinanciero, GastoOperativo, Iniciativa, KpiMeta,
     Semaforo, SimAsesor, SimConfig, SimTipoCliente, Suscripcion,
 )
+
+
+def comercial_touchpoint_flow_out(row: ComercialTouchpointFlow) -> dict:
+    return {
+        "id": row.id,
+        "from_touchpoint_id": row.from_touchpoint_id,
+        "to_touchpoint_id": row.to_touchpoint_id,
+        "label": row.label,
+        "order": row.order or 0,
+    }
+
+
+def comercial_canvas_note_out(row: ComercialCanvasNote) -> dict:
+    return {
+        "id": row.id,
+        "text": row.text or "",
+        "color": row.color or "yellow",
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def comercial_canvas_layout_out(row: ComercialCanvasLayout) -> dict:
+    return {
+        "id": row.id,
+        "view_id": row.view_id,
+        "entity_type": row.entity_type,
+        "entity_id": row.entity_id,
+        "x": row.x,
+        "y": row.y,
+        "width": row.width,
+        "height": row.height,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
 
 
 def deal_out(row: Deal) -> dict:
@@ -224,6 +259,34 @@ def comercial_trust_pillar_out(row: ComercialTrustPillar) -> dict:
         "id": row.id, "name": row.name, "icon": row.icon,
         "current_state": row.current_state, "target_state": row.target_state,
         "actions": row.actions, "status": row.status, "order": row.order,
+    }
+
+
+def comercial_initiative_out(row: ComercialInitiative, links: dict = None) -> dict:
+    links = links or {}
+    return {
+        "id": row.id,
+        "pillar_id": row.pillar_id,
+        "title": row.title,
+        "description": row.description or "",
+        "motor": row.motor or "trust",
+        "phase_id": row.phase_id,
+        "touchpoint_id": row.touchpoint_id,
+        "status": row.status,
+        "responsable_id": row.responsable_id,
+        "due_date": row.due_date.isoformat() if row.due_date else None,
+        "target": row.target or "",
+        "progress": row.progress if row.progress is not None else 0,
+        "priority": row.priority or "medium",
+        "area": row.area or "",
+        "tipo": row.tipo or "operativa",
+        "friction_ids": links.get("friction_ids", []),
+        "touchpoint_ids": links.get("touchpoint_ids", []),
+        "pillar_ids": links.get("pillar_ids", []),
+        "involved_ids": links.get("involved_ids", []),
+        "depends_on_ids": links.get("depends_on_ids", []),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 
 

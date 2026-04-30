@@ -6,6 +6,7 @@ window.ComercialModule = (function() {
     touchpoints: [],
     frictions: [],
     trust_pillars: [],
+    iniciativas: [],
     kpis: [],
     activity_log: [],
     comments: [],
@@ -14,9 +15,28 @@ window.ComercialModule = (function() {
     kpi_touchpoints: [],
     tp_kpi_history: [],
     kpi_history: [],
+    canvas_layout: [],
+    canvas_notes: [],
+    touchpoint_flows: [],
     dashboard: null
   };
   var activeTab = 'dashboard';
+  var iniciativasFilter = { status: 'all', responsable: 'all', priority: 'all', area: 'all', tipo: 'all', text: '' };
+
+  function priorityBadge(p) {
+    var cfg = { high: ['Alta','#FEE2E2','#DC2626'], medium: ['Media','#FEF3C7','#B45309'], low: ['Baja','#F1F5F9','#64748B'] };
+    var v = cfg[p] || cfg.medium;
+    return '<span style="display:inline-block;font-size:.66rem;font-weight:700;padding:2px 8px;border-radius:9999px;background:' + v[1] + ';color:' + v[2] + ';text-transform:uppercase;letter-spacing:.3px">' + v[0] + '</span>';
+  }
+  function tipoBadge(t) {
+    var cfg = { estrategica: ['Estratégica','#EEF2FF','#4F46E5'], operativa: ['Operativa','#F0FDF4','#15803D'], hito: ['Hito','#FFF7ED','#C2410C'] };
+    var v = cfg[t] || cfg.operativa;
+    return '<span style="display:inline-block;font-size:.66rem;font-weight:600;padding:2px 8px;border-radius:6px;background:' + v[1] + ';color:' + v[2] + '">' + v[0] + '</span>';
+  }
+  function frictionName(fid) {
+    var f = (state.frictions || []).find(function(x) { return String(x.id) === String(fid); });
+    return f ? f.name : ('F-' + fid);
+  }
   var kpiSegFilter = { phase: 'all', responsable: 'all', status: 'all', search: '' };
   var expandedKpis = {};
   var frictionFilterImpact = 'all';
@@ -25,6 +45,7 @@ window.ComercialModule = (function() {
   var frictionSearch = '';
   var expandedFrictions = {};
   var pendingPhaseClick = null;
+  var pendingCanvasFocus = null;
   var selectedPhase = 'atraccion';
   var collapsedBands = {};
   var kpiBoardView = 'monthly';
@@ -127,6 +148,32 @@ window.ComercialModule = (function() {
     return '<span class="cm-badge ' + cls + '">' + statusLabel(s) + '</span>';
   }
 
+  function initiativeStatusLabel(s) {
+    if (s === 'completed') return 'Completada';
+    if (s === 'in_progress') return 'En ejecución';
+    return 'Abierta';
+  }
+
+  /** Prioridad visual de fila: vencida > vence pronto > sin responsable > normal */
+  function initiativeRowClass(i) {
+    var st = i.status || 'pending';
+    if (st === 'completed') return 'cm-ini-row cm-ini-row--done';
+    var dd = i.due_date ? daysDiff(i.due_date) : null;
+    if (dd !== null && dd < 0) return 'cm-ini-row cm-ini-row--overdue';
+    if (dd !== null && dd <= 7) return 'cm-ini-row cm-ini-row--soon';
+    if (!i.responsable_id) return 'cm-ini-row cm-ini-row--unassigned';
+    return 'cm-ini-row';
+  }
+
+  function initiativePriorityChip(i) {
+    var st = i.status || 'pending';
+    if (st === 'completed') return '';
+    var dd = i.due_date ? daysDiff(i.due_date) : null;
+    if (dd !== null && dd < 0) return '<span class="cm-ini-pri cm-ini-pri--overdue">Vencida</span>';
+    if (dd !== null && dd <= 7) return '<span class="cm-ini-pri cm-ini-pri--soon">Próxima</span>';
+    return '';
+  }
+
   function initials(name) {
     if (!name) return '?';
     var parts = name.trim().split(/\s+/);
@@ -137,6 +184,12 @@ window.ComercialModule = (function() {
   function personName(personId) {
     if (!personId) return '';
     var p = state.people.find(function(p) { return p.id == personId; });
+    return p ? p.name : '';
+  }
+
+  function phaseName(phaseId) {
+    if (!phaseId) return '';
+    var p = state.phases.find(function(pp) { return String(pp.id) === String(phaseId); });
     return p ? p.name : '';
   }
 
@@ -594,6 +647,227 @@ window.ComercialModule = (function() {
     style.textContent = `
       #comercial-module{font-family:'Inter',system-ui,-apple-system,sans-serif;max-width:1440px;margin:0 auto;padding:24px;color:var(--text-primary,#1E293B)}
 
+      /* ── Mapa Visual ── */
+      .cm-mv-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;padding:18px 20px;background:#fff;border:1px solid var(--border,#E2E8F0);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+      .cm-mv-title{font-size:1.05rem;font-weight:700;color:var(--text-primary,#1E293B)}
+      .cm-mv-subtitle{font-size:.78rem;color:var(--text-muted,#94A3B8);margin-top:2px}
+      .cm-mv-legend{display:flex;gap:14px;flex-wrap:wrap}
+      .cm-mv-legend-item{display:flex;align-items:center;gap:6px;font-size:.74rem;color:var(--text-secondary,#64748B)}
+      .cm-mv-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
+      .cm-mv-hint{font-size:.74rem;color:var(--text-muted,#94A3B8);margin-bottom:14px;font-style:italic}
+      .cm-mv-canvas-wrap{background:#FAFBFC;border:1px solid var(--border,#E2E8F0);border-radius:12px;padding:20px;overflow:hidden}
+      .cm-mv-canvas{position:relative;display:flex;gap:36px;overflow-x:auto;overflow-y:visible;padding-bottom:8px;min-height:420px}
+      .cm-mv-svg{position:absolute;top:0;left:0;pointer-events:none;z-index:0}
+      .cm-mv-column{flex:0 0 280px;position:relative;z-index:1}
+      .cm-mv-col-header{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;background:#fff;border:1px solid var(--border,#E2E8F0);border-radius:10px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .cm-mv-col-title{font-size:.84rem;font-weight:700;color:var(--text-primary,#1E293B)}
+      .cm-mv-col-stats{display:flex;gap:4px}
+      .cm-mv-col-stat{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;padding:0 6px;font-size:.66rem;font-weight:700;border-radius:9999px;text-align:center}
+      .cm-mv-col-body{display:flex;flex-direction:column;gap:14px}
+      .cm-mv-empty{font-size:.78rem;color:var(--text-muted,#94A3B8);font-style:italic;padding:20px;text-align:center;border:1px dashed var(--border,#E2E8F0);border-radius:8px}
+      .cm-mv-node{background:#fff;border:1px solid var(--border,#E2E8F0);border-radius:10px;padding:12px;cursor:pointer;transition:transform .12s, box-shadow .12s;position:relative;z-index:2}
+      .cm-mv-node:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08)}
+      .cm-mv-node-header{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+      .cm-mv-node-id{font-size:.66rem;color:var(--text-muted,#94A3B8);font-weight:600}
+      .cm-mv-node-title{font-size:.82rem;font-weight:700;color:var(--text-primary,#1E293B);flex:1}
+      .cm-mv-node-meta{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+      .cm-mv-tag{display:inline-block;padding:2px 8px;font-size:.66rem;font-weight:600;background:#F1F5F9;color:#475569;border-radius:9999px;border:1px solid #E2E8F0}
+      .cm-mv-tag-resp{background:#EEF2FF;color:#4F46E5;border-color:#C7D2FE}
+      .cm-mv-node-kpi{padding:6px 8px;background:rgba(255,255,255,.6);border:1px solid rgba(0,0,0,.05);border-radius:6px;margin-bottom:8px}
+      .cm-mv-node-stats{display:flex;flex-direction:column;gap:6px}
+      .cm-mv-node-stat{display:flex;flex-direction:column;gap:2px;font-size:.74rem}
+      .cm-mv-frictions{margin-top:10px;padding-left:24px;display:flex;flex-direction:column;gap:6px;position:relative;z-index:2}
+      .cm-mv-friction-node{background:#fff;border:1px solid #E2E8F0;border-left:3px solid;border-radius:6px;padding:6px 8px;cursor:pointer;transition:transform .12s, box-shadow .12s}
+      .cm-mv-friction-node:hover{transform:translateX(2px);box-shadow:0 2px 6px rgba(0,0,0,.06)}
+      .cm-mv-fr-header{display:flex;align-items:center;gap:5px;margin-bottom:3px}
+      .cm-mv-fr-impact{padding:1px 6px;font-size:.6rem;font-weight:700;border-radius:9999px;text-transform:uppercase;letter-spacing:.3px}
+      .cm-mv-fr-id{font-size:.62rem;color:var(--text-muted,#94A3B8);font-weight:600}
+      .cm-mv-fr-resolved{margin-left:auto;font-size:.7rem;color:#10B981;font-weight:700}
+      .cm-mv-fr-name{font-size:.7rem;font-weight:600;line-height:1.3;color:var(--text-primary,#1E293B)}
+      .cm-mv-fr-progress{display:flex;align-items:center;gap:5px;margin-top:4px}
+
+      /* Canvas libre (Mapa Visual) */
+      .cm-canvas-viewport{position:relative;width:100%;height:calc(100vh - 280px);min-height:520px;background:#FAFBFC;background-image:radial-gradient(circle, #CBD5E1 1px, transparent 1px);background-size:22px 22px;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;cursor:grab;user-select:none}
+      .cm-canvas-viewport:active{cursor:grabbing}
+      .cm-canvas-stage{position:absolute;top:0;left:0;width:0;height:0;transform-origin:0 0;will-change:transform}
+      .cm-canvas-svg{position:absolute;top:0;left:0;pointer-events:none;overflow:visible}
+      .cm-canvas-node{position:absolute;width:240px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 1px 3px rgba(15,23,42,.06),0 4px 12px rgba(15,23,42,.04);cursor:grab;transition:box-shadow .12s,border-color .12s,transform .12s;overflow:hidden}
+      .cm-canvas-node:hover{box-shadow:0 4px 14px rgba(15,23,42,.10),0 2px 4px rgba(15,23,42,.06)}
+      .cm-canvas-node:active{cursor:grabbing}
+      .cm-canvas-node.selected{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.18),0 4px 14px rgba(15,23,42,.10)}
+      .cm-canvas-node--friction{width:200px;background:#fff;border:1px solid #E2E8F0;border-left:3px solid;padding:8px 10px;border-radius:8px}
+      .cm-canvas-node-bar{height:4px}
+      .cm-canvas-node-body{padding:10px 12px}
+      .cm-canvas-node-header{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+      .cm-canvas-node-id{font-size:.62rem;color:#94A3B8;font-weight:700}
+      .cm-canvas-node-title{font-size:.82rem;font-weight:700;color:#1E293B;flex:1;line-height:1.3}
+      .cm-canvas-node-meta{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+      .cm-canvas-node-kpi{padding:6px 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;margin-bottom:8px;display:flex;flex-direction:column;gap:2px}
+      .cm-canvas-node-stats{display:flex;flex-direction:column;gap:6px}
+      .cm-canvas-node-stat{display:flex;flex-direction:column;gap:2px;font-size:.74rem}
+      .cm-canvas-fr-header{display:flex;align-items:center;gap:5px;margin-bottom:3px}
+      .cm-canvas-fr-id{font-size:.62rem;color:#94A3B8;font-weight:600}
+      .cm-canvas-fr-resolved{margin-left:auto;font-size:.7rem;color:#10B981;font-weight:700}
+      .cm-canvas-fr-name{font-size:.72rem;font-weight:600;line-height:1.3;color:#1E293B}
+      .cm-canvas-fr-progress{display:flex;align-items:center;gap:5px;margin-top:5px}
+      .cm-canvas-controls{position:absolute;left:14px;bottom:14px;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:5px;box-shadow:0 2px 8px rgba(15,23,42,.08);z-index:10}
+      .cm-canvas-ctrl-btn{width:30px;height:30px;border:none;background:transparent;border-radius:6px;font-size:1rem;font-weight:700;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s}
+      .cm-canvas-ctrl-btn:hover{background:#F1F5F9;color:#1E293B}
+      .cm-canvas-zoom-label{font-size:.74rem;font-weight:700;color:#475569;padding:0 8px;min-width:46px;text-align:center}
+      .cm-canvas-drawer{position:fixed;top:0;right:0;bottom:0;width:380px;background:#fff;border-left:1px solid #E2E8F0;box-shadow:-4px 0 16px rgba(15,23,42,.08);transform:translateX(100%);transition:transform .22s ease;z-index:1000;overflow-y:auto}
+      .cm-canvas-drawer.open{transform:translateX(0)}
+      .cm-canvas-drawer-content{padding:20px}
+      .cm-canvas-drawer-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+      .cm-canvas-drawer-close{width:30px;height:30px;border:none;background:transparent;font-size:1.4rem;color:#64748B;cursor:pointer;border-radius:6px;line-height:1}
+      .cm-canvas-drawer-close:hover{background:#F1F5F9;color:#1E293B}
+      .cm-canvas-drawer-title{font-size:1.05rem;font-weight:700;color:#1E293B;margin-bottom:10px;line-height:1.3}
+      .cm-canvas-drawer-section{margin-bottom:18px}
+      .cm-canvas-drawer-section-title{font-size:.7rem;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-bottom:8px}
+      .cm-canvas-drawer-item{padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:6px}
+      .cm-canvas-drawer-empty{font-size:.78rem;color:#94A3B8;font-style:italic;padding:8px}
+      .cm-canvas-drawer-actions{display:flex;flex-direction:column;gap:6px;margin-top:18px;padding-top:14px;border-top:1px solid #E2E8F0}
+
+      /* Canvas v2 — toolbar, filtros, links, banners */
+      .cm-canvas-toolbar{position:sticky;top:0;z-index:50;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 14px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
+      .cm-canvas-toolbar-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .cm-canvas-toolbar-row--secondary{font-size:.74rem;color:#64748B}
+      .cm-canvas-toolbar-spacer{flex:1}
+      .cm-canvas-search-wrap{position:relative;display:flex;align-items:center}
+      .cm-canvas-search-icon{position:absolute;left:10px;font-size:.85rem;color:#94A3B8;pointer-events:none}
+      .cm-canvas-search{padding:7px 12px 7px 32px;border:1px solid #E2E8F0;border-radius:8px;font-size:.82rem;font-family:inherit;width:260px;background:#F8FAFC;transition:border-color .12s,background .12s}
+      .cm-canvas-search:focus{outline:none;border-color:#4F46E5;background:#fff;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+      .cm-canvas-filters{display:flex;gap:6px;flex-wrap:wrap}
+      .cm-canvas-filter{position:relative}
+      .cm-canvas-filter-trigger{padding:6px 12px;border:1px solid #E2E8F0;background:#fff;border-radius:8px;font-size:.78rem;font-weight:600;color:#475569;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px}
+      .cm-canvas-filter-trigger:hover{background:#F1F5F9}
+      .cm-canvas-filter-trigger.has-selection{background:#EEF2FF;color:#4F46E5;border-color:#C7D2FE}
+      .cm-canvas-filter-trigger b{background:#4F46E5;color:#fff;font-size:.66rem;padding:1px 6px;border-radius:9999px;font-weight:700}
+      .cm-canvas-filter-pop{position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.12);min-width:200px;z-index:100;overflow:hidden}
+      .cm-canvas-filter-list{max-height:240px;overflow-y:auto;padding:6px}
+      .cm-canvas-filter-opt{display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:.78rem;color:#1E293B;cursor:pointer;border-radius:6px}
+      .cm-canvas-filter-opt:hover{background:#F1F5F9}
+      .cm-canvas-filter-opt input{margin:0}
+      .cm-canvas-filter-actions{padding:6px 8px;border-top:1px solid #F1F5F9;display:flex;justify-content:flex-end}
+      .cm-canvas-filter-actions button{font-size:.72rem;color:#64748B;background:none;border:none;cursor:pointer;font-family:inherit}
+      .cm-canvas-filter-actions button:hover{color:#4F46E5}
+      .cm-canvas-tool-btn{padding:6px 12px;border:1px solid #E2E8F0;background:#fff;border-radius:8px;font-size:.78rem;font-weight:600;color:#475569;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:4px;transition:all .12s}
+      .cm-canvas-tool-btn:hover{background:#F1F5F9;color:#1E293B}
+      .cm-canvas-tool-btn.active{background:#EEF2FF;color:#4F46E5;border-color:#C7D2FE}
+      .cm-canvas-tool-btn.primary{background:#4F46E5;color:#fff;border-color:#4F46E5}
+      .cm-canvas-tool-btn.primary:hover{background:#4338CA}
+      .cm-canvas-create-wrap{position:relative}
+      .cm-canvas-create-menu{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.12);overflow:hidden;z-index:100;min-width:180px}
+      .cm-canvas-create-menu button{display:block;width:100%;padding:8px 14px;background:none;border:none;text-align:left;font-size:.82rem;color:#1E293B;cursor:pointer;font-family:inherit}
+      .cm-canvas-create-menu button:hover{background:#F1F5F9}
+      .cm-canvas-totals{font-weight:600}
+      .cm-canvas-legend{display:flex;gap:14px;flex-wrap:wrap}
+      .cm-canvas-legend-item{display:flex;align-items:center;gap:6px;font-size:.74rem;color:#64748B}
+      .cm-canvas-save-indicator{padding:5px 12px;border-radius:9999px;font-size:.72rem;font-weight:700;display:inline-flex;align-items:center;gap:4px}
+      .cm-canvas-save-indicator.saving{background:#FEF3C7;color:#92400E}
+      .cm-canvas-save-indicator.saved{background:#D1FAE5;color:#065F46}
+      .cm-canvas-save-indicator.error{background:#FEE2E2;color:#991B1B}
+      .cm-canvas-mode-banner{padding:8px 14px;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:8px;margin-bottom:8px;font-size:.82rem;font-weight:600;text-align:center}
+      .cm-canvas-viewport.dropmode{cursor:crosshair}
+      .cm-canvas-viewport.linkmode{cursor:crosshair}
+      .cm-canvas-viewport.locked .cm-canvas-node{cursor:default}
+      .cm-canvas-link-handle{position:absolute;top:50%;right:-12px;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;background:#4F46E5;color:#fff;font-size:.95rem;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:crosshair;opacity:0;transition:opacity .12s,transform .12s;box-shadow:0 2px 6px rgba(79,70,229,.3);z-index:5;line-height:1}
+      .cm-canvas-node:hover .cm-canvas-link-handle{opacity:1}
+      .cm-canvas-viewport.linkmode .cm-canvas-link-handle{opacity:1}
+      .cm-canvas-link-handle:hover{transform:translateY(-50%) scale(1.15)}
+      .cm-canvas-dim{opacity:.22;pointer-events:none;filter:saturate(.6)}
+      .cm-canvas-node--note{width:180px;padding:14px 12px 28px 12px;border:1px solid rgba(0,0,0,.05);box-shadow:0 2px 6px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);font-family:'Caveat', cursive, system-ui;font-size:1rem;line-height:1.3;color:#1E293B}
+      .cm-canvas-note-text{white-space:pre-wrap;word-break:break-word;min-height:30px}
+      .cm-canvas-note-del{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;border:none;background:rgba(0,0,0,.06);color:#475569;font-size:.85rem;cursor:pointer;line-height:1;display:none;align-items:center;justify-content:center}
+      .cm-canvas-node--note:hover .cm-canvas-note-del{display:flex}
+      .cm-color-chip{transition:transform .1s}
+      .cm-fullscreen-mode .cm-tabs,.cm-fullscreen-mode .topbar,.cm-fullscreen-mode .sidebar{display:none !important}
+      .cm-fullscreen-mode #cm-main{padding:14px}
+      .cm-fullscreen-mode .cm-canvas-viewport{height:calc(100vh - 160px) !important;border-radius:6px}
+      .cm-flow-hit:hover ~ .cm-flow-visible,.cm-flow-visible.cm-flow-hover{stroke:#3730A3;stroke-width:3.5}
+      .cm-flow-visible.selected{filter:drop-shadow(0 0 4px rgba(67,56,202,.6))}
+
+      /* 4 anchors por nodo */
+      .cm-canvas-node{overflow:visible}
+      .cm-anchor{position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid #4F46E5;cursor:crosshair;opacity:0;transition:opacity .15s,transform .15s,box-shadow .15s;z-index:6;pointer-events:auto}
+      /* Hit-area invisible más grande para que el anchor sea fácil de clickar incluso con zoom bajo */
+      .cm-anchor::before{content:"";position:absolute;inset:-12px;border-radius:50%}
+      .cm-canvas-node:hover .cm-anchor{opacity:.55}
+      .cm-canvas-viewport.linkmode .cm-anchor{opacity:1}
+      .cm-anchor:hover{opacity:1 !important;transform:scale(1.4);box-shadow:0 0 0 4px rgba(79,70,229,.18)}
+      .cm-anchor-top{top:-9px;left:50%;margin-left:-7px}
+      .cm-anchor-right{top:50%;right:-9px;margin-top:-7px}
+      .cm-anchor-bottom{bottom:-9px;left:50%;margin-left:-7px}
+      .cm-anchor-left{top:50%;left:-9px;margin-top:-7px}
+
+      /* Drop target durante drag-to-link */
+      .cm-canvas-node.cm-drop-target{box-shadow:0 0 0 4px rgba(16,185,129,.35),0 0 0 2px #10B981 !important;border-color:#10B981 !important}
+      .cm-canvas-node.cm-drop-target::after{content:'Soltar para conectar';position:absolute;top:-22px;left:50%;transform:translateX(-50%);background:#10B981;color:#fff;font-size:.66rem;font-weight:700;padding:3px 8px;border-radius:9999px;white-space:nowrap;pointer-events:none}
+
+      /* Indicador touchpoint paralelo */
+      .cm-canvas-node--parallel{border-style:dashed !important}
+      .cm-mv-tag-parallel{background:#FEF3C7;color:#92400E;border:1px solid #FDE68A}
+
+      /* Edge widget HTML midpoint */
+      .cm-canvas-edge-widgets-layer{position:absolute;top:0;left:0;width:0;height:0;pointer-events:none;z-index:7}
+      .cm-edge-widget{position:absolute;transform:translate(-50%,-50%);background:#fff;border:1px solid #C7D2FE;border-radius:9999px;padding:3px 8px;font-size:.7rem;font-weight:700;color:#4F46E5;display:flex;align-items:center;gap:4px;cursor:pointer;pointer-events:auto;box-shadow:0 1px 3px rgba(15,23,42,.12);transition:all .12s;white-space:nowrap;max-width:160px}
+      .cm-edge-widget:hover{background:#EEF2FF;border-color:#4F46E5;transform:translate(-50%,-50%) scale(1.05)}
+      .cm-edge-widget.selected{background:#4F46E5;color:#fff;border-color:#3730A3}
+      .cm-edge-widget.empty{padding:0;width:22px;height:22px;justify-content:center;border-radius:50%}
+      .cm-edge-widget.empty .cm-edge-widget-label{display:none}
+      .cm-edge-widget.empty .cm-edge-widget-add{display:flex;align-items:center;justify-content:center;font-size:.95rem;line-height:1}
+      .cm-edge-widget.empty:hover .cm-edge-widget-add{display:flex}
+      .cm-edge-widget-label{overflow:hidden;text-overflow:ellipsis}
+      .cm-edge-widget-del{display:none;width:18px;height:18px;border-radius:50%;border:none;background:rgba(0,0,0,.08);color:inherit;font-size:.85rem;line-height:1;cursor:pointer;align-items:center;justify-content:center;font-weight:700;padding:0}
+      .cm-edge-widget:hover .cm-edge-widget-del{display:flex}
+      .cm-edge-widget.selected .cm-edge-widget-del{display:flex;background:rgba(255,255,255,.25)}
+      .cm-edge-widget-del:hover{background:#EF4444 !important;color:#fff}
+
+      /* Phase frame headers HTML */
+      .cm-canvas-phase-layer{position:absolute;top:0;left:0;width:0;height:0;pointer-events:none;z-index:1}
+      .cm-phase-frame-header{position:absolute;height:30px;background:#fff;border:1.5px solid;border-radius:8px;padding:0 6px 0 4px;display:flex;align-items:center;gap:4px;pointer-events:auto;box-shadow:0 2px 6px rgba(15,23,42,.08);transition:box-shadow .12s,opacity .12s}
+      .cm-phase-frame-header:hover{box-shadow:0 4px 12px rgba(15,23,42,.14)}
+      .cm-phase-drag{width:22px;height:22px;border:none;background:transparent;cursor:grab;color:#94A3B8;font-size:.95rem;font-weight:700;border-radius:4px;display:flex;align-items:center;justify-content:center;line-height:1}
+      .cm-phase-drag:hover{background:#F1F5F9;color:#475569}
+      .cm-phase-drag:active{cursor:grabbing}
+      .cm-phase-name-input{flex:1;border:1px solid transparent;background:transparent;font-size:.85rem;font-weight:700;color:#1E293B;padding:3px 6px;border-radius:4px;font-family:inherit;min-width:60px}
+      .cm-phase-name-input:hover{background:#F8FAFC}
+      .cm-phase-name-input:focus{outline:none;background:#fff;border-color:#C7D2FE;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+      .cm-phase-color-btn{width:22px;height:22px;border-radius:50%;border:2px solid #fff;cursor:pointer;box-shadow:0 0 0 1px rgba(0,0,0,.1);transition:transform .12s}
+      .cm-phase-color-btn:hover{transform:scale(1.15)}
+      .cm-phase-menu-btn{width:22px;height:22px;border:none;background:transparent;color:#94A3B8;font-size:1.05rem;font-weight:700;cursor:pointer;border-radius:4px;line-height:1;display:flex;align-items:center;justify-content:center}
+      .cm-phase-menu-btn:hover{background:#F1F5F9;color:#1E293B}
+      .cm-phase-color-popup{position:fixed;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:8px;box-shadow:0 10px 30px rgba(15,23,42,.18);z-index:2000;display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+      .cm-color-swatch{width:28px;height:28px;border-radius:6px;border:2px solid transparent;cursor:pointer;transition:transform .1s}
+      .cm-color-swatch:hover{transform:scale(1.15);border-color:#1E293B}
+
+      /* Tabla Mapa de Procesos: drag-handle + journey badges */
+      .cm-tp-drag-handle{cursor:grab;color:#94A3B8;font-size:1.05rem;font-weight:700;text-align:center;user-select:none;line-height:1}
+      .cm-tp-drag-handle:active{cursor:grabbing}
+      .cm-tp-table tbody tr.cm-tp-dragging{opacity:.4}
+      .cm-tp-table tbody tr.cm-tp-drop-above{box-shadow:inset 0 3px 0 #4F46E5}
+      .cm-tp-table tbody tr.cm-tp-drop-below{box-shadow:inset 0 -3px 0 #4F46E5}
+      .cm-journey-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+      .cm-journey-badge{display:inline-flex;align-items:center;font-size:.62rem;font-weight:700;padding:1px 7px;border-radius:9999px;letter-spacing:.2px;text-transform:none}
+      .cm-journey-badge.badge-parallel{background:#FEF3C7;color:#92400E;border:1px solid #FDE68A}
+      .cm-journey-badge.badge-fork{background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE}
+      .cm-journey-badge.badge-join{background:#F0FDF4;color:#166534;border:1px solid #BBF7D0}
+      .cm-journey-badge.badge-start{background:#E0E7FF;color:#3730A3;border:1px solid #C7D2FE}
+      .cm-journey-badge.badge-loop{background:#FCE7F3;color:#9D174D;border:1px solid #FBCFE8}
+
+      /* Auto-link suggestion bar */
+      .cm-autolink-suggest{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1E293B;color:#fff;padding:12px 18px;border-radius:10px;display:flex;align-items:center;gap:10px;font-size:.85rem;box-shadow:0 8px 30px rgba(15,23,42,.3);z-index:3000;animation:cmSlideUp .25s ease-out}
+      @keyframes cmSlideUp{from{opacity:0;transform:translate(-50%, 20px)}to{opacity:1;transform:translate(-50%, 0)}}
+      .cm-autolink-suggest button{padding:5px 12px;border-radius:6px;border:none;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
+      .cm-autolink-suggest button[data-yes]{background:#4F46E5;color:#fff}
+      .cm-autolink-suggest button[data-yes]:hover{background:#4338CA}
+      .cm-autolink-suggest button[data-no]{background:rgba(255,255,255,.1);color:#fff}
+      .cm-autolink-suggest button[data-no]:hover{background:rgba(255,255,255,.2)}
+      .cm-flow-popover{position:fixed;background:#fff;border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:12px;z-index:2000;width:300px}
+      .cm-flow-popover-title{font-size:.7rem;color:#64748B;text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-bottom:6px}
+      .cm-flow-popover-route{font-size:.84rem;color:#1E293B;line-height:1.4}
+      .cm-btn-danger{background:#FEE2E2;color:#B91C1C;border:1px solid #FECACA}
+      .cm-btn-danger:hover{background:#FECACA}
+
       /* Tabs */
       .cm-tabs{display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border,#E2E8F0);padding-bottom:0;flex-wrap:wrap}
       .cm-tab{padding:10px 18px;font-size:.85rem;font-weight:600;color:var(--text-secondary,#64748B);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;font-family:inherit;transition:all .15s ease;display:flex;align-items:center;gap:6px}
@@ -687,11 +961,41 @@ window.ComercialModule = (function() {
 
       /* Table */
       .cm-table-wrap{overflow-x:auto;background:var(--bg-white,#fff);border:1px solid var(--border,#E2E8F0);border-radius:var(--radius-xl,12px);box-shadow:var(--shadow-sm,0 1px 3px rgba(0,0,0,.06));margin-bottom:24px}
-      .cm-table{width:100%;border-collapse:collapse;font-size:.82rem}
-      .cm-table th{background:#F8FAFC;padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted,#94A3B8);text-transform:uppercase;font-size:.7rem;letter-spacing:.5px;position:sticky;top:0}
+      .cm-table{width:100%;border-collapse:collapse;font-size:.82rem;table-layout:fixed}
+      .cm-table th, .cm-table td{overflow:hidden;text-overflow:ellipsis;white-space:normal;word-break:break-word}
+      .cm-col-resizer{position:absolute;top:0;right:-3px;width:7px;height:100%;cursor:col-resize;user-select:none;z-index:5;background:transparent;transition:background .15s}
+      .cm-col-resizer:hover, .cm-col-resizer.cm-resizing{background:rgba(99,102,241,.45)}
+      body.cm-col-resizing, body.cm-col-resizing *{cursor:col-resize !important;user-select:none !important}
+      .cm-table th{background:#F8FAFC;padding:10px 14px;text-align:left;font-weight:600;color:var(--text-muted,#94A3B8);text-transform:uppercase;font-size:.7rem;letter-spacing:.5px;position:sticky;top:0;z-index:1}
       .cm-table td{padding:9px 14px;border-bottom:1px solid var(--border,#E2E8F0);color:var(--text-primary,#1E293B)}
       .cm-table tr:last-child td{border-bottom:none}
       .cm-table tr:hover td{background:var(--bg-hover,#F0F2F5)}
+      .cm-table tr.cm-ini-row--overdue td{box-shadow:inset 3px 0 0 #EF4444}
+      .cm-table tr.cm-ini-row--overdue:hover td{background-color:#FEF2F2 !important}
+      .cm-table tr.cm-ini-row--soon td{box-shadow:inset 3px 0 0 #F59E0B}
+      .cm-table tr.cm-ini-row--soon:hover td{background-color:#FFFBEB !important}
+      .cm-table tr.cm-ini-row--unassigned td{box-shadow:inset 3px 0 0 #CBD5E1}
+      .cm-table tr.cm-ini-row--unassigned:hover td{background-color:#F8FAFC !important}
+      .cm-table tr.cm-ini-row--done td{opacity:.7}
+      .cm-table tr.cm-ini-row--done:hover td{background:#F0FDF4 !important;opacity:1}
+      .cm-table-iniciativas td{vertical-align:middle}
+      .cm-table-iniciativas .cm-select{font-size:.78rem !important;padding:6px 8px !important;width:100%}
+      .cm-table-iniciativas .cm-input{font-size:.78rem !important;padding:6px 8px !important;width:100%}
+      .cm-table-iniciativas input[type=range]{accent-color:#6366F1}
+      .cm-table-iniciativas input[type=range]::-webkit-slider-thumb{cursor:grab}
+      .cm-table-iniciativas input[type=range]:active::-webkit-slider-thumb{cursor:grabbing}
+      .cm-initiative-status-inline{min-width:132px;font-size:.74rem;padding:5px 8px}
+      .cm-ini-prog-cell{display:flex;align-items:center;gap:8px}
+      .cm-ini-prog-slider{flex:1;cursor:pointer;height:18px}
+      .cm-ini-prog-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid currentColor;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+      .cm-ini-prog-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.15)}
+      .cm-ini-resp-inline,.cm-ini-pillar-inline,.cm-ini-due-inline{background:transparent;border:1px solid transparent;transition:border .15s}
+      .cm-ini-resp-inline:hover,.cm-ini-pillar-inline:hover,.cm-ini-due-inline:hover{border-color:var(--border,#E2E8F0);background:#fff}
+      .cm-ini-resp-inline:focus,.cm-ini-pillar-inline:focus,.cm-ini-due-inline:focus{border-color:#6366F1;background:#fff;outline:none}
+      .cm-ini-pri{display:inline-block;margin-left:6px;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.2px;padding:1px 6px;border-radius:9999px;vertical-align:middle}
+      .cm-ini-pri--overdue{background:#FEF2F2;color:#DC2626}
+      .cm-ini-pri--soon{background:#FFFBEB;color:#B45309}
+      .cm-ini-pri--unassigned{background:#F1F5F9;color:#64748B}
 
       /* Badges */
       .cm-badge{display:inline-block;padding:2px 10px;border-radius:var(--radius-full,9999px);font-size:.7rem;font-weight:600;white-space:nowrap}
@@ -704,6 +1008,15 @@ window.ComercialModule = (function() {
       .cm-badge-purple{background:#F3F0FF;color:#7C3AED}
       .cm-badge-friction{background:#FEF2F2;color:#DC2626;font-weight:600;font-size:.72rem;padding:3px 10px}
       .cm-badge-ok{background:#F0FDF4;color:#15803D;font-weight:600;font-size:.72rem;padding:3px 10px}
+      .cm-ini-detail{margin-top:4px;font-size:.76rem;color:var(--text-secondary,#64748B);line-height:1.4}
+      .cm-ini-scope{display:inline-flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+      .cm-ini-scope-tag{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:.66rem;font-weight:600;background:#F8FAFC;color:#475569;border:1px solid #E2E8F0}
+      .cm-pillar-initiative-list{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border,#E2E8F0)}
+      .cm-pillar-initiative-item{padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:8px}
+      .cm-pillar-initiative-item:last-child{margin-bottom:0}
+      .cm-pillar-initiative-item .title{font-size:.76rem;font-weight:700;color:var(--text-primary,#1E293B)}
+      .cm-pillar-initiative-item .desc{font-size:.72rem;color:var(--text-secondary,#64748B);margin-top:3px;line-height:1.35}
+      .cm-pillar-initiative-item .meta{font-size:.68rem;color:var(--text-muted,#94A3B8);margin-top:5px}
 
       /* ── Pipeline (Mapa de Procesos) ── */
       .cm-pipeline-wrap{background:var(--bg-white,#fff);border:1px solid var(--border,#E2E8F0);border-radius:var(--radius-xl,12px);padding:24px;margin-bottom:24px;box-shadow:var(--shadow-sm,0 1px 3px rgba(0,0,0,.06))}
@@ -1033,13 +1346,19 @@ window.ComercialModule = (function() {
     });
   }
 
+  function _parseApiError(r) {
+    return r.json().then(function(body) {
+      var msg = (body && body.detail) ? body.detail : ('Error ' + r.status);
+      throw new Error(msg);
+    }, function() { throw new Error('Error ' + r.status); });
+  }
   function apiPatch(resource, id, data) {
     return fetch('/api/comercial/' + resource + '/' + id, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     }).then(function(r) {
-      if (!r.ok) throw new Error('Error ' + r.status);
+      if (!r.ok) return _parseApiError(r);
       return r.json();
     });
   }
@@ -1050,7 +1369,7 @@ window.ComercialModule = (function() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     }).then(function(r) {
-      if (!r.ok) throw new Error('Error ' + r.status);
+      if (!r.ok) return _parseApiError(r);
       return r.json();
     });
   }
@@ -1071,6 +1390,7 @@ window.ComercialModule = (function() {
       state.touchpoints = data.touchpoints || [];
       state.frictions = data.frictions || [];
       state.trust_pillars = data.trust_pillars || [];
+      state.iniciativas = data.iniciativas || [];
       state.kpis = data.kpis || [];
       state.activity_log = data.activity_log || [];
       state.comments = data.comments || [];
@@ -1079,6 +1399,9 @@ window.ComercialModule = (function() {
       state.kpi_touchpoints = data.kpi_touchpoints || [];
       state.tp_kpi_history = data.tp_kpi_history || [];
       state.kpi_history = data.kpi_history || [];
+      state.canvas_layout = data.canvas_layout || [];
+      state.canvas_notes = data.canvas_notes || [];
+      state.touchpoint_flows = data.touchpoint_flows || [];
     });
   }
 
@@ -1123,10 +1446,14 @@ window.ComercialModule = (function() {
     html += '<div class="cm-tabs">';
     html += tabBtn('dashboard', 'Dashboard', '');
     html += tabBtn('proceso', 'Mapa de Procesos', '');
+    html += tabBtn('mapavisual', 'Mapa Visual', '');
     var fBadge = overdueCount > 0 ? '<span class="cm-tab-badge cm-tab-badge-red">(' + overdueCount + ' vencidas)</span>' : '';
     html += tabBtn('fricciones', 'Fricciones &amp; Tareas', fBadge);
     html += tabBtn('timeline', 'Linea de Tiempo', '');
     html += tabBtn('equipo', 'Equipo', '');
+    var iniciOverdue = state.iniciativas.filter(function(i) { return i.status !== 'completed' && i.due_date && daysDiff(i.due_date) < 0; }).length;
+    var iniciBadge = iniciOverdue > 0 ? '<span class="cm-tab-badge cm-tab-badge-red">(' + iniciOverdue + ' vencidas)</span>' : '';
+    html += tabBtn('iniciativas', 'Iniciativas', iniciBadge);
     var critCount = state.kpi_touchpoints.filter(function(lk) { return lk.is_critical; }).length;
     var kpiBadge2 = critCount > 0 ? '<span class="cm-tab-badge cm-tab-badge-blue">' + critCount + '</span>' : '';
     html += tabBtn('kpis', 'KPIs Seguimiento', kpiBadge2);
@@ -1153,9 +1480,11 @@ window.ComercialModule = (function() {
     if (!main) return;
     if (activeTab === 'dashboard') renderDashboard(main);
     else if (activeTab === 'proceso') renderProceso(main);
+    else if (activeTab === 'mapavisual') renderMapaVisual(main);
     else if (activeTab === 'fricciones') renderFricciones(main);
     else if (activeTab === 'timeline') renderTimeline(main);
     else if (activeTab === 'equipo') renderEquipo(main);
+    else if (activeTab === 'iniciativas') renderIniciativas(main);
     else if (activeTab === 'kpis') renderKpisSeguimiento(main);
   }
 
@@ -1377,6 +1706,125 @@ window.ComercialModule = (function() {
   }
 
   /* ──────────────────────────────────────────────────
+     Journey badges helpers (derivados del grafo de flechas)
+     ────────────────────────────────────────────────── */
+  function _journeyBadges(tp) {
+    var flows = state.touchpoint_flows || [];
+    var outs = flows.filter(function(f){ return f.from_touchpoint_id === tp.id; });
+    var ins = flows.filter(function(f){ return f.to_touchpoint_id === tp.id; });
+    var inSamePhase = function(otherId) {
+      var o = state.touchpoints.find(function(t){ return t.id === otherId; });
+      return o && o.phase_id === tp.phase_id;
+    };
+    var hasInPhase = outs.some(function(f){ return inSamePhase(f.to_touchpoint_id); }) ||
+                     ins.some(function(f){ return inSamePhase(f.from_touchpoint_id); });
+    var badges = [];
+    if (!hasInPhase) badges.push({ text: '⏱ Paralelo', cls: 'badge-parallel' });
+    if (outs.length > 1) badges.push({ text: '→ Bifurca a ' + outs.length, cls: 'badge-fork' });
+    if (ins.length > 1) badges.push({ text: '← Une desde ' + ins.length, cls: 'badge-join' });
+    if (outs.length === 1 && ins.length === 0) badges.push({ text: '⚓ Inicio', cls: 'badge-start' });
+    if (_hasCycle(tp.id)) badges.push({ text: '🔁 Bucle', cls: 'badge-loop' });
+    return badges;
+  }
+
+  function _hasCycle(startId) {
+    var flows = state.touchpoint_flows || [];
+    var visited = {};
+    var stack = [startId];
+    while (stack.length > 0) {
+      var cur = stack.pop();
+      var children = flows.filter(function(f){ return f.from_touchpoint_id === cur; }).map(function(f){ return f.to_touchpoint_id; });
+      for (var i = 0; i < children.length; i++) {
+        if (children[i] === startId) return true;
+        if (!visited[children[i]]) { visited[children[i]] = true; stack.push(children[i]); }
+      }
+    }
+    return false;
+  }
+
+  function _badgesHTML(badges) {
+    if (!badges || badges.length === 0) return '';
+    return '<div class="cm-journey-badges">' + badges.map(function(b) {
+      return '<span class="cm-journey-badge ' + b.cls + '">' + escHtml(b.text) + '</span>';
+    }).join('') + '</div>';
+  }
+
+  function _canvasFocusOn(type, id) {
+    activeTab = 'mapavisual';
+    pendingCanvasFocus = { type: type, id: String(id) };
+    render();
+  }
+
+  /* ──────────────────────────────────────────────────
+     Resizable table columns (cm-table)
+     - Adds drag-handle on right edge of each <th>
+     - Persists per-table widths in localStorage(key)
+     ────────────────────────────────────────────────── */
+  function _makeTableResizable(table, storageKey) {
+    if (!table || table.dataset.resizableInited === '1') return;
+    table.dataset.resizableInited = '1';
+
+    var saved = null;
+    try {
+      var raw = storageKey ? localStorage.getItem('cm.colw.' + storageKey) : null;
+      if (raw) saved = JSON.parse(raw);
+    } catch(e) { saved = null; }
+
+    var ths = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+    var minW = 48;
+
+    // Apply saved widths if any (and same column count)
+    if (saved && Array.isArray(saved) && saved.length === ths.length) {
+      ths.forEach(function(th, i) {
+        if (saved[i] && saved[i] > 0) th.style.width = saved[i] + 'px';
+      });
+    }
+
+    function persist() {
+      if (!storageKey) return;
+      try {
+        var widths = ths.map(function(th){ return Math.round(th.getBoundingClientRect().width); });
+        localStorage.setItem('cm.colw.' + storageKey, JSON.stringify(widths));
+      } catch(e) {}
+    }
+
+    ths.forEach(function(th, i) {
+      // No resizer on last column (avoids extra horizontal scroll)
+      if (i === ths.length - 1) return;
+      // Skip if resizer already present
+      if (th.querySelector('.cm-col-resizer')) return;
+      var grip = document.createElement('div');
+      grip.className = 'cm-col-resizer';
+      grip.addEventListener('mousedown', function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var startX = ev.clientX;
+        var startW = th.getBoundingClientRect().width;
+        grip.classList.add('cm-resizing');
+        document.body.classList.add('cm-col-resizing');
+
+        function onMove(e) {
+          var dx = e.clientX - startX;
+          var newW = Math.max(minW, startW + dx);
+          th.style.width = newW + 'px';
+        }
+        function onUp() {
+          grip.classList.remove('cm-resizing');
+          document.body.classList.remove('cm-col-resizing');
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          persist();
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+      // Prevent the th drag handlers (e.g., draggable rows) from interfering
+      grip.addEventListener('click', function(e) { e.stopPropagation(); });
+      th.appendChild(grip);
+    });
+  }
+
+  /* ──────────────────────────────────────────────────
      TAB 2: MAPA DE PROCESOS
      ────────────────────────────────────────────────── */
   function renderProceso(el) {
@@ -1436,7 +1884,8 @@ window.ComercialModule = (function() {
       html += '<div class="ph-info">';
       html += '<div class="ph-name">' + escHtml(phObj.name || '') + '</div>';
       if (phObj.description) {
-        html += '<div class="ph-desc">' + escHtml(phObj.description) + ' &mdash; ' + phaseTps.length + ' touchpoints</div>';
+        var phaseIniCount = state.iniciativas.filter(function(ii) { return String(ii.phase_id || '') === String(phObj.id); }).length;
+        html += '<div class="ph-desc">' + escHtml(phObj.description) + ' &mdash; ' + phaseTps.length + ' touchpoints &mdash; ' + phaseIniCount + ' iniciativas</div>';
       }
       html += '</div>';
       if (!isAll) {
@@ -1446,18 +1895,20 @@ window.ComercialModule = (function() {
 
       // Touchpoints Table
       if (phaseTps.length > 0) {
-        html += '<div class="cm-table-wrap" style="margin-bottom:24px"><table class="cm-table">';
-        html += '<thead><tr><th style="width:40px">#</th><th>Touchpoint</th><th>Canal</th><th>Responsable</th><th>KPI</th><th>Friccion</th>';
-        if (!isAll) html += '<th style="width:80px;text-align:center">Acciones</th>';
+        html += '<div class="cm-table-wrap" style="margin-bottom:24px"><table class="cm-table cm-tp-table" data-phase-id="' + escHtml(phObj.id) + '">';
+        html += '<thead><tr><th style="width:28px"></th><th style="width:40px">#</th><th>Touchpoint</th><th>Canal</th><th>Responsable</th><th>KPI</th><th>Friccion</th><th style="width:120px">Iniciativas</th>';
+        html += '<th style="width:120px;text-align:center">Acciones</th>';
         html += '</tr></thead>';
         html += '<tbody>';
         phaseTps.forEach(function(tp, idx) {
           var hasFriction = tp.has_friction || false;
           var frictionText = tp.friction_text || '';
           var respName = personName(tp.responsable_id) || tp.responsable || '';
-          html += '<tr data-tp-id="' + escHtml(tp.id) + '"' + (hasFriction ? ' style="border-left:4px solid var(--warning)"' : '') + '>';
+          var badges = _journeyBadges(tp);
+          html += '<tr data-tp-id="' + escHtml(tp.id) + '" draggable="true"' + (hasFriction ? ' style="border-left:4px solid var(--warning)"' : '') + '>';
+          html += '<td class="cm-tp-drag-handle" title="Arrastra para reordenar (display only)">⠿</td>';
           html += '<td>' + tp.id + '</td>';
-          html += '<td style="font-weight:600">' + escHtml(tp.name) + '</td>';
+          html += '<td style="font-weight:600">' + escHtml(tp.name) + _badgesHTML(badges) + '</td>';
           html += '<td>' + escHtml(tp.canal || '') + '</td>';
           html += '<td>' + (tp.responsable_id ? personAvatar(tp.responsable_id, 20) + ' ' : '') + escHtml(respName) + '</td>';
           var tpKpis = getLinkedKpisForTouchpoint(tp.id);
@@ -1471,12 +1922,29 @@ window.ComercialModule = (function() {
           } else {
             html += '<td><span class="cm-badge-ok">&#10003; OK</span></td>';
           }
+          // Iniciativas chip
+          var tpInis = state.iniciativas.filter(function(ii) {
+            var tids = ii.touchpoint_ids || (ii.touchpoint_id ? [ii.touchpoint_id] : []);
+            return tids.indexOf(tp.id) >= 0;
+          });
+          var tpDone = tpInis.filter(function(ii){ return ii.status === 'completed'; }).length;
+          var tpAvg = tpInis.length > 0 ? Math.round(tpInis.reduce(function(s,ii){ return s + (ii.progress||0); }, 0) / tpInis.length) : 0;
+          html += '<td>';
+          if (tpInis.length > 0) {
+            var col = tpAvg >= 100 ? '#10B981' : (tpAvg >= 50 ? '#6366F1' : (tpAvg > 0 ? '#F59E0B' : '#94A3B8'));
+            html += '<div style="font-size:.72rem;font-weight:700;color:' + col + '">' + tpDone + '/' + tpInis.length + ' · ' + tpAvg + '%</div>';
+            html += '<div style="height:4px;background:#E2E8F0;border-radius:9999px;overflow:hidden;margin-top:3px"><div style="height:100%;width:' + tpAvg + '%;background:' + col + '"></div></div>';
+          } else {
+            html += '<span style="font-size:.7rem;color:var(--text-muted);font-style:italic">Sin iniciativas</span>';
+          }
+          html += '</td>';
+          html += '<td style="text-align:center">';
+          html += '<button class="cm-icon-btn cm-tp-view-canvas" data-tp-id="' + escHtml(tp.id) + '" title="Ver en Mapa Visual">&#128065;</button>';
           if (!isAll) {
-            html += '<td style="text-align:center">';
             html += '<button class="cm-icon-btn cm-edit-tp" data-tp-id="' + escHtml(tp.id) + '" title="Editar">&#9998;</button>';
             html += '<button class="cm-icon-btn danger cm-delete-tp" data-tp-id="' + escHtml(tp.id) + '" title="Eliminar">&#128465;</button>';
-            html += '</td>';
           }
+          html += '</td>';
           html += '</tr>';
         });
         html += '</tbody></table></div>';
@@ -1503,11 +1971,51 @@ window.ComercialModule = (function() {
       html += '<div class="cm-field-box" style="margin:0"><div class="field-label">Estado Actual</div><div class="field-value" style="font-size:.8rem">' + escHtml(p.current_state || 'Sin definir') + '</div></div>';
       html += '<div class="cm-field-box" style="margin:0"><div class="field-label">Estado Objetivo</div><div class="field-value" style="font-size:.8rem">' + escHtml(p.target_state || 'Sin definir') + '</div></div>';
       html += '</div>';
-      if (actions.length > 0) {
-        html += '<div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Iniciativas</div>';
-        html += '<ul style="margin:0;padding-left:16px;font-size:.8rem;line-height:1.6;color:var(--text-secondary)">';
-        actions.forEach(function(a) { html += '<li>' + escHtml(a) + '</li>'; });
-        html += '</ul>';
+      var linkedInitiatives = state.iniciativas.filter(function(ii) {
+        var pids = ii.pillar_ids || (ii.pillar_id ? [ii.pillar_id] : []);
+        return pids.indexOf(p.id) >= 0;
+      });
+      var doneCount = linkedInitiatives.filter(function(ii){ return ii.status === 'completed'; }).length;
+      var avgProgress = linkedInitiatives.length > 0
+        ? Math.round(linkedInitiatives.reduce(function(s, ii){ return s + (ii.progress || 0); }, 0) / linkedInitiatives.length)
+        : 0;
+      var pillarHeader = '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;margin-bottom:4px">';
+      pillarHeader += '<div style="font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;font-weight:700">Iniciativas (' + doneCount + '/' + linkedInitiatives.length + ')</div>';
+      pillarHeader += '<button class="cm-icon-btn cm-pillar-add-ini" data-pid="' + escHtml(p.id) + '" title="Agregar iniciativa" style="font-size:.85rem">+</button>';
+      pillarHeader += '</div>';
+      if (linkedInitiatives.length > 0) {
+        pillarHeader += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+        pillarHeader += '<div style="flex:1;height:6px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + avgProgress + '%;background:#6366F1;transition:width .3s"></div></div>';
+        pillarHeader += '<span style="font-size:.7rem;font-weight:700;color:var(--text-secondary);min-width:32px;text-align:right">' + avgProgress + '%</span>';
+        pillarHeader += '</div>';
+      }
+      html += pillarHeader;
+      if (linkedInitiatives.length > 0) {
+        html += '<div class="cm-pillar-initiative-list" style="margin-top:0;padding-top:0;border-top:none">';
+        linkedInitiatives.forEach(function(ii) {
+          var resp = personName(ii.responsable_id) || 'Sin asignar';
+          var due = ii.due_date ? fmtDate(ii.due_date) : '';
+          var prog = ii.progress || 0;
+          html += '<div class="cm-pillar-initiative-item">';
+          html += '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">';
+          html += '<div class="title" style="flex:1">' + escHtml(ii.title || '') + '</div>';
+          html += statusBadge(ii.status || 'pending');
+          html += '</div>';
+          if (ii.target) html += '<div class="desc" style="color:#475569"><b>Meta:</b> ' + escHtml(ii.target) + '</div>';
+          if (ii.description) html += '<div class="desc">' + escHtml(ii.description) + '</div>';
+          html += '<div style="display:flex;align-items:center;gap:6px;margin-top:6px">';
+          html += '<div style="flex:1;height:5px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + prog + '%;background:' + (prog >= 100 ? '#10B981' : '#6366F1') + ';transition:width .3s"></div></div>';
+          html += '<span style="font-size:.66rem;font-weight:700;color:var(--text-muted);min-width:30px;text-align:right">' + prog + '%</span>';
+          html += '</div>';
+          html += '<div class="meta" style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px">';
+          html += '<span><b>' + escHtml(resp) + '</b>' + (due ? ' · ' + escHtml(due) : '') + '</span>';
+          html += '<button class="cm-icon-btn cm-pillar-edit-ini" data-id="' + escHtml(ii.id) + '" title="Editar" style="padding:2px 6px">&#9998;</button>';
+          html += '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      } else if (actions.length > 0) {
+        html += '<div style="font-size:.72rem;color:var(--text-muted);font-style:italic">Sugerencias: ' + actions.map(escHtml).join(', ') + '</div>';
       }
       html += '<div style="margin-top:10px;display:flex;gap:6px">';
       html += '<select class="cm-select cm-pillar-status" data-pid="' + escHtml(p.id) + '" style="font-size:.76rem">';
@@ -1522,6 +2030,12 @@ window.ComercialModule = (function() {
     html += '</div></div>';
 
     el.innerHTML = html;
+
+    // Make every touchpoint table resizable (one storage key per phase)
+    el.querySelectorAll('.cm-tp-table').forEach(function(tbl) {
+      var phaseKey = tbl.getAttribute('data-phase-id') || 'all';
+      _makeTableResizable(tbl, 'tp.' + phaseKey);
+    });
 
     // Bind pipeline card clicks
     el.querySelectorAll('.cm-pipeline-card').forEach(function(card) {
@@ -1552,6 +2066,64 @@ window.ComercialModule = (function() {
       });
     });
 
+    // View in canvas buttons
+    el.querySelectorAll('.cm-tp-view-canvas').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        _canvasFocusOn('touchpoint', this.dataset.tpId);
+      });
+    });
+
+    // Drag-and-drop reorder de touchpoints (display order only)
+    el.querySelectorAll('.cm-tp-table').forEach(function(tbl) {
+      var phaseId = tbl.getAttribute('data-phase-id');
+      var tbody = tbl.querySelector('tbody');
+      if (!tbody) return;
+      var dragRow = null;
+      tbody.querySelectorAll('tr[data-tp-id]').forEach(function(tr) {
+        tr.addEventListener('dragstart', function(e) {
+          dragRow = this;
+          this.classList.add('cm-tp-dragging');
+          if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', this.dataset.tpId); }
+        });
+        tr.addEventListener('dragend', function() {
+          if (dragRow) dragRow.classList.remove('cm-tp-dragging');
+          dragRow = null;
+          tbody.querySelectorAll('.cm-tp-drop-above,.cm-tp-drop-below').forEach(function(r){ r.classList.remove('cm-tp-drop-above','cm-tp-drop-below'); });
+        });
+        tr.addEventListener('dragover', function(e) {
+          if (!dragRow || dragRow === this) return;
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+          var rect = this.getBoundingClientRect();
+          var midY = rect.top + rect.height / 2;
+          tbody.querySelectorAll('.cm-tp-drop-above,.cm-tp-drop-below').forEach(function(r){ r.classList.remove('cm-tp-drop-above','cm-tp-drop-below'); });
+          if (e.clientY < midY) this.classList.add('cm-tp-drop-above');
+          else this.classList.add('cm-tp-drop-below');
+        });
+        tr.addEventListener('drop', function(e) {
+          if (!dragRow || dragRow === this) return;
+          e.preventDefault();
+          var rect = this.getBoundingClientRect();
+          var before = e.clientY < rect.top + rect.height / 2;
+          if (before) tbody.insertBefore(dragRow, this);
+          else tbody.insertBefore(dragRow, this.nextSibling);
+          // Persistir
+          var ids = Array.from(tbody.querySelectorAll('tr[data-tp-id]')).map(function(r){ return parseInt(r.dataset.tpId, 10); });
+          fetch('/api/comercial/touchpoints/reorder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phase_id: phaseId, ids: ids })
+          }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+            .then(function() {
+              ids.forEach(function(id, idx) {
+                var t = state.touchpoints.find(function(x){ return x.id === id; });
+                if (t) t.order = idx;
+              });
+              toast('Orden actualizado', 'success');
+            }).catch(function(){ toast('Error al reordenar','error'); renderProceso(el); });
+        });
+      });
+    });
+
     // Pillar status changes
     el.querySelectorAll('.cm-pillar-status').forEach(function(sel) {
       sel.addEventListener('change', function() {
@@ -1570,7 +2142,2220 @@ window.ComercialModule = (function() {
         showEditPillarModal(this.dataset.pid, el);
       });
     });
+
+    // Add initiative to pillar
+    el.querySelectorAll('.cm-pillar-add-ini').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        showInitiativeModal(null, el, { pillar_id: this.dataset.pid });
+      });
+    });
+
+    // Edit linked initiative from pillar card
+    el.querySelectorAll('.cm-pillar-edit-ini').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        showInitiativeModal(this.dataset.id, el);
+      });
+    });
   }
+
+  /* ──────────────────────────────────────────────────
+     MAPA VISUAL — vista canvas del proceso comercial
+     ────────────────────────────────────────────────── */
+  function _initiativesForTouchpoint(tpId) {
+    return state.iniciativas.filter(function(ii) {
+      var tids = ii.touchpoint_ids || (ii.touchpoint_id ? [ii.touchpoint_id] : []);
+      return tids.indexOf(tpId) >= 0;
+    });
+  }
+  function _initiativesForFriction(fId) {
+    return state.iniciativas.filter(function(ii) {
+      var fids = ii.friction_ids || [];
+      return fids.indexOf(fId) >= 0 || fids.indexOf(String(fId)) >= 0;
+    });
+  }
+  function _frictionsForTouchpoint(tpId) {
+    return (state.frictions || []).filter(function(f) {
+      return f.touchpoint_id === tpId;
+    });
+  }
+  function _kpiSemColor(k) {
+    if (!k || k.current_value == null) return null;
+    var v = k.current_value;
+    var dir = k.direction || 'higher';
+    var sg = k.threshold_super_green, gn = k.threshold_green, yl = k.threshold_yellow;
+    if (sg == null && gn == null && yl == null) return null;
+    if (dir === 'higher') {
+      if (sg != null && v >= sg) return 'green';
+      if (gn != null && v >= gn) return 'green';
+      if (yl != null && v >= yl) return 'yellow';
+      return 'red';
+    } else {
+      if (sg != null && v <= sg) return 'green';
+      if (gn != null && v <= gn) return 'green';
+      if (yl != null && v <= yl) return 'yellow';
+      return 'red';
+    }
+  }
+  function computeTouchpointHealth(tp) {
+    var fricts = _frictionsForTouchpoint(tp.id);
+    var inis = _initiativesForTouchpoint(tp.id);
+    var score = 0;
+    fricts.forEach(function(f) {
+      if (f.status === 'completed') return;
+      var fInis = _initiativesForFriction(f.id);
+      var avgFInisProg = fInis.length > 0 ? (fInis.reduce(function(s,ii){return s + (ii.progress||0);},0) / fInis.length) : 0;
+      if (f.impact === 'high') {
+        if (fInis.length === 0) score += 3;
+        else if (avgFInisProg < 30) score += 2;
+        else score += 1;
+      } else if (f.impact === 'medium') {
+        score += 1;
+      }
+    });
+    var tpKpiLinks = state.kpi_touchpoints.filter(function(lk){ return lk.touchpoint_id === tp.id; });
+    tpKpiLinks.forEach(function(lk) {
+      var k = state.kpis.find(function(x){ return x.id === lk.kpi_id; });
+      if (!k) return;
+      var sem = _kpiSemColor(k);
+      if (sem === 'red') score += 2;
+      else if (sem === 'yellow') score += 1;
+    });
+    inis.forEach(function(ii) {
+      if (ii.status !== 'completed' && ii.due_date && daysDiff(ii.due_date) < 0) score += 2;
+    });
+    var hasData = fricts.length > 0 || inis.length > 0 || tpKpiLinks.length > 0;
+    if (!hasData) return { level: 'gray', score: 0 };
+    if (score >= 4) return { level: 'red', score: score };
+    if (score >= 2) return { level: 'yellow', score: score };
+    return { level: 'green', score: score };
+  }
+  var _healthCfg = {
+    green:  { bg: '#F0FDF4', border: '#BBF7D0', dot: '#10B981', label: 'Sano' },
+    yellow: { bg: '#FFFBEB', border: '#FDE68A', dot: '#F59E0B', label: 'Atención' },
+    red:    { bg: '#FEF2F2', border: '#FECACA', dot: '#EF4444', label: 'Crítico' },
+    gray:   { bg: '#F8FAFC', border: '#E2E8F0', dot: '#94A3B8', label: 'Sin datos' }
+  };
+  var _impactCfg = {
+    high:   { color: '#EF4444', bg: '#FEF2F2', label: 'Alto' },
+    medium: { color: '#F59E0B', bg: '#FFFBEB', label: 'Medio' },
+    low:    { color: '#94A3B8', bg: '#F1F5F9', label: 'Bajo' }
+  };
+
+  /* ──────────────────────────────────────────────────
+     MAPA VISUAL v2 — Canvas con toolbar, fullscreen,
+     filtros, drag-to-link, crear nodos, bandas de fase
+     ────────────────────────────────────────────────── */
+  var canvasState = {
+    x: 0, y: 0, zoom: 1,
+    layout: {},
+    pendingSaves: {},
+    saveTimer: null,
+    saveStatus: 'idle',     // idle | saving | saved | error
+    saveStatusTimer: null,
+    selectedKey: null,
+    isPanning: false,
+    panStart: null,
+    filters: { q: '', phase: [], resp: [], impact: [], health: [] },
+    critical: false,
+    locked: false,
+    snap: false,
+    linkMode: false,
+    fullscreen: false,
+    linkDraft: null,        // { fromType, fromId, fromSide, fromX, fromY, currentX, currentY }
+    dropMode: null,         // null | 'touchpoint' | 'friction' | 'note'
+    selectedFlowId: null,   // edge seleccionado
+    dropTargetKey: null,    // key del nodo bajo cursor durante drag-to-link
+    phaseDrag: null,        // { phaseId, startX, startY, originals: {tpId: {x,y}} }
+    edgeMidpoints: {}       // flowId -> {x,y} para colocar widgets
+  };
+
+  var _activeDrag = null;
+  var _PHASE_COLORS = ['#6366F1','#0EA5E9','#10B981','#F59E0B','#EC4899','#8B5CF6'];
+
+  function _layoutKey(type, id) { return type + ':' + id; }
+
+  function _autoSeedLayout(force) {
+    var phases = state.phases.slice().sort(function(a,b){ return (a.order||0) - (b.order||0); });
+    var COL_W = 320, COL_GAP = 60, ROW_H = 200, NODE_W = 240;
+    var FRICTION_OFFSET_Y = 140, FRICTION_GAP = 60, FRICTION_W = 200;
+    phases.forEach(function(ph, phIdx) {
+      var phTps = state.touchpoints
+        .filter(function(t){ return t.phase_id === ph.id; })
+        .sort(function(a,b){ return (a.order||0) - (b.order||0); });
+      var colX = phIdx * (COL_W + COL_GAP);
+      phTps.forEach(function(tp, i) {
+        var k = _layoutKey('touchpoint', String(tp.id));
+        if (force || !canvasState.layout[k]) {
+          canvasState.layout[k] = { x: colX, y: i * ROW_H };
+        }
+        var fricts = _frictionsForTouchpoint(tp.id);
+        fricts.forEach(function(f, fi) {
+          var fk = _layoutKey('friction', String(f.id));
+          if (force || !canvasState.layout[fk]) {
+            var tpPos = canvasState.layout[k];
+            canvasState.layout[fk] = {
+              x: tpPos.x + (NODE_W - FRICTION_W) / 2 + (fi % 2 === 0 ? -110 : 110),
+              y: tpPos.y + FRICTION_OFFSET_Y + Math.floor(fi / 2) * FRICTION_GAP
+            };
+          }
+        });
+      });
+    });
+    // Notas: posición por defecto en (50,50) +offset si no tienen
+    (state.canvas_notes || []).forEach(function(n, i) {
+      var nk = _layoutKey('note', String(n.id));
+      if (!canvasState.layout[nk]) {
+        canvasState.layout[nk] = { x: 50 + i * 30, y: 50 + i * 30 };
+      }
+    });
+  }
+
+  function _loadLayoutFromState() {
+    canvasState.layout = {};
+    (state.canvas_layout || []).forEach(function(row) {
+      var x = Number(row.x), y = Number(row.y);
+      if (!isFinite(x) || !isFinite(y)) return;
+      canvasState.layout[_layoutKey(row.entity_type, row.entity_id)] = { x: x, y: y };
+    });
+  }
+
+  function _setSaveStatus(status) {
+    canvasState.saveStatus = status;
+    var el = document.querySelector('#cm-canvas-save-indicator');
+    if (!el) return;
+    el.classList.remove('saving','saved','error');
+    if (status === 'saving') {
+      el.textContent = '💾 Guardando…';
+      el.classList.add('saving');
+      el.style.display = 'inline-flex';
+    } else if (status === 'saved') {
+      el.textContent = '✓ Guardado';
+      el.classList.add('saved');
+      el.style.display = 'inline-flex';
+      if (canvasState.saveStatusTimer) clearTimeout(canvasState.saveStatusTimer);
+      canvasState.saveStatusTimer = setTimeout(function() {
+        el.style.display = 'none';
+        canvasState.saveStatus = 'idle';
+      }, 1500);
+    } else if (status === 'error') {
+      el.textContent = '⚠ Error al guardar';
+      el.classList.add('error');
+      el.style.display = 'inline-flex';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  function _scheduleLayoutSave(key, entityType, entityId, x, y) {
+    canvasState.pendingSaves[key] = { entity_type: entityType, entity_id: String(entityId), x: x, y: y };
+    if (canvasState.saveTimer) clearTimeout(canvasState.saveTimer);
+    _setSaveStatus('saving');
+    canvasState.saveTimer = setTimeout(function() {
+      var items = Object.keys(canvasState.pendingSaves).map(function(k){ return canvasState.pendingSaves[k]; });
+      canvasState.pendingSaves = {};
+      if (items.length === 0) return;
+      fetch('/api/comercial/canvas-layout/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view_id: 'comercial_main', items: items })
+      }).then(function(r) {
+        if (!r.ok) throw new Error('save failed');
+        return r.json();
+      }).then(function(rows) {
+        state.canvas_layout = rows;
+        _setSaveStatus('saved');
+      }).catch(function() {
+        _setSaveStatus('error');
+        toast('Error al guardar posiciones', 'error');
+      });
+    }, 400);
+  }
+
+  // Flush sincrónico de saves pendientes al cerrar la pestaña.
+  // Sin esto, el debounce de 400ms se pierde si cierras justo después de mover.
+  function _flushPendingLayoutSaves() {
+    var items = Object.keys(canvasState.pendingSaves).map(function(k){ return canvasState.pendingSaves[k]; });
+    if (items.length === 0) return;
+    canvasState.pendingSaves = {};
+    if (canvasState.saveTimer) { clearTimeout(canvasState.saveTimer); canvasState.saveTimer = null; }
+    var payload = JSON.stringify({ view_id: 'comercial_main', items: items });
+    if (navigator.sendBeacon) {
+      var blob = new Blob([payload], { type: 'application/json' });
+      navigator.sendBeacon('/api/comercial/canvas-layout/bulk', blob);
+    } else {
+      fetch('/api/comercial/canvas-layout/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: payload, keepalive: true,
+      });
+    }
+  }
+  if (!window._cmCanvasBeforeUnloadInited) {
+    window._cmCanvasBeforeUnloadInited = true;
+    window.addEventListener('beforeunload', _flushPendingLayoutSaves);
+    window.addEventListener('pagehide', _flushPendingLayoutSaves);
+  }
+
+  function _saveAllLayout() {
+    var items = Object.keys(canvasState.layout).map(function(k) {
+      var parts = k.split(':');
+      var pos = canvasState.layout[k];
+      return { entity_type: parts[0], entity_id: parts[1], x: pos.x, y: pos.y };
+    });
+    if (items.length === 0) return Promise.resolve();
+    _setSaveStatus('saving');
+    return fetch('/api/comercial/canvas-layout/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ view_id: 'comercial_main', items: items })
+    }).then(function(r) {
+      if (!r.ok) throw new Error('save failed');
+      return r.json();
+    }).then(function(rows) {
+      state.canvas_layout = rows;
+      _setSaveStatus('saved');
+    }).catch(function() {
+      _setSaveStatus('error');
+    });
+  }
+
+  function _applyTransform(stage) {
+    if (!stage) return;
+    stage.style.transform = 'translate(' + canvasState.x + 'px, ' + canvasState.y + 'px) scale(' + canvasState.zoom + ')';
+    var lbl = document.querySelector('#cm-canvas-zoom-label');
+    if (lbl) lbl.textContent = Math.round(canvasState.zoom * 100) + '%';
+  }
+
+  function _canvasSnapValue(v) {
+    if (!canvasState.snap) return v;
+    return Math.round(v / 20) * 20;
+  }
+
+  function renderMapaVisual(el) {
+    _loadLayoutFromState();
+    _autoSeedLayout(false);
+    canvasState.x = 0; canvasState.y = 0; canvasState.zoom = 1;
+    canvasState.selectedKey = null;
+    canvasState.linkDraft = null;
+    canvasState.dropMode = null;
+
+    var totals = { tps: state.touchpoints.length, fricts: (state.frictions||[]).length, inis: state.iniciativas.length };
+    var counts = { green: 0, yellow: 0, red: 0, gray: 0 };
+    state.touchpoints.forEach(function(tp) {
+      var h = computeTouchpointHealth(tp);
+      counts[h.level] = (counts[h.level] || 0) + 1;
+    });
+
+    var html = '';
+
+    // Toolbar sticky
+    html += '<div class="cm-canvas-toolbar" id="cm-canvas-toolbar">';
+    html += '<div class="cm-canvas-toolbar-row">';
+    html += '<div class="cm-canvas-search-wrap">';
+    html += '<span class="cm-canvas-search-icon">🔍</span>';
+    html += '<input type="text" class="cm-canvas-search" id="cm-canvas-search" placeholder="Buscar touchpoint o fricción..." value="' + escHtml(canvasState.filters.q) + '">';
+    html += '</div>';
+    html += '<div class="cm-canvas-filters">';
+    html += _filterDropdown('phase', 'Fase', state.phases.map(function(p){ return { value: p.id, label: p.name }; }));
+    var respOpts = (state.people || []).map(function(p){ return { value: String(p.id), label: p.name }; });
+    html += _filterDropdown('resp', 'Responsable', respOpts);
+    html += _filterDropdown('impact', 'Impacto', [{value:'high',label:'Alto'},{value:'medium',label:'Medio'},{value:'low',label:'Bajo'}]);
+    html += _filterDropdown('health', 'Salud', [{value:'red',label:'🔴 Crítico'},{value:'yellow',label:'🟡 Riesgo'},{value:'green',label:'🟢 Sano'},{value:'gray',label:'⚪ Sin datos'}]);
+    html += '</div>';
+    html += '<div class="cm-canvas-toolbar-spacer"></div>';
+    html += '<button class="cm-canvas-tool-btn ' + (canvasState.critical ? 'active' : '') + '" id="cm-canvas-critical-btn" title="Mostrar solo problemas (rojos/amarillos)">🎯 Ruta crítica</button>';
+    html += '<div class="cm-canvas-create-wrap">';
+    html += '<button class="cm-canvas-tool-btn primary" id="cm-canvas-create-btn">+ Crear ▾</button>';
+    html += '<div class="cm-canvas-create-menu" id="cm-canvas-create-menu" style="display:none">';
+    html += '<button data-create="touchpoint">＋ Touchpoint</button>';
+    html += '<button data-create="friction">＋ Fricción</button>';
+    html += '<button data-create="note">＋ Nota libre</button>';
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div class="cm-canvas-toolbar-row cm-canvas-toolbar-row--secondary">';
+    html += '<div class="cm-canvas-totals">' + totals.tps + ' touchpoints · ' + totals.fricts + ' fricciones · ' + totals.inis + ' iniciativas</div>';
+    html += '<div class="cm-canvas-legend">';
+    ['red','yellow','green','gray'].forEach(function(lvl) {
+      var cfg = _healthCfg[lvl];
+      html += '<div class="cm-canvas-legend-item"><span class="cm-mv-dot" style="background:' + cfg.dot + '"></span>' + cfg.label + ' <b>' + counts[lvl] + '</b></div>';
+    });
+    html += '</div>';
+    html += '<div class="cm-canvas-toolbar-spacer"></div>';
+    html += '<span class="cm-canvas-save-indicator" id="cm-canvas-save-indicator" style="display:none"></span>';
+    html += '<button class="cm-canvas-tool-btn ' + (canvasState.locked ? 'active' : '') + '" id="cm-canvas-lock-btn" title="Bloquear/desbloquear movimiento">🔒</button>';
+    html += '<button class="cm-canvas-tool-btn ' + (canvasState.snap ? 'active' : '') + '" id="cm-canvas-snap-btn" title="Snap a grilla 20px">🧲</button>';
+    html += '<button class="cm-canvas-tool-btn" id="cm-canvas-autolayout-btn" title="Re-aplicar auto-layout (sobrescribe posiciones)">📐 Auto</button>';
+    html += '<button class="cm-canvas-tool-btn ' + (canvasState.linkMode ? 'active' : '') + '" id="cm-canvas-linkmode-btn" title="Modo conexión: arrastrar de un nodo a otro">🔗 Enlace</button>';
+    html += '<button class="cm-canvas-tool-btn" id="cm-canvas-fullscreen-btn" title="Pantalla completa">⛶</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Banner de modo (drop / link)
+    html += '<div class="cm-canvas-mode-banner" id="cm-canvas-mode-banner" style="display:none"></div>';
+
+    // Viewport + Stage
+    html += '<div class="cm-canvas-viewport" id="cm-canvas-viewport">';
+    html += '<div class="cm-canvas-stage" id="cm-canvas-stage">';
+    html += '<svg class="cm-canvas-svg" id="cm-canvas-svg" xmlns="http://www.w3.org/2000/svg"></svg>';
+    html += '<div class="cm-canvas-phase-layer" id="cm-canvas-phase-layer"></div>';
+    state.touchpoints.forEach(function(tp) { html += renderCanvasTouchpointNode(tp); });
+    (state.frictions || []).forEach(function(f) { html += renderCanvasFrictionNode(f); });
+    (state.canvas_notes || []).forEach(function(n) { html += renderCanvasNoteNode(n); });
+    html += '<div class="cm-canvas-edge-widgets-layer" id="cm-canvas-edge-widgets-layer"></div>';
+    html += '</div>';
+    html += '<div class="cm-canvas-controls">';
+    html += '<button class="cm-canvas-ctrl-btn" id="cm-canvas-zoom-in" title="Zoom in">+</button>';
+    html += '<button class="cm-canvas-ctrl-btn" id="cm-canvas-zoom-out" title="Zoom out">−</button>';
+    html += '<button class="cm-canvas-ctrl-btn" id="cm-canvas-fit" title="Ajustar todo">⊡</button>';
+    html += '<button class="cm-canvas-ctrl-btn" id="cm-canvas-reset" title="Reset">↺</button>';
+    html += '<span class="cm-canvas-zoom-label" id="cm-canvas-zoom-label">100%</span>';
+    html += '</div>';
+    html += '</div>';
+
+    // Drawer
+    html += '<div class="cm-canvas-drawer" id="cm-canvas-drawer"><div class="cm-canvas-drawer-content" id="cm-canvas-drawer-content"></div></div>';
+
+    el.innerHTML = html;
+
+    _initGlobalDragHandlers();
+    _initGlobalLinkHandlers();
+    _initGlobalKeyHandlers();
+    _initFullscreenChangeHandler();
+    _initFlowEdgeClickHandler();
+    requestAnimationFrame(function() {
+      _bindCanvasEvents(el);
+      _attachNodeDragHandlers(el);
+      _drawCanvasEdges();
+      _renderPhaseFrameHeaders();
+      _renderEdgeWidgets();
+      _canvasFit();
+      _applyCanvasFilters();
+      _bindMultiCheckSearch(document);
+      // Focus opcional desde tabla
+      if (pendingCanvasFocus) {
+        var pf = pendingCanvasFocus;
+        pendingCanvasFocus = null;
+        _focusCanvasNode(pf.type, pf.id);
+      }
+      var vp = el.querySelector('#cm-canvas-viewport');
+      if (vp) vp.addEventListener('click', function(e) {
+        if (e.target === vp || e.target.id === 'cm-canvas-stage') {
+          _closeCanvasDrawer();
+          if (canvasState.selectedFlowId) {
+            canvasState.selectedFlowId = null;
+            _drawCanvasEdges();
+            _renderEdgeWidgets();
+          }
+        }
+      });
+    });
+  }
+
+  function _filterDropdown(key, label, opts) {
+    var sel = canvasState.filters[key] || [];
+    var count = sel.length;
+    var items = opts.map(function(o) {
+      var checked = sel.indexOf(o.value) >= 0 ? 'checked' : '';
+      return '<label class="cm-canvas-filter-opt"><input type="checkbox" data-filter="' + key + '" value="' + escHtml(o.value) + '" ' + checked + '> <span>' + escHtml(o.label) + '</span></label>';
+    }).join('');
+    var html = '';
+    html += '<div class="cm-canvas-filter">';
+    html += '<button class="cm-canvas-filter-trigger ' + (count > 0 ? 'has-selection' : '') + '" data-filter-trigger="' + key + '">' + label + (count > 0 ? ' <b>' + count + '</b>' : '') + ' ▾</button>';
+    html += '<div class="cm-canvas-filter-pop" data-filter-pop="' + key + '" style="display:none">';
+    html += '<div class="cm-canvas-filter-list">' + (items || '<div style="font-size:.74rem;color:#94A3B8;padding:6px">Sin opciones</div>') + '</div>';
+    html += '<div class="cm-canvas-filter-actions"><button data-filter-clear="' + key + '">Limpiar</button></div>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderCanvasTouchpointNode(tp) {
+    var k = _layoutKey('touchpoint', String(tp.id));
+    var pos = canvasState.layout[k] || { x: 0, y: 0 };
+    var h = computeTouchpointHealth(tp);
+    var cfg = _healthCfg[h.level];
+    var fricts = _frictionsForTouchpoint(tp.id);
+    var inis = _initiativesForTouchpoint(tp.id);
+    var doneInis = inis.filter(function(ii){ return ii.status === 'completed'; }).length;
+    var avgInis = inis.length > 0 ? Math.round(inis.reduce(function(s,ii){return s + (ii.progress||0);},0) / inis.length) : 0;
+    var resp = personName(tp.responsable_id) || tp.responsable || '';
+    var tpKpiLinks = state.kpi_touchpoints.filter(function(lk){ return lk.touchpoint_id === tp.id; });
+    var primaryKpi = null, primaryKpiSem = null;
+    if (tpKpiLinks.length > 0) {
+      primaryKpi = state.kpis.find(function(x){ return x.id === tpKpiLinks[0].kpi_id; });
+      primaryKpiSem = _kpiSemColor(primaryKpi);
+    }
+
+    // ¿Touchpoint paralelo? (sin flechas dentro de su misma fase)
+    var flowsAll = state.touchpoint_flows || [];
+    var hasInPhaseFlow = flowsAll.some(function(f) {
+      if (f.from_touchpoint_id !== tp.id && f.to_touchpoint_id !== tp.id) return false;
+      var otherId = f.from_touchpoint_id === tp.id ? f.to_touchpoint_id : f.from_touchpoint_id;
+      var other = state.touchpoints.find(function(t){ return t.id === otherId; });
+      return other && other.phase_id === tp.phase_id;
+    });
+    var isParallel = !hasInPhaseFlow;
+
+    var html = '';
+    html += '<div class="cm-canvas-node cm-canvas-node--tp' + (isParallel ? ' cm-canvas-node--parallel' : '') + '" data-mv-tp="' + escHtml(tp.id) + '" data-key="' + escHtml(k) + '" data-phase="' + escHtml(tp.phase_id || '') + '" data-resp="' + escHtml(tp.responsable_id || '') + '" data-health="' + h.level + '"';
+    html += ' style="left:' + pos.x + 'px;top:' + pos.y + 'px;background:#fff;border-color:' + cfg.border + '">';
+    html += '<span class="cm-anchor cm-anchor-top" data-link-from="touchpoint:' + escHtml(tp.id) + '" data-side="top" title="Arrastra para conectar"></span>';
+    html += '<span class="cm-anchor cm-anchor-right" data-link-from="touchpoint:' + escHtml(tp.id) + '" data-side="right" title="Arrastra para conectar"></span>';
+    html += '<span class="cm-anchor cm-anchor-bottom" data-link-from="touchpoint:' + escHtml(tp.id) + '" data-side="bottom" title="Arrastra para conectar"></span>';
+    html += '<span class="cm-anchor cm-anchor-left" data-link-from="touchpoint:' + escHtml(tp.id) + '" data-side="left" title="Arrastra para conectar"></span>';
+    html += '<div class="cm-canvas-node-bar" style="background:' + cfg.dot + '"></div>';
+    html += '<div class="cm-canvas-node-body">';
+    html += '<div class="cm-canvas-node-header">';
+    html += '<span class="cm-mv-dot" style="background:' + cfg.dot + ';width:10px;height:10px"></span>';
+    html += '<span class="cm-canvas-node-id">#' + tp.id + '</span>';
+    html += '<span class="cm-canvas-node-title">' + escHtml(tp.name) + '</span>';
+    html += '</div>';
+    html += '<div class="cm-canvas-node-meta">';
+    if (tp.canal) html += '<span class="cm-mv-tag">' + escHtml(tp.canal) + '</span>';
+    if (resp) html += '<span class="cm-mv-tag cm-mv-tag-resp">' + escHtml(resp) + '</span>';
+    if (isParallel) html += '<span class="cm-mv-tag cm-mv-tag-parallel" title="Sin dependencias en su fase, sucede durante esta etapa">⏱ paralelo</span>';
+    html += '</div>';
+    if (primaryKpi) {
+      var semColor = primaryKpiSem ? _healthCfg[primaryKpiSem === 'green' ? 'green' : primaryKpiSem === 'yellow' ? 'yellow' : 'red'].dot : '#94A3B8';
+      html += '<div class="cm-canvas-node-kpi">';
+      html += '<div style="display:flex;align-items:center;gap:6px;font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px"><span class="cm-mv-dot" style="background:' + semColor + ';width:6px;height:6px"></span>KPI</div>';
+      html += '<div style="font-size:.78rem;font-weight:600">' + escHtml(primaryKpi.name) + '</div>';
+      if (primaryKpi.current_value != null) {
+        html += '<div style="font-size:.72rem;color:var(--text-secondary)">' + primaryKpi.current_value + (primaryKpi.unit || '');
+        if (primaryKpi.target_value != null) html += ' / ' + primaryKpi.target_value + (primaryKpi.unit || '');
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    html += '<div class="cm-canvas-node-stats">';
+    if (inis.length > 0) {
+      var iniCol = avgInis >= 100 ? '#10B981' : (avgInis >= 50 ? '#6366F1' : (avgInis > 0 ? '#F59E0B' : '#94A3B8'));
+      html += '<div class="cm-canvas-node-stat">';
+      html += '<span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px">Iniciativas</span>';
+      html += '<span style="font-weight:700;color:' + iniCol + '">' + doneInis + '/' + inis.length + ' · ' + avgInis + '%</span>';
+      html += '<div style="height:3px;background:#E2E8F0;border-radius:9999px;overflow:hidden;margin-top:2px"><div style="height:100%;width:' + avgInis + '%;background:' + iniCol + '"></div></div>';
+      html += '</div>';
+    }
+    if (fricts.length > 0) {
+      var critCnt = fricts.filter(function(f){ return f.impact === 'high' && f.status !== 'completed'; }).length;
+      html += '<div class="cm-canvas-node-stat">';
+      html += '<span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px">Fricciones</span>';
+      html += '<span style="font-weight:700">' + fricts.length + (critCnt > 0 ? ' <span style="color:#DC2626">(' + critCnt + ' crít.)</span>' : '') + '</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderCanvasFrictionNode(f) {
+    var k = _layoutKey('friction', String(f.id));
+    var pos = canvasState.layout[k] || { x: 0, y: 0 };
+    var icfg = _impactCfg[f.impact || 'medium'] || _impactCfg.medium;
+    var fInis = _initiativesForFriction(f.id);
+    var avgProg = fInis.length > 0 ? Math.round(fInis.reduce(function(s,ii){return s + (ii.progress||0);},0) / fInis.length) : 0;
+    var isResolved = f.status === 'completed';
+    var tpId = f.touchpoint_id;
+    var tp = tpId ? state.touchpoints.find(function(x){ return x.id === tpId; }) : null;
+    var phaseId = tp ? tp.phase_id : '';
+    var fHealth = isResolved ? 'green' : (f.impact === 'high' ? 'red' : (f.impact === 'medium' ? 'yellow' : 'gray'));
+
+    var html = '';
+    html += '<div class="cm-canvas-node cm-canvas-node--friction" data-mv-friction="' + escHtml(f.id) + '" data-key="' + escHtml(k) + '" data-phase="' + escHtml(phaseId) + '" data-impact="' + escHtml(f.impact||'medium') + '" data-health="' + fHealth + '"';
+    html += ' style="left:' + pos.x + 'px;top:' + pos.y + 'px;border-left-color:' + icfg.color + (isResolved ? ';opacity:.55' : '') + '">';
+    html += '<span class="cm-anchor cm-anchor-top" data-link-from="friction:' + escHtml(f.id) + '" data-side="top"></span>';
+    html += '<span class="cm-anchor cm-anchor-right" data-link-from="friction:' + escHtml(f.id) + '" data-side="right"></span>';
+    html += '<span class="cm-anchor cm-anchor-bottom" data-link-from="friction:' + escHtml(f.id) + '" data-side="bottom"></span>';
+    html += '<span class="cm-anchor cm-anchor-left" data-link-from="friction:' + escHtml(f.id) + '" data-side="left"></span>';
+    html += '<div class="cm-canvas-fr-header">';
+    html += '<span class="cm-mv-fr-impact" style="background:' + icfg.bg + ';color:' + icfg.color + '">' + icfg.label + '</span>';
+    html += '<span class="cm-canvas-fr-id">' + escHtml(f.id) + '</span>';
+    if (isResolved) html += '<span class="cm-canvas-fr-resolved">✓</span>';
+    html += '</div>';
+    html += '<div class="cm-canvas-fr-name">' + escHtml(f.name) + '</div>';
+    if (fInis.length > 0) {
+      var col = avgProg >= 100 ? '#10B981' : (avgProg >= 50 ? '#6366F1' : '#F59E0B');
+      html += '<div class="cm-canvas-fr-progress"><div style="flex:1;height:3px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + avgProg + '%;background:' + col + '"></div></div><span style="font-size:.62rem;font-weight:700;color:' + col + '">' + fInis.length + ' ini · ' + avgProg + '%</span></div>';
+    } else {
+      html += '<div style="font-size:.62rem;color:#DC2626;font-style:italic;margin-top:4px">⚠ Sin iniciativas</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderCanvasNoteNode(n) {
+    var k = _layoutKey('note', String(n.id));
+    var pos = canvasState.layout[k] || { x: 0, y: 0 };
+    var palette = { yellow:'#FEF3C7', blue:'#DBEAFE', pink:'#FCE7F3', green:'#D1FAE5' };
+    var bg = palette[n.color] || palette.yellow;
+    var html = '';
+    html += '<div class="cm-canvas-node cm-canvas-node--note" data-mv-note="' + n.id + '" data-key="' + escHtml(k) + '"';
+    html += ' style="left:' + pos.x + 'px;top:' + pos.y + 'px;background:' + bg + '">';
+    html += '<div class="cm-canvas-note-text">' + escHtml(n.text || '(nota vacía)') + '</div>';
+    html += '<button class="cm-canvas-note-del" data-note-del="' + n.id + '" title="Eliminar nota">×</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function _oppositeSide(s) {
+    return s === 'left' ? 'right' : s === 'right' ? 'left' : s === 'top' ? 'bottom' : 'top';
+  }
+
+  function _anchorPoint(box, side) {
+    if (side === 'top') return { x: box.x, y: box.top };
+    if (side === 'right') return { x: box.right, y: box.y };
+    if (side === 'bottom') return { x: box.x, y: box.bottom };
+    return { x: box.left, y: box.y };
+  }
+
+  function _computeBestAnchorPair(a, b, forcedFromSide) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var fromSide, toSide;
+    if (forcedFromSide) {
+      fromSide = forcedFromSide;
+    } else {
+      if (Math.abs(dx) > Math.abs(dy)) fromSide = dx > 0 ? 'right' : 'left';
+      else fromSide = dy > 0 ? 'bottom' : 'top';
+    }
+    // Target side: el opuesto preferentemente
+    if (fromSide === 'right') toSide = dx >= -10 ? 'left' : (Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? 'top' : 'bottom') : 'right');
+    else if (fromSide === 'left') toSide = dx <= 10 ? 'right' : (Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? 'top' : 'bottom') : 'left');
+    else if (fromSide === 'bottom') toSide = dy >= -10 ? 'top' : (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'left' : 'right') : 'bottom');
+    else toSide = dy <= 10 ? 'bottom' : (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'left' : 'right') : 'top');
+    return { fromSide: fromSide, toSide: toSide };
+  }
+
+  function _bezierPath(p1, side1, p2, side2) {
+    var dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    var k = Math.max(40, dist / 3);
+    var cp1 = _offsetFromSide(p1, side1, k);
+    var cp2 = _offsetFromSide(p2, side2, k);
+    var d = 'M ' + p1.x + ' ' + p1.y + ' C ' + cp1.x + ' ' + cp1.y + ', ' + cp2.x + ' ' + cp2.y + ', ' + p2.x + ' ' + p2.y;
+    return { d: d, cp1: cp1, cp2: cp2 };
+  }
+
+  function _offsetFromSide(p, side, k) {
+    if (side === 'right') return { x: p.x + k, y: p.y };
+    if (side === 'left')  return { x: p.x - k, y: p.y };
+    if (side === 'top')   return { x: p.x, y: p.y - k };
+    return { x: p.x, y: p.y + k };
+  }
+
+  function _bezierPoint(p0, p1, p2, p3, t) {
+    var u = 1 - t;
+    var tt = t*t, uu = u*u;
+    var x = uu*u*p0.x + 3*uu*t*p1.x + 3*u*tt*p2.x + tt*t*p3.x;
+    var y = uu*u*p0.y + 3*uu*t*p1.y + 3*u*tt*p2.y + tt*t*p3.y;
+    return { x: x, y: y };
+  }
+
+  function _drawCanvasEdges() {
+    var svg = document.querySelector('#cm-canvas-svg');
+    if (!svg) return;
+    var phases = state.phases.slice().sort(function(a,b){ return (a.order||0) - (b.order||0); });
+    var bands = _phaseBandsHTML(phases);
+    var paths = '';
+    paths += '<defs>';
+    paths += '<marker id="cmv-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94A3B8"/></marker>';
+    paths += '<marker id="cmv-arrow-manual" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4F46E5"/></marker>';
+    paths += '</defs>';
+
+    // IMPORTANT: estas constantes deben declararse ANTES del loop manualFlows porque
+    // tpCenter las usa internamente. Aunque las funciones tpCenter/frCenter se hoistean,
+    // los inicializadores `var X = ...` no, así que TP_W sería undefined y produciría NaN
+    // en `px + TP_W/2` rompiendo el path.
+    var TP_W = 240, TP_HEIGHT_EST = 130;
+    var FR_W = 200, FR_HEIGHT_EST = 70;
+
+    // Manual flows (touchpoint→touchpoint editables) con smart anchor + bezier
+    var manualFlows = state.touchpoint_flows || [];
+    var sourcesWithManual = {};
+    manualFlows.forEach(function(fl) { sourcesWithManual[fl.from_touchpoint_id] = true; });
+    canvasState.edgeMidpoints = {};
+
+    manualFlows.forEach(function(fl) {
+      var from = state.touchpoints.find(function(t){ return t.id === fl.from_touchpoint_id; });
+      var to = state.touchpoints.find(function(t){ return t.id === fl.to_touchpoint_id; });
+      if (!from || !to) return;
+      var a = tpCenter(from), b = tpCenter(to);
+      if (!a || !b) return;
+      var pair = _computeBestAnchorPair(a, b);
+      var p1 = _anchorPoint(a, pair.fromSide);
+      var p2 = _anchorPoint(b, pair.toSide);
+      var bz = _bezierPath(p1, pair.fromSide, p2, pair.toSide);
+      var isSelected = String(canvasState.selectedFlowId) === String(fl.id);
+      var stroke = isSelected ? '#4338CA' : '#4F46E5';
+      var width = isSelected ? 3.2 : 2.4;
+      paths += '<path class="cm-flow-hit" data-flow-id="' + fl.id + '" d="' + bz.d + '" stroke="transparent" stroke-width="18" fill="none" style="cursor:pointer;pointer-events:stroke"/>';
+      paths += '<path class="cm-flow-visible' + (isSelected ? ' selected' : '') + '" data-flow-id="' + fl.id + '" d="' + bz.d + '" stroke="' + stroke + '" stroke-width="' + width + '" fill="none" marker-end="url(#cmv-arrow-manual)" style="pointer-events:none"/>';
+      var mid = _bezierPoint(p1, bz.cp1, bz.cp2, p2, 0.5);
+      canvasState.edgeMidpoints[fl.id] = mid;
+    });
+
+    function tpCenter(tp) {
+      var pos = canvasState.layout[_layoutKey('touchpoint', String(tp.id))];
+      if (!pos) return null;
+      var px = Number(pos.x), py = Number(pos.y);
+      if (!isFinite(px) || !isFinite(py)) return null;
+      var node = document.querySelector('[data-mv-tp="' + tp.id + '"]');
+      var h = node ? node.offsetHeight : TP_HEIGHT_EST;
+      return { x: px + TP_W/2, y: py + h/2, top: py, bottom: py + h, left: px, right: px + TP_W };
+    }
+    function frCenter(f) {
+      var pos = canvasState.layout[_layoutKey('friction', String(f.id))];
+      if (!pos) return null;
+      var px = Number(pos.x), py = Number(pos.y);
+      if (!isFinite(px) || !isFinite(py)) return null;
+      var node = document.querySelector('[data-mv-friction="' + f.id + '"]');
+      var h = node ? node.offsetHeight : FR_HEIGHT_EST;
+      return { x: px + FR_W/2, y: py + h/2, top: py, bottom: py + h, left: px, right: px + FR_W };
+    }
+
+    phases.forEach(function(ph, phIdx) {
+      var phTps = state.touchpoints
+        .filter(function(t){ return t.phase_id === ph.id; })
+        .sort(function(a,b){ return (a.order||0) - (b.order||0); });
+      // Auto edges solo desde touchpoints SIN flows manuales salientes
+      for (var i = 0; i < phTps.length - 1; i++) {
+        if (sourcesWithManual[phTps[i].id]) continue;
+        var a = tpCenter(phTps[i]); var b = tpCenter(phTps[i+1]);
+        if (!a || !b) continue;
+        var dx = b.x - a.x, dy = b.y - a.y;
+        if (Math.abs(dy) > Math.abs(dx)) {
+          paths += '<path d="M ' + a.x + ' ' + a.bottom + ' L ' + b.x + ' ' + b.top + '" stroke="#CBD5E1" stroke-width="2" fill="none" marker-end="url(#cmv-arrow)"/>';
+        } else {
+          paths += '<path d="M ' + a.right + ' ' + a.y + ' L ' + b.left + ' ' + b.y + '" stroke="#CBD5E1" stroke-width="2" fill="none" marker-end="url(#cmv-arrow)"/>';
+        }
+      }
+      if (phIdx < phases.length - 1) {
+        var nextPhTps = state.touchpoints
+          .filter(function(t){ return t.phase_id === phases[phIdx+1].id; })
+          .sort(function(a,b){ return (a.order||0) - (b.order||0); });
+        if (phTps.length > 0 && nextPhTps.length > 0 && !sourcesWithManual[phTps[phTps.length - 1].id]) {
+          var lastA = tpCenter(phTps[phTps.length - 1]);
+          var firstB = tpCenter(nextPhTps[0]);
+          if (lastA && firstB) {
+            var x1 = lastA.right, y1 = lastA.y, x2 = firstB.left, y2 = firstB.y;
+            var midX = (x1 + x2) / 2;
+            paths += '<path d="M ' + x1 + ' ' + y1 + ' C ' + midX + ' ' + y1 + ', ' + midX + ' ' + y2 + ', ' + x2 + ' ' + y2 + '" stroke="#94A3B8" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#cmv-arrow)"/>';
+          }
+        }
+      }
+      phTps.forEach(function(tp) {
+        var tpC = tpCenter(tp);
+        if (!tpC) return;
+        var fricts = _frictionsForTouchpoint(tp.id);
+        fricts.forEach(function(f) {
+          var fC = frCenter(f);
+          if (!fC) return;
+          var fx = fC.left + 10, fy = fC.y;
+          paths += '<path d="M ' + tpC.x + ' ' + tpC.bottom + ' Q ' + tpC.x + ' ' + ((tpC.bottom + fy) / 2) + ', ' + fx + ' ' + fy + '" stroke="#FDA4AF" stroke-width="1.5" fill="none" stroke-dasharray="3 3"/>';
+        });
+      });
+    });
+
+    // Link draft (preview) — bezier desde anchor
+    if (canvasState.linkDraft) {
+      var ld = canvasState.linkDraft;
+      if (isFinite(ld.fromX) && isFinite(ld.fromY) && isFinite(ld.currentX) && isFinite(ld.currentY)) {
+        var pp1 = { x: ld.fromX, y: ld.fromY };
+        var pp2 = { x: ld.currentX, y: ld.currentY };
+        var bzd = _bezierPath(pp1, ld.fromSide || 'right', pp2, _oppositeSide(ld.fromSide || 'right'));
+        paths += '<path d="' + bzd.d + '" stroke="#4F46E5" stroke-width="2.4" stroke-dasharray="6 4" fill="none" style="pointer-events:none"/>';
+      }
+    }
+
+    // Bounding box
+    var maxX = 0, maxY = 0, minX = 0, minY = 0;
+    Object.keys(canvasState.layout).forEach(function(k) {
+      var p = canvasState.layout[k];
+      if (p.x + 300 > maxX) maxX = p.x + 300;
+      if (p.y + 200 > maxY) maxY = p.y + 200;
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+    });
+    svg.setAttribute('width', maxX - Math.min(0, minX) + 200);
+    svg.setAttribute('height', maxY - Math.min(0, minY) + 200);
+    svg.innerHTML = bands + paths;
+  }
+
+  function _phaseBandBboxes() {
+    var phases = state.phases.slice().sort(function(a,b){ return (a.order||0) - (b.order||0); });
+    var out = [];
+    phases.forEach(function(ph, phIdx) {
+      var phTps = state.touchpoints.filter(function(t){ return t.phase_id === ph.id; });
+      if (phTps.length === 0) return;
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      var any = false;
+      phTps.forEach(function(tp) {
+        var pos = canvasState.layout[_layoutKey('touchpoint', String(tp.id))];
+        if (!pos) return;
+        any = true;
+        if (pos.x < minX) minX = pos.x;
+        if (pos.y < minY) minY = pos.y;
+        if (pos.x + 240 > maxX) maxX = pos.x + 240;
+        if (pos.y + 220 > maxY) maxY = pos.y + 220;
+        var fricts = _frictionsForTouchpoint(tp.id);
+        fricts.forEach(function(f) {
+          var fp = canvasState.layout[_layoutKey('friction', String(f.id))];
+          if (!fp) return;
+          if (fp.x < minX) minX = fp.x;
+          if (fp.y < minY) minY = fp.y;
+          if (fp.x + 200 > maxX) maxX = fp.x + 200;
+          if (fp.y + 90 > maxY) maxY = fp.y + 90;
+        });
+      });
+      if (!any) return;
+      var pad = 30;
+      var color = ph.color && ph.color.indexOf('#') === 0 ? ph.color : _PHASE_COLORS[phIdx % _PHASE_COLORS.length];
+      out.push({
+        phase: ph, color: color,
+        x: minX - pad, y: minY - pad - 38,
+        width: (maxX - minX) + pad*2,
+        height: (maxY - minY) + pad*2 + 38,
+        bodyTop: minY - pad
+      });
+    });
+    return out;
+  }
+
+  function _phaseBandsHTML(phases) {
+    // SVG fill rects (sin texto — el header va como HTML)
+    var bboxes = _phaseBandBboxes();
+    var html = '';
+    bboxes.forEach(function(bb) {
+      html += '<g class="cm-canvas-phase-band">';
+      html += '<rect x="' + bb.x + '" y="' + bb.y + '" width="' + bb.width + '" height="' + bb.height + '" rx="14" fill="' + bb.color + '" fill-opacity="0.05" stroke="' + bb.color + '" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="6 4"/>';
+      html += '</g>';
+    });
+    return html;
+  }
+
+  function _renderPhaseFrameHeaders() {
+    var layer = document.querySelector('#cm-canvas-phase-layer');
+    if (!layer) return;
+    var bboxes = _phaseBandBboxes();
+    var html = '';
+    bboxes.forEach(function(bb) {
+      var ph = bb.phase;
+      html += '<div class="cm-phase-frame-header" data-phase-id="' + escHtml(ph.id) + '" style="left:' + bb.x + 'px;top:' + bb.y + 'px;width:' + bb.width + 'px;border-color:' + bb.color + '">';
+      html += '<button class="cm-phase-drag" title="Arrastra para mover toda la fase" data-phase-id="' + escHtml(ph.id) + '">⠿</button>';
+      html += '<input class="cm-phase-name-input" data-phase-id="' + escHtml(ph.id) + '" value="' + escHtml(ph.name) + '" />';
+      html += '<button class="cm-phase-color-btn" data-phase-id="' + escHtml(ph.id) + '" style="background:' + bb.color + '" title="Cambiar color"></button>';
+      html += '<button class="cm-phase-menu-btn" data-phase-id="' + escHtml(ph.id) + '" title="Más opciones">⋯</button>';
+      html += '</div>';
+    });
+    layer.innerHTML = html;
+    _bindPhaseFrameEvents();
+  }
+
+  function _bindPhaseFrameEvents() {
+    var layer = document.querySelector('#cm-canvas-phase-layer');
+    if (!layer) return;
+    layer.querySelectorAll('.cm-phase-name-input').forEach(function(input) {
+      var orig = input.value;
+      input.addEventListener('focus', function(){ orig = this.value; });
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        if (e.key === 'Escape') { this.value = orig; this.blur(); }
+      });
+      input.addEventListener('change', function() {
+        var pid = this.getAttribute('data-phase-id');
+        var newName = this.value.trim();
+        if (!newName || newName === orig) return;
+        _setSaveStatus('saving');
+        fetch('/api/comercial/phases/' + encodeURIComponent(pid), {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName })
+        }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(updated) {
+            state.phases = state.phases.map(function(p){ return p.id === updated.id ? updated : p; });
+            _setSaveStatus('saved');
+          }).catch(function(){ _setSaveStatus('error'); input.value = orig; toast('Error al guardar nombre','error'); });
+      });
+      input.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    });
+    layer.querySelectorAll('.cm-phase-color-btn').forEach(function(btn) {
+      btn.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _showPhaseColorPicker(this.getAttribute('data-phase-id'), this);
+      });
+    });
+    layer.querySelectorAll('.cm-phase-menu-btn').forEach(function(btn) {
+      btn.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _showPhaseMenu(this.getAttribute('data-phase-id'), this);
+      });
+    });
+    layer.querySelectorAll('.cm-phase-drag').forEach(function(btn) {
+      btn.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        e.stopPropagation(); e.preventDefault();
+        var pid = this.getAttribute('data-phase-id');
+        _startPhaseDrag(pid, e);
+      });
+    });
+  }
+
+  function _showPhaseColorPicker(phaseId, anchor) {
+    var existing = document.querySelector('#cm-phase-color-popup');
+    if (existing) existing.remove();
+    var palette = ['#6366F1','#0EA5E9','#10B981','#F59E0B','#EC4899','#8B5CF6','#EF4444','#64748B'];
+    var rect = anchor.getBoundingClientRect();
+    var pop = document.createElement('div');
+    pop.id = 'cm-phase-color-popup';
+    pop.className = 'cm-phase-color-popup';
+    pop.style.left = rect.left + 'px';
+    pop.style.top = (rect.bottom + 6) + 'px';
+    pop.innerHTML = palette.map(function(c) {
+      return '<button class="cm-color-swatch" data-color="' + c + '" style="background:' + c + '"></button>';
+    }).join('');
+    document.body.appendChild(pop);
+    pop.querySelectorAll('[data-color]').forEach(function(b) {
+      b.addEventListener('click', function() {
+        var col = this.getAttribute('data-color');
+        pop.remove();
+        _setSaveStatus('saving');
+        fetch('/api/comercial/phases/' + encodeURIComponent(phaseId), {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ color: col })
+        }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(updated) {
+            state.phases = state.phases.map(function(p){ return p.id === updated.id ? updated : p; });
+            _setSaveStatus('saved');
+            _drawCanvasEdges();
+            _renderPhaseFrameHeaders();
+          }).catch(function(){ _setSaveStatus('error'); toast('Error al cambiar color','error'); });
+      });
+    });
+    setTimeout(function() {
+      document.addEventListener('click', function dismiss(e) {
+        if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', dismiss); }
+      });
+    }, 50);
+  }
+
+  function _showPhaseMenu(phaseId, anchor) {
+    var existing = document.querySelector('#cm-phase-menu-popup');
+    if (existing) existing.remove();
+    var ph = state.phases.find(function(p){ return p.id === phaseId; });
+    var hasTps = state.touchpoints.some(function(t){ return t.phase_id === phaseId; });
+    var rect = anchor.getBoundingClientRect();
+    var pop = document.createElement('div');
+    pop.id = 'cm-phase-menu-popup';
+    pop.className = 'cm-canvas-create-menu';
+    pop.style.position = 'fixed';
+    pop.style.left = (rect.right - 180) + 'px';
+    pop.style.top = (rect.bottom + 6) + 'px';
+    pop.style.minWidth = '180px';
+    pop.style.display = 'block';
+    var btnDel = '<button data-action="delete"' + (hasTps ? ' disabled style="opacity:.5;cursor:not-allowed"' : '') + '>🗑️ Eliminar fase' + (hasTps ? ' (tiene touchpoints)' : '') + '</button>';
+    pop.innerHTML = btnDel;
+    document.body.appendChild(pop);
+    pop.querySelectorAll('[data-action]').forEach(function(b) {
+      b.addEventListener('click', function() {
+        var act = this.getAttribute('data-action');
+        pop.remove();
+        if (act === 'delete' && !hasTps) {
+          if (!confirm('¿Eliminar fase "' + (ph ? ph.name : phaseId) + '"?')) return;
+          fetch('/api/comercial/phases/' + encodeURIComponent(phaseId), { method: 'DELETE' })
+            .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+            .then(function() {
+              state.phases = state.phases.filter(function(p){ return p.id !== phaseId; });
+              var main = document.querySelector('#cm-main');
+              if (main) renderMapaVisual(main);
+            }).catch(function(){ toast('Error al eliminar fase','error'); });
+        }
+      });
+    });
+    setTimeout(function() {
+      document.addEventListener('click', function dismiss(e) {
+        if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', dismiss); }
+      });
+    }, 50);
+  }
+
+  function _startPhaseDrag(phaseId, e) {
+    var originals = {};
+    state.touchpoints.filter(function(t){ return t.phase_id === phaseId; }).forEach(function(tp) {
+      var k = _layoutKey('touchpoint', String(tp.id));
+      var pos = canvasState.layout[k];
+      if (pos) originals[k] = { x: pos.x, y: pos.y };
+      _frictionsForTouchpoint(tp.id).forEach(function(f) {
+        var fk = _layoutKey('friction', String(f.id));
+        var fp = canvasState.layout[fk];
+        if (fp) originals[fk] = { x: fp.x, y: fp.y };
+      });
+    });
+    canvasState.phaseDrag = {
+      phaseId: phaseId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originals: originals
+    };
+  }
+
+  function _renderEdgeWidgets() {
+    var layer = document.querySelector('#cm-canvas-edge-widgets-layer');
+    if (!layer) return;
+    var flows = state.touchpoint_flows || [];
+    var html = '';
+    flows.forEach(function(fl) {
+      var mid = canvasState.edgeMidpoints[fl.id];
+      if (!mid) return;
+      var isSel = String(canvasState.selectedFlowId) === String(fl.id);
+      var label = fl.label ? escHtml(fl.label) : '';
+      html += '<div class="cm-edge-widget' + (isSel ? ' selected' : '') + (label ? '' : ' empty') + '" data-flow-id="' + fl.id + '" style="left:' + mid.x + 'px;top:' + mid.y + 'px">';
+      if (label) html += '<span class="cm-edge-widget-label">' + label + '</span>';
+      else html += '<span class="cm-edge-widget-label cm-edge-widget-add">+</span>';
+      html += '<button class="cm-edge-widget-del" data-flow-del="' + fl.id + '" title="Eliminar conexión">×</button>';
+      html += '</div>';
+    });
+    layer.innerHTML = html;
+    _bindEdgeWidgetEvents();
+  }
+
+  function _bindEdgeWidgetEvents() {
+    var layer = document.querySelector('#cm-canvas-edge-widgets-layer');
+    if (!layer) return;
+    layer.querySelectorAll('.cm-edge-widget').forEach(function(w) {
+      w.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+      w.addEventListener('click', function(e) {
+        if (e.target.closest('.cm-edge-widget-del')) return;
+        e.stopPropagation();
+        var fid = this.getAttribute('data-flow-id');
+        canvasState.selectedFlowId = fid;
+        _drawCanvasEdges();
+        _renderEdgeWidgets();
+        _openFlowPopover(fid, e.clientX, e.clientY);
+      });
+    });
+    layer.querySelectorAll('[data-flow-del]').forEach(function(btn) {
+      btn.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var fid = this.getAttribute('data-flow-del');
+        if (!confirm('¿Eliminar esta conexión de flujo?')) return;
+        // Optimistic delete: remove from local state and redraw
+        var prev = state.touchpoint_flows || [];
+        var removed = prev.find(function(x){ return String(x.id) === String(fid); });
+        state.touchpoint_flows = prev.filter(function(x){ return String(x.id) !== String(fid); });
+        if (String(canvasState.selectedFlowId) === String(fid)) canvasState.selectedFlowId = null;
+        _setSaveStatus('saving');
+        _drawCanvasEdges();
+        _renderEdgeWidgets();
+        fetch('/api/comercial/touchpoint-flows/' + fid, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function() { _setSaveStatus('saved'); })
+          .catch(function() {
+            // Rollback
+            if (removed) state.touchpoint_flows = state.touchpoint_flows.concat([removed]);
+            _drawCanvasEdges();
+            _renderEdgeWidgets();
+            _setSaveStatus('error');
+            toast('Error al eliminar','error');
+          });
+      });
+    });
+  }
+
+  function _bindCanvasEvents(el) {
+    var viewport = el.querySelector('#cm-canvas-viewport');
+    var stage = el.querySelector('#cm-canvas-stage');
+    if (!viewport || !stage) return;
+    _applyTransform(stage);
+
+    // Pan
+    viewport.addEventListener('mousedown', function(e) {
+      if (canvasState.dropMode) return; // handled separately on click
+      if (e.target.closest('.cm-canvas-node')) return;
+      if (e.target.closest('.cm-canvas-controls')) return;
+      if (e.target.closest('.cm-canvas-toolbar')) return;
+      canvasState.isPanning = true;
+      canvasState.panStart = { x: e.clientX - canvasState.x, y: e.clientY - canvasState.y };
+      viewport.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', function(e) {
+      if (canvasState.isPanning) {
+        canvasState.x = e.clientX - canvasState.panStart.x;
+        canvasState.y = e.clientY - canvasState.panStart.y;
+        _applyTransform(stage);
+      }
+    });
+    window.addEventListener('mouseup', function() {
+      if (canvasState.isPanning) {
+        canvasState.isPanning = false;
+        viewport.style.cursor = '';
+      }
+    });
+
+    // Click on empty viewport: cierra drawer o ejecuta dropMode
+    viewport.addEventListener('click', function(e) {
+      if (e.target.closest('.cm-canvas-node')) return;
+      if (e.target.closest('.cm-canvas-controls')) return;
+      if (e.target.closest('.cm-canvas-toolbar')) return;
+      if (canvasState.dropMode) {
+        var coords = _viewportToStageCoords(e.clientX, e.clientY, viewport);
+        _handleCanvasDrop(canvasState.dropMode, coords.x, coords.y);
+        return;
+      }
+      _closeCanvasDrawer();
+    });
+
+    // Wheel zoom
+    viewport.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      var rect = viewport.getBoundingClientRect();
+      var cx = e.clientX - rect.left;
+      var cy = e.clientY - rect.top;
+      var prevZoom = canvasState.zoom;
+      var delta = e.deltaY < 0 ? 1.1 : 0.9;
+      var newZoom = Math.max(0.3, Math.min(2.5, prevZoom * delta));
+      var sx = (cx - canvasState.x) / prevZoom;
+      var sy = (cy - canvasState.y) / prevZoom;
+      canvasState.zoom = newZoom;
+      canvasState.x = cx - sx * newZoom;
+      canvasState.y = cy - sy * newZoom;
+      _applyTransform(stage);
+    }, { passive: false });
+
+    // Zoom buttons
+    function zoomBy(factor) {
+      var rect = viewport.getBoundingClientRect();
+      var cx = rect.width / 2, cy = rect.height / 2;
+      var prevZoom = canvasState.zoom;
+      var newZoom = Math.max(0.3, Math.min(2.5, prevZoom * factor));
+      var sx = (cx - canvasState.x) / prevZoom;
+      var sy = (cy - canvasState.y) / prevZoom;
+      canvasState.zoom = newZoom;
+      canvasState.x = cx - sx * newZoom;
+      canvasState.y = cy - sy * newZoom;
+      _applyTransform(stage);
+    }
+    var btnIn = el.querySelector('#cm-canvas-zoom-in');
+    var btnOut = el.querySelector('#cm-canvas-zoom-out');
+    var btnFit = el.querySelector('#cm-canvas-fit');
+    var btnReset = el.querySelector('#cm-canvas-reset');
+    if (btnIn) btnIn.addEventListener('click', function() { zoomBy(1.2); });
+    if (btnOut) btnOut.addEventListener('click', function() { zoomBy(1/1.2); });
+    if (btnFit) btnFit.addEventListener('click', _canvasFit);
+    if (btnReset) btnReset.addEventListener('click', function() {
+      canvasState.x = 0; canvasState.y = 0; canvasState.zoom = 1;
+      _applyTransform(stage);
+    });
+
+    // Toolbar bindings
+    _bindToolbar(el);
+
+    // Note delete buttons
+    el.querySelectorAll('[data-note-del]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var nid = this.getAttribute('data-note-del');
+        if (!confirm('¿Eliminar nota?')) return;
+        // Optimistic: remove DOM node + state, redraw edges only
+        var noteEl = document.querySelector('[data-key="note:' + nid + '"]');
+        if (noteEl && noteEl.parentNode) noteEl.parentNode.removeChild(noteEl);
+        var prevNotes = state.canvas_notes || [];
+        var removed = prevNotes.find(function(n){ return String(n.id) === String(nid); });
+        state.canvas_notes = prevNotes.filter(function(n){ return String(n.id) !== String(nid); });
+        var lkey = _layoutKey('note', nid);
+        var prevPos = canvasState.layout[lkey];
+        delete canvasState.layout[lkey];
+        _drawCanvasEdges();
+        fetch('/api/comercial/canvas-notes/' + nid, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .catch(function(){
+            // Rollback
+            if (removed) state.canvas_notes = state.canvas_notes.concat([removed]);
+            if (prevPos) canvasState.layout[lkey] = prevPos;
+            toast('Error al eliminar nota', 'error');
+            renderMapaVisual(el);
+          });
+      });
+    });
+  }
+
+  function _bindToolbar(el) {
+    // Search
+    var search = el.querySelector('#cm-canvas-search');
+    if (search) {
+      search.addEventListener('input', function() {
+        canvasState.filters.q = this.value || '';
+        _applyCanvasFilters();
+      });
+    }
+
+    // Filter dropdowns
+    el.querySelectorAll('[data-filter-trigger]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var key = this.getAttribute('data-filter-trigger');
+        var pop = el.querySelector('[data-filter-pop="' + key + '"]');
+        var open = pop && pop.style.display !== 'none';
+        // close all
+        el.querySelectorAll('[data-filter-pop]').forEach(function(p){ p.style.display = 'none'; });
+        if (pop && !open) pop.style.display = 'block';
+      });
+    });
+    el.querySelectorAll('[data-filter]').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var key = this.getAttribute('data-filter');
+        var arr = canvasState.filters[key] || [];
+        if (this.checked) {
+          if (arr.indexOf(this.value) < 0) arr.push(this.value);
+        } else {
+          arr = arr.filter(function(v){ return v !== cb.value; });
+        }
+        canvasState.filters[key] = arr;
+        _updateFilterTriggerLabels(el);
+        _applyCanvasFilters();
+      });
+    });
+    el.querySelectorAll('[data-filter-clear]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var key = this.getAttribute('data-filter-clear');
+        canvasState.filters[key] = [];
+        el.querySelectorAll('[data-filter="' + key + '"]').forEach(function(cb){ cb.checked = false; });
+        _updateFilterTriggerLabels(el);
+        _applyCanvasFilters();
+      });
+    });
+    // Click outside closes filter pops
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.cm-canvas-filter')) {
+        el.querySelectorAll('[data-filter-pop]').forEach(function(p){ p.style.display = 'none'; });
+      }
+    });
+
+    // Critical
+    var critBtn = el.querySelector('#cm-canvas-critical-btn');
+    if (critBtn) critBtn.addEventListener('click', function() {
+      canvasState.critical = !canvasState.critical;
+      this.classList.toggle('active', canvasState.critical);
+      _applyCanvasFilters();
+    });
+
+    // Lock / Snap / Auto-layout
+    var lockBtn = el.querySelector('#cm-canvas-lock-btn');
+    if (lockBtn) lockBtn.addEventListener('click', function() {
+      canvasState.locked = !canvasState.locked;
+      this.classList.toggle('active', canvasState.locked);
+      var vp = el.querySelector('#cm-canvas-viewport');
+      if (vp) vp.classList.toggle('locked', canvasState.locked);
+    });
+    var snapBtn = el.querySelector('#cm-canvas-snap-btn');
+    if (snapBtn) snapBtn.addEventListener('click', function() {
+      canvasState.snap = !canvasState.snap;
+      this.classList.toggle('active', canvasState.snap);
+    });
+    var autoBtn = el.querySelector('#cm-canvas-autolayout-btn');
+    if (autoBtn) autoBtn.addEventListener('click', function() {
+      if (!confirm('Re-aplicar auto-layout sobrescribirá las posiciones actuales. ¿Continuar?')) return;
+      _autoSeedLayout(true);
+      _saveAllLayout();
+      renderMapaVisual(el);
+    });
+
+    // Link mode
+    var linkBtn = el.querySelector('#cm-canvas-linkmode-btn');
+    if (linkBtn) linkBtn.addEventListener('click', function() {
+      canvasState.linkMode = !canvasState.linkMode;
+      this.classList.toggle('active', canvasState.linkMode);
+      _updateModeBanner(el);
+      var vp = el.querySelector('#cm-canvas-viewport');
+      if (vp) vp.classList.toggle('linkmode', canvasState.linkMode);
+    });
+
+    // Fullscreen
+    var fsBtn = el.querySelector('#cm-canvas-fullscreen-btn');
+    if (fsBtn) fsBtn.addEventListener('click', _toggleFullscreen);
+
+    // Create menu
+    var createBtn = el.querySelector('#cm-canvas-create-btn');
+    var createMenu = el.querySelector('#cm-canvas-create-menu');
+    if (createBtn && createMenu) {
+      createBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        createMenu.style.display = createMenu.style.display === 'none' ? 'block' : 'none';
+      });
+      createMenu.querySelectorAll('[data-create]').forEach(function(b) {
+        b.addEventListener('click', function() {
+          createMenu.style.display = 'none';
+          canvasState.dropMode = this.getAttribute('data-create');
+          _updateModeBanner(el);
+          var vp = el.querySelector('#cm-canvas-viewport');
+          if (vp) vp.classList.add('dropmode');
+        });
+      });
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('#cm-canvas-create-btn') && !e.target.closest('#cm-canvas-create-menu')) {
+          createMenu.style.display = 'none';
+        }
+      });
+    }
+  }
+
+  function _updateFilterTriggerLabels(el) {
+    ['phase','resp','impact','health'].forEach(function(key) {
+      var trigger = el.querySelector('[data-filter-trigger="' + key + '"]');
+      if (!trigger) return;
+      var labels = { phase:'Fase', resp:'Responsable', impact:'Impacto', health:'Salud' };
+      var count = (canvasState.filters[key] || []).length;
+      trigger.innerHTML = labels[key] + (count > 0 ? ' <b>' + count + '</b>' : '') + ' ▾';
+      trigger.classList.toggle('has-selection', count > 0);
+    });
+  }
+
+  function _updateModeBanner(el) {
+    var b = el.querySelector('#cm-canvas-mode-banner');
+    if (!b) return;
+    if (canvasState.dropMode) {
+      var labels = { touchpoint: 'touchpoint', friction: 'fricción', note: 'nota libre' };
+      b.textContent = '➕ Click en el canvas para colocar el nuevo ' + labels[canvasState.dropMode] + ' · Esc para cancelar';
+      b.style.display = 'block';
+    } else if (canvasState.linkMode) {
+      b.textContent = '🔗 Modo conexión activo · arrastra del + de un nodo a otro · Esc para salir';
+      b.style.display = 'block';
+    } else {
+      b.style.display = 'none';
+    }
+  }
+
+  function _applyCanvasFilters() {
+    var f = canvasState.filters;
+    var q = (f.q || '').trim().toLowerCase();
+    var nodes = document.querySelectorAll('.cm-canvas-node');
+    nodes.forEach(function(node) {
+      if (node.classList.contains('cm-canvas-node--note')) {
+        // notas no se filtran
+        node.classList.remove('cm-canvas-dim');
+        return;
+      }
+      var match = true;
+      if (q) {
+        var text = (node.textContent || '').toLowerCase();
+        if (text.indexOf(q) < 0) match = false;
+      }
+      if (match && f.phase && f.phase.length > 0) {
+        var ph = node.getAttribute('data-phase') || '';
+        if (f.phase.indexOf(ph) < 0) match = false;
+      }
+      if (match && f.resp && f.resp.length > 0) {
+        var r = node.getAttribute('data-resp') || '';
+        if (f.resp.indexOf(r) < 0) match = false;
+      }
+      if (match && f.impact && f.impact.length > 0) {
+        var imp = node.getAttribute('data-impact') || '';
+        // touchpoints no tienen impact directo — filtrar solo fricciones, dejar tps si filtro de impacto activo
+        if (node.classList.contains('cm-canvas-node--friction')) {
+          if (f.impact.indexOf(imp) < 0) match = false;
+        }
+      }
+      if (match && f.health && f.health.length > 0) {
+        var hv = node.getAttribute('data-health') || '';
+        if (f.health.indexOf(hv) < 0) match = false;
+      }
+      if (match && canvasState.critical) {
+        var hv2 = node.getAttribute('data-health') || '';
+        if (hv2 !== 'red' && hv2 !== 'yellow') match = false;
+      }
+      node.classList.toggle('cm-canvas-dim', !match);
+    });
+  }
+
+  function _attachNodeDragHandlers(el) {
+    el.querySelectorAll('.cm-canvas-node').forEach(function(node) {
+      node.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        if (e.target.closest('.cm-anchor')) return;
+        if (e.target.closest('.cm-canvas-note-del')) return;
+        if (canvasState.locked) return;
+        if (canvasState.linkMode) {
+          var fromKey = this.dataset.key;
+          var parts = fromKey.split(':');
+          if (parts[0] === 'note') return;
+          _startLinkDragFromAnchor(parts[0], parts[1], 'right', e);
+          e.stopPropagation();
+          return;
+        }
+        e.stopPropagation();
+        var k = this.dataset.key;
+        var pos = canvasState.layout[k] || { x: 0, y: 0 };
+        _activeDrag = {
+          node: this,
+          key: k,
+          startX: e.clientX,
+          startY: e.clientY,
+          origX: pos.x,
+          origY: pos.y,
+          moved: false
+        };
+      });
+    });
+
+    // Anchor handles (4 lados)
+    el.querySelectorAll('.cm-anchor').forEach(function(anchor) {
+      anchor.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        e.preventDefault();
+        var spec = this.getAttribute('data-link-from') || '';
+        var side = this.getAttribute('data-side') || 'right';
+        var parts = spec.split(':');
+        _startLinkDragFromAnchor(parts[0], parts[1], side, e);
+      });
+    });
+  }
+
+  function _initGlobalDragHandlers() {
+    if (window._cmCanvasDragInited) return;
+    window._cmCanvasDragInited = true;
+    document.addEventListener('mousemove', function(e) {
+      // Phase drag (mover toda la fase)
+      if (canvasState.phaseDrag) {
+        var pd = canvasState.phaseDrag;
+        var ddx = (e.clientX - pd.startX) / canvasState.zoom;
+        var ddy = (e.clientY - pd.startY) / canvasState.zoom;
+        Object.keys(pd.originals).forEach(function(k) {
+          var orig = pd.originals[k];
+          var nx = orig.x + ddx, ny = orig.y + ddy;
+          canvasState.layout[k] = { x: nx, y: ny };
+          var n = document.querySelector('[data-key="' + k + '"]');
+          if (n) { n.style.left = nx + 'px'; n.style.top = ny + 'px'; }
+        });
+        _drawCanvasEdges();
+        _renderPhaseFrameHeaders();
+        _renderEdgeWidgets();
+        return;
+      }
+      // Node drag normal
+      if (!_activeDrag) return;
+      var dx = (e.clientX - _activeDrag.startX) / canvasState.zoom;
+      var dy = (e.clientY - _activeDrag.startY) / canvasState.zoom;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) _activeDrag.moved = true;
+      var newX = _activeDrag.origX + dx;
+      var newY = _activeDrag.origY + dy;
+      canvasState.layout[_activeDrag.key] = { x: newX, y: newY };
+      _activeDrag.node.style.left = newX + 'px';
+      _activeDrag.node.style.top = newY + 'px';
+      _drawCanvasEdges();
+      _renderPhaseFrameHeaders();
+      _renderEdgeWidgets();
+    });
+    document.addEventListener('mouseup', function() {
+      // Phase drag end → save bulk
+      if (canvasState.phaseDrag) {
+        var keys = Object.keys(canvasState.phaseDrag.originals);
+        var items = keys.map(function(k) {
+          var pos = canvasState.layout[k];
+          var parts = k.split(':');
+          return { entity_type: parts[0], entity_id: parts[1], x: pos.x, y: pos.y };
+        });
+        canvasState.phaseDrag = null;
+        _setSaveStatus('saving');
+        fetch('/api/comercial/canvas-layout/bulk', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ view_id: 'comercial_main', items: items })
+        }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(rows){ state.canvas_layout = rows; _setSaveStatus('saved'); })
+          .catch(function(){ _setSaveStatus('error'); toast('Error al guardar fase','error'); });
+        return;
+      }
+      if (!_activeDrag) return;
+      if (_activeDrag.moved) {
+        var parts = _activeDrag.key.split(':');
+        var pos = canvasState.layout[_activeDrag.key];
+        var sx = _canvasSnapValue(pos.x);
+        var sy = _canvasSnapValue(pos.y);
+        if (sx !== pos.x || sy !== pos.y) {
+          canvasState.layout[_activeDrag.key] = { x: sx, y: sy };
+          _activeDrag.node.style.left = sx + 'px';
+          _activeDrag.node.style.top = sy + 'px';
+          _drawCanvasEdges();
+        }
+        _scheduleLayoutSave(_activeDrag.key, parts[0], parts[1], sx, sy);
+        _renderPhaseFrameHeaders();
+        _renderEdgeWidgets();
+      } else {
+        var parts2 = _activeDrag.key.split(':');
+        _selectCanvasNode(parts2[0], parts2[1]);
+      }
+      _activeDrag = null;
+    });
+  }
+
+  function _startLinkDragFromAnchor(fromType, fromId, fromSide, e) {
+    var key = _layoutKey(fromType, fromId);
+    var pos = canvasState.layout[key];
+    if (!pos) return;
+    var px = Number(pos.x), py = Number(pos.y);
+    if (!isFinite(px) || !isFinite(py)) return;
+    var w = fromType === 'touchpoint' ? 240 : (fromType === 'friction' ? 200 : 180);
+    var node = document.querySelector('[data-key="' + key + '"]');
+    var h = node ? node.offsetHeight : 100;
+    var box = { x: px + w/2, y: py + h/2, top: py, bottom: py + h, left: px, right: px + w };
+    var anchor = _anchorPoint(box, fromSide);
+    canvasState.linkDraft = {
+      fromType: fromType,
+      fromId: fromId,
+      fromSide: fromSide,
+      fromX: anchor.x,
+      fromY: anchor.y,
+      currentX: anchor.x,
+      currentY: anchor.y
+    };
+  }
+
+  // Compatibilidad — alias del nombre anterior
+  function _startLinkDragFromNode(fromType, fromId, e) {
+    _startLinkDragFromAnchor(fromType, fromId, 'right', e);
+  }
+
+  function _initGlobalLinkHandlers() {
+    if (window._cmCanvasLinkInited) return;
+    window._cmCanvasLinkInited = true;
+    document.addEventListener('mousemove', function(e) {
+      if (!canvasState.linkDraft) return;
+      var viewport = document.querySelector('#cm-canvas-viewport');
+      if (!viewport) return;
+      var coords = _viewportToStageCoords(e.clientX, e.clientY, viewport);
+      canvasState.linkDraft.currentX = coords.x;
+      canvasState.linkDraft.currentY = coords.y;
+      // Detectar nodo bajo cursor para drop highlight (busca debajo de overlays)
+      var node = _findCanvasNodeAt(e.clientX, e.clientY);
+      var newKey = null;
+      if (node) {
+        var k = node.dataset.key;
+        var pp = k.split(':');
+        var sameAsSource = pp[0] === canvasState.linkDraft.fromType && pp[1] === canvasState.linkDraft.fromId;
+        if (!sameAsSource && pp[0] !== 'note') newKey = k;
+      }
+      if (newKey !== canvasState.dropTargetKey) {
+        if (canvasState.dropTargetKey) {
+          var prev = document.querySelector('[data-key="' + canvasState.dropTargetKey + '"]');
+          if (prev) prev.classList.remove('cm-drop-target');
+        }
+        canvasState.dropTargetKey = newKey;
+        if (newKey) {
+          var nxt = document.querySelector('[data-key="' + newKey + '"]');
+          if (nxt) nxt.classList.add('cm-drop-target');
+        }
+      }
+      _drawCanvasEdges();
+    });
+    document.addEventListener('mouseup', function(e) {
+      if (!canvasState.linkDraft) return;
+      var draft = canvasState.linkDraft;
+      canvasState.linkDraft = null;
+      // Limpia drop target visual
+      if (canvasState.dropTargetKey) {
+        var prev = document.querySelector('[data-key="' + canvasState.dropTargetKey + '"]');
+        if (prev) prev.classList.remove('cm-drop-target');
+        canvasState.dropTargetKey = null;
+      }
+      var node = _findCanvasNodeAt(e.clientX, e.clientY);
+      _drawCanvasEdges();
+      if (!node) return;
+      var key = node.dataset.key || '';
+      var parts = key.split(':');
+      var toType = parts[0], toId = parts[1];
+      if (toType === 'note') { toast('No se puede conectar a una nota libre', 'error'); return; }
+      if (draft.fromType === toType && draft.fromId === toId) return;
+      _saveLink(draft.fromType, draft.fromId, toType, toId);
+    });
+  }
+
+  // Busca el primer .cm-canvas-node bajo (clientX, clientY), atravesando capas
+  // como cm-edge-widget y cm-phase-frame-header que tienen pointer-events:auto
+  function _findCanvasNodeAt(x, y) {
+    // elementsFromPoint devuelve todos los elementos apilados en orden z-index descendente
+    var stack = (typeof document.elementsFromPoint === 'function')
+      ? document.elementsFromPoint(x, y)
+      : [document.elementFromPoint(x, y)].filter(Boolean);
+    for (var i = 0; i < stack.length; i++) {
+      var el = stack[i];
+      if (!el) continue;
+      var node = el.closest && el.closest('.cm-canvas-node');
+      if (node) return node;
+    }
+    return null;
+  }
+
+  function _saveLink(fromType, fromId, toType, toId) {
+    _setSaveStatus('saving');
+    // Touchpoint→Touchpoint: optimistic — append flow + redraw edges, no full re-render
+    if (fromType === 'touchpoint' && toType === 'touchpoint') {
+      // Optimistic: insert provisional flow with negative tmp id
+      var tmpId = -Date.now();
+      var optimistic = {
+        id: tmpId,
+        from_touchpoint_id: parseInt(fromId, 10),
+        to_touchpoint_id: parseInt(toId, 10),
+        label: '',
+        order: 0
+      };
+      state.touchpoint_flows = (state.touchpoint_flows || []).concat([optimistic]);
+      _drawCanvasEdges();
+      _renderEdgeWidgets();
+      return fetch('/api/comercial/touchpoint-flows/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_touchpoint_id: parseInt(fromId,10), to_touchpoint_id: parseInt(toId,10) })
+      }).then(function(r) {
+        if (!r.ok) return r.json().then(function(j){ throw new Error(j.detail || 'link failed'); }, function(){ throw new Error('link failed'); });
+        return r.json();
+      }).then(function(saved) {
+        // Replace tmp with real
+        state.touchpoint_flows = state.touchpoint_flows.map(function(x){ return x.id === tmpId ? saved : x; });
+        _setSaveStatus('saved');
+        _drawCanvasEdges();
+        _renderEdgeWidgets();
+        var fromTp = state.touchpoints.find(function(t){ return t.id === parseInt(fromId,10); });
+        var toTp = state.touchpoints.find(function(t){ return t.id === parseInt(toId,10); });
+        var fromName = fromTp ? fromTp.name : '#' + fromId;
+        var toName = toTp ? toTp.name : '#' + toId;
+        toast('Conectado: ' + fromName + ' → ' + toName, 'success');
+      }).catch(function(err) {
+        // Rollback
+        state.touchpoint_flows = state.touchpoint_flows.filter(function(x){ return x.id !== tmpId; });
+        _drawCanvasEdges();
+        _renderEdgeWidgets();
+        _setSaveStatus('error');
+        toast(err.message || 'Error al crear conexión', 'error');
+      });
+    }
+    // Other link types (touchpoint↔friction, friction↔initiative, touchpoint↔initiative)
+    fetch('/api/comercial/canvas-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_type: fromType, from_id: String(fromId), to_type: toType, to_id: String(toId) })
+    }).then(function(r) {
+      if (!r.ok) {
+        return r.json().then(function(j){ throw new Error(j.detail || 'link failed'); }, function(){ throw new Error('link failed'); });
+      }
+      return r.json();
+    }).then(function() {
+      _setSaveStatus('saved');
+      // Refresh just the affected pieces locally without nuking the canvas
+      return loadBootstrap();
+    }).then(function() {
+      _drawCanvasEdges();
+      _renderEdgeWidgets();
+    }).catch(function(err) {
+      _setSaveStatus('error');
+      toast(err.message || 'Conexión no permitida', 'error');
+    });
+  }
+
+  function _initFlowEdgeClickHandler() {
+    if (window._cmCanvasFlowClickInited) return;
+    window._cmCanvasFlowClickInited = true;
+    // Click sobre la línea SVG (cm-flow-hit) selecciona la flecha
+    document.addEventListener('click', function(e) {
+      var hit = e.target && e.target.closest && e.target.closest('.cm-flow-hit');
+      if (!hit) return;
+      e.stopPropagation();
+      var flowId = hit.getAttribute('data-flow-id');
+      canvasState.selectedFlowId = flowId;
+      _drawCanvasEdges();
+      _renderEdgeWidgets();
+    });
+  }
+
+  function _openFlowPopover(flowId, clientX, clientY) {
+    var existing = document.querySelector('#cm-flow-popover');
+    if (existing) existing.remove();
+    var fl = (state.touchpoint_flows || []).find(function(x){ return String(x.id) === String(flowId); });
+    if (!fl) return;
+    var from = state.touchpoints.find(function(t){ return t.id === fl.from_touchpoint_id; });
+    var to = state.touchpoints.find(function(t){ return t.id === fl.to_touchpoint_id; });
+    var pop = document.createElement('div');
+    pop.id = 'cm-flow-popover';
+    pop.className = 'cm-flow-popover';
+    pop.style.left = (clientX + 8) + 'px';
+    pop.style.top = (clientY + 8) + 'px';
+    var html = '';
+    html += '<div class="cm-flow-popover-title">Conexión de flujo</div>';
+    html += '<div class="cm-flow-popover-route"><b>' + escHtml(from ? from.name : '?') + '</b> → <b>' + escHtml(to ? to.name : '?') + '</b></div>';
+    html += '<label style="display:block;font-size:.7rem;color:#64748B;margin-top:8px;text-transform:uppercase;letter-spacing:.3px;font-weight:700">Etiqueta (opcional)</label>';
+    html += '<input id="cm-flow-label" class="cm-input" style="margin-top:4px" placeholder="ej: si califica, si rechaza..." value="' + escHtml(fl.label||'') + '">';
+    html += '<div style="display:flex;gap:6px;margin-top:10px">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-flow-cancel" style="flex:1">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-danger" id="cm-flow-delete">Eliminar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-flow-save" style="flex:1">Guardar</button>';
+    html += '</div>';
+    pop.innerHTML = html;
+    document.body.appendChild(pop);
+    // Reposition if off-screen
+    var rect = pop.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 10) pop.style.left = (window.innerWidth - rect.width - 10) + 'px';
+    if (rect.bottom > window.innerHeight - 10) pop.style.top = (window.innerHeight - rect.height - 10) + 'px';
+
+    var close = function() { pop.remove(); };
+    document.querySelector('#cm-flow-cancel').addEventListener('click', close);
+    document.querySelector('#cm-flow-save').addEventListener('click', function() {
+      var label = document.querySelector('#cm-flow-label').value;
+      _setSaveStatus('saving');
+      fetch('/api/comercial/touchpoint-flows/' + flowId, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(updated) {
+          state.touchpoint_flows = state.touchpoint_flows.map(function(x){ return x.id===updated.id ? updated : x; });
+          _setSaveStatus('saved');
+          _drawCanvasEdges();
+          _renderEdgeWidgets();
+          close();
+        }).catch(function(){ _setSaveStatus('error'); toast('Error al guardar etiqueta','error'); });
+    });
+    document.querySelector('#cm-flow-delete').addEventListener('click', function() {
+      if (!confirm('¿Eliminar esta conexión de flujo?')) return;
+      _setSaveStatus('saving');
+      fetch('/api/comercial/touchpoint-flows/' + flowId, { method: 'DELETE' })
+        .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function() {
+          state.touchpoint_flows = state.touchpoint_flows.filter(function(x){ return String(x.id) !== String(flowId); });
+          _setSaveStatus('saved');
+          _drawCanvasEdges();
+          _renderEdgeWidgets();
+          close();
+        }).catch(function(){ _setSaveStatus('error'); toast('Error al eliminar','error'); });
+    });
+    setTimeout(function() {
+      document.addEventListener('click', function dismiss(e) {
+        if (!pop.contains(e.target)) { close(); document.removeEventListener('click', dismiss); }
+      });
+    }, 50);
+  }
+
+  function _initGlobalKeyHandlers() {
+    if (window._cmCanvasKeyInited) return;
+    window._cmCanvasKeyInited = true;
+    document.addEventListener('keydown', function(e) {
+      var isInput = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if (e.key === 'Escape') {
+        if (canvasState.dropMode) {
+          canvasState.dropMode = null;
+          var vp = document.querySelector('#cm-canvas-viewport');
+          if (vp) vp.classList.remove('dropmode');
+          var el = document.querySelector('#cm-main');
+          if (el) _updateModeBanner(el);
+        } else if (canvasState.linkMode) {
+          canvasState.linkMode = false;
+          var btn = document.querySelector('#cm-canvas-linkmode-btn');
+          if (btn) btn.classList.remove('active');
+          var vp2 = document.querySelector('#cm-canvas-viewport');
+          if (vp2) vp2.classList.remove('linkmode');
+          var el2 = document.querySelector('#cm-main');
+          if (el2) _updateModeBanner(el2);
+        } else if (canvasState.selectedFlowId) {
+          canvasState.selectedFlowId = null;
+          _drawCanvasEdges();
+          _renderEdgeWidgets();
+        } else if (canvasState.selectedKey) {
+          _closeCanvasDrawer();
+        }
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput && canvasState.selectedFlowId) {
+        e.preventDefault();
+        var fid = canvasState.selectedFlowId;
+        if (!confirm('¿Eliminar la conexión seleccionada?')) return;
+        _setSaveStatus('saving');
+        fetch('/api/comercial/touchpoint-flows/' + fid, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function() {
+            state.touchpoint_flows = state.touchpoint_flows.filter(function(x){ return String(x.id) !== String(fid); });
+            canvasState.selectedFlowId = null;
+            _setSaveStatus('saved');
+            _drawCanvasEdges();
+            _renderEdgeWidgets();
+          }).catch(function(){ _setSaveStatus('error'); toast('Error al eliminar','error'); });
+      }
+    });
+  }
+
+  function _toggleFullscreen() {
+    var el = document.querySelector('#comercial-module') || document.querySelector('#cm-main');
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) req.call(el);
+    } else {
+      var exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) exit.call(document);
+    }
+  }
+
+  function _initFullscreenChangeHandler() {
+    if (window._cmCanvasFsInited) return;
+    window._cmCanvasFsInited = true;
+    document.addEventListener('fullscreenchange', function() {
+      canvasState.fullscreen = !!document.fullscreenElement;
+      var btn = document.querySelector('#cm-canvas-fullscreen-btn');
+      if (btn) btn.classList.toggle('active', canvasState.fullscreen);
+      var root = document.querySelector('#comercial-module');
+      if (root) root.classList.toggle('cm-fullscreen-mode', canvasState.fullscreen);
+    });
+  }
+
+  function _viewportToStageCoords(clientX, clientY, viewport) {
+    var rect = viewport.getBoundingClientRect();
+    var vx = clientX - rect.left;
+    var vy = clientY - rect.top;
+    return {
+      x: (vx - canvasState.x) / canvasState.zoom,
+      y: (vy - canvasState.y) / canvasState.zoom
+    };
+  }
+
+  function _handleCanvasDrop(type, x, y) {
+    var sx = _canvasSnapValue(x);
+    var sy = _canvasSnapValue(y);
+    canvasState.dropMode = null;
+    var vp = document.querySelector('#cm-canvas-viewport');
+    if (vp) vp.classList.remove('dropmode');
+    var el = document.querySelector('#cm-main');
+    if (el) _updateModeBanner(el);
+    if (type === 'note') {
+      _showCreateNoteMini(sx, sy);
+    } else if (type === 'touchpoint') {
+      _showCreateTouchpointMini(sx, sy);
+    } else if (type === 'friction') {
+      _showCreateFrictionMini(sx, sy);
+    }
+  }
+
+  function _showCreateNoteMini(x, y) {
+    var html = '<div class="cm-modal-backdrop" id="cm-mini-bd"><div class="cm-modal" style="max-width:380px">';
+    html += '<div class="cm-modal-title">Nueva nota libre</div>';
+    html += '<div class="cm-modal-field"><label>Texto</label><textarea id="cm-mini-text" rows="4" class="cm-textarea" placeholder="Escribe una nota..."></textarea></div>';
+    html += '<div class="cm-modal-field"><label>Color</label><div style="display:flex;gap:8px">';
+    ['yellow','blue','pink','green'].forEach(function(c, i) {
+      var bgs = { yellow:'#FEF3C7', blue:'#DBEAFE', pink:'#FCE7F3', green:'#D1FAE5' };
+      html += '<label style="cursor:pointer"><input type="radio" name="cm-mini-color" value="' + c + '" ' + (i===0?'checked':'') + ' style="display:none"><span class="cm-color-chip" style="background:' + bgs[c] + ';width:30px;height:30px;border-radius:6px;display:inline-block;border:2px solid #E2E8F0"></span></label>';
+    });
+    html += '</div></div>';
+    html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-mini-cancel">Cancelar</button><button class="cm-btn cm-btn-primary" id="cm-mini-save">Crear</button></div></div></div>';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstChild);
+    document.querySelector('#cm-mini-cancel').addEventListener('click', function(){ document.querySelector('#cm-mini-bd').remove(); });
+    document.querySelector('#cm-mini-save').addEventListener('click', function() {
+      var text = document.querySelector('#cm-mini-text').value || '';
+      var color = (document.querySelector('input[name=cm-mini-color]:checked') || {}).value || 'yellow';
+      fetch('/api/comercial/canvas-notes/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, color: color })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(note) {
+          state.canvas_notes = (state.canvas_notes || []).concat([note]);
+          var k = _layoutKey('note', String(note.id));
+          canvasState.layout[k] = { x: x, y: y };
+          return fetch('/api/comercial/canvas-layout/bulk', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ view_id: 'comercial_main', items: [{ entity_type: 'note', entity_id: String(note.id), x: x, y: y }] })
+          });
+        }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(rows) {
+          state.canvas_layout = rows;
+          document.querySelector('#cm-mini-bd').remove();
+          var main = document.querySelector('#cm-main');
+          if (main) renderMapaVisual(main);
+        }).catch(function(){ toast('Error al crear nota','error'); });
+    });
+  }
+
+  function _showCreateTouchpointMini(x, y) {
+    var phaseOpts = state.phases.map(function(p){ return '<option value="' + escHtml(p.id) + '">' + escHtml(p.name) + '</option>'; }).join('');
+    var html = '<div class="cm-modal-backdrop" id="cm-mini-bd"><div class="cm-modal" style="max-width:420px">';
+    html += '<div class="cm-modal-title">Nuevo Touchpoint</div>';
+    html += '<div class="cm-modal-field"><label>Nombre *</label><input id="cm-mini-name" class="cm-input" placeholder="Ej: Llamada de descubrimiento"></div>';
+    html += '<div class="cm-modal-field"><label>Fase *</label><select id="cm-mini-phase" class="cm-input">' + phaseOpts + '</select></div>';
+    html += '<div class="cm-modal-field"><label>Canal</label><input id="cm-mini-canal" class="cm-input" placeholder="Email, Llamada, Web..."></div>';
+    html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-mini-cancel">Cancelar</button><button class="cm-btn cm-btn-primary" id="cm-mini-save">Crear</button></div></div></div>';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstChild);
+    document.querySelector('#cm-mini-cancel').addEventListener('click', function(){ document.querySelector('#cm-mini-bd').remove(); });
+    document.querySelector('#cm-mini-save').addEventListener('click', function() {
+      var name = document.querySelector('#cm-mini-name').value.trim();
+      if (!name) { toast('Nombre requerido','error'); return; }
+      var phase_id = document.querySelector('#cm-mini-phase').value;
+      var canal = document.querySelector('#cm-mini-canal').value.trim();
+      var newTpId = null;
+      fetch('/api/comercial/touchpoints/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, phase_id: phase_id, canal: canal || null, order: 999 })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(tp) {
+          newTpId = tp.id;
+          var k = _layoutKey('touchpoint', String(tp.id));
+          canvasState.layout[k] = { x: x, y: y };
+          return fetch('/api/comercial/canvas-layout/bulk', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ view_id: 'comercial_main', items: [{ entity_type: 'touchpoint', entity_id: String(tp.id), x: x, y: y }] })
+          }).then(function(){ return loadBootstrap(); });
+        }).then(function() {
+          document.querySelector('#cm-mini-bd').remove();
+          var main = document.querySelector('#cm-main');
+          if (main) renderMapaVisual(main);
+          // Sugerencia de auto-link: ofrecer conectar desde el touchpoint anterior en la fase
+          if (newTpId) _suggestAutoLink(newTpId, phase_id);
+        }).catch(function(){ toast('Error al crear touchpoint','error'); });
+    });
+  }
+
+  function _suggestAutoLink(newTpId, phaseId) {
+    var phaseTps = state.touchpoints.filter(function(t){ return t.phase_id === phaseId && t.id !== newTpId; });
+    if (phaseTps.length === 0) return;
+    var flows = state.touchpoint_flows || [];
+    // Candidato: el último touchpoint de la fase (mayor order) que aún no tenga saliente
+    var candidates = phaseTps.slice().sort(function(a,b){ return (b.order||0) - (a.order||0); });
+    var prev = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var hasOut = flows.some(function(f){ return f.from_touchpoint_id === candidates[i].id; });
+      if (!hasOut) { prev = candidates[i]; break; }
+    }
+    if (!prev) return;
+    var bar = document.createElement('div');
+    bar.className = 'cm-autolink-suggest';
+    bar.innerHTML = '<span>¿Conectar este touchpoint desde <b>' + escHtml(prev.name) + '</b>?</span>' +
+      '<button data-yes>Sí, crear flecha</button>' +
+      '<button data-no>No</button>';
+    document.body.appendChild(bar);
+    var dismiss = function() { if (bar.parentNode) bar.parentNode.removeChild(bar); };
+    var t = setTimeout(dismiss, 8000);
+    bar.querySelector('[data-no]').addEventListener('click', function(){ clearTimeout(t); dismiss(); });
+    bar.querySelector('[data-yes]').addEventListener('click', function() {
+      clearTimeout(t); dismiss();
+      // Optimistic insert
+      var tmpId = -Date.now();
+      var optimistic = { id: tmpId, from_touchpoint_id: prev.id, to_touchpoint_id: newTpId, label: '', order: 0 };
+      state.touchpoint_flows = (state.touchpoint_flows || []).concat([optimistic]);
+      _setSaveStatus('saving');
+      _drawCanvasEdges();
+      _renderEdgeWidgets();
+      fetch('/api/comercial/touchpoint-flows/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_touchpoint_id: prev.id, to_touchpoint_id: newTpId })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(saved) {
+          state.touchpoint_flows = state.touchpoint_flows.map(function(x){ return x.id === tmpId ? saved : x; });
+          _setSaveStatus('saved');
+          _drawCanvasEdges();
+          _renderEdgeWidgets();
+        }).catch(function(){
+          state.touchpoint_flows = state.touchpoint_flows.filter(function(x){ return x.id !== tmpId; });
+          _drawCanvasEdges();
+          _renderEdgeWidgets();
+          _setSaveStatus('error');
+          toast('Error al crear conexión','error');
+        });
+    });
+  }
+
+  function _showCreateFrictionMini(x, y) {
+    var tpOpts = '<option value="">(sin touchpoint)</option>' + state.touchpoints.map(function(t){ return '<option value="' + t.id + '">' + escHtml(t.name) + '</option>'; }).join('');
+    var html = '<div class="cm-modal-backdrop" id="cm-mini-bd"><div class="cm-modal" style="max-width:420px">';
+    html += '<div class="cm-modal-title">Nueva Fricción</div>';
+    html += '<div class="cm-modal-field"><label>ID *</label><input id="cm-mini-fid" class="cm-input" placeholder="Ej: F-99"></div>';
+    html += '<div class="cm-modal-field"><label>Nombre *</label><input id="cm-mini-name" class="cm-input"></div>';
+    html += '<div class="cm-modal-field"><label>Touchpoint</label><select id="cm-mini-tp" class="cm-input">' + tpOpts + '</select></div>';
+    html += '<div class="cm-modal-field"><label>Impacto</label><select id="cm-mini-impact" class="cm-input"><option value="high">Alto</option><option value="medium" selected>Medio</option><option value="low">Bajo</option></select></div>';
+    html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-mini-cancel">Cancelar</button><button class="cm-btn cm-btn-primary" id="cm-mini-save">Crear</button></div></div></div>';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstChild);
+    document.querySelector('#cm-mini-cancel').addEventListener('click', function(){ document.querySelector('#cm-mini-bd').remove(); });
+    document.querySelector('#cm-mini-save').addEventListener('click', function() {
+      var fid = document.querySelector('#cm-mini-fid').value.trim();
+      var name = document.querySelector('#cm-mini-name').value.trim();
+      if (!fid || !name) { toast('ID y nombre requeridos','error'); return; }
+      var tpVal = document.querySelector('#cm-mini-tp').value;
+      var impact = document.querySelector('#cm-mini-impact').value;
+      fetch('/api/comercial/frictions/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: fid, name: name, touchpoint_id: tpVal ? parseInt(tpVal,10) : null, impact: impact, status: 'pending' })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(f) {
+          var k = _layoutKey('friction', String(f.id));
+          canvasState.layout[k] = { x: x, y: y };
+          return fetch('/api/comercial/canvas-layout/bulk', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ view_id: 'comercial_main', items: [{ entity_type: 'friction', entity_id: String(f.id), x: x, y: y }] })
+          }).then(function(){ return loadBootstrap(); });
+        }).then(function() {
+          document.querySelector('#cm-mini-bd').remove();
+          var main = document.querySelector('#cm-main');
+          if (main) renderMapaVisual(main);
+        }).catch(function(){ toast('Error al crear fricción','error'); });
+    });
+  }
+
+  function _focusCanvasNode(type, id) {
+    var key = _layoutKey(type, String(id));
+    var pos = canvasState.layout[key];
+    if (!pos) return;
+    var viewport = document.querySelector('#cm-canvas-viewport');
+    var stage = document.querySelector('#cm-canvas-stage');
+    if (!viewport || !stage) return;
+    var rect = viewport.getBoundingClientRect();
+    canvasState.zoom = 1;
+    var w = type === 'touchpoint' ? 240 : 200;
+    var h = type === 'touchpoint' ? 200 : 90;
+    canvasState.x = rect.width / 2 - (pos.x + w/2);
+    canvasState.y = rect.height / 2 - (pos.y + h/2);
+    _applyTransform(stage);
+    _selectCanvasNode(type, String(id));
+  }
+
+  function _canvasFit() {
+    var viewport = document.querySelector('#cm-canvas-viewport');
+    var stage = document.querySelector('#cm-canvas-stage');
+    if (!viewport || !stage) return;
+    var keys = Object.keys(canvasState.layout);
+    if (keys.length === 0) return;
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    keys.forEach(function(k) {
+      var p = canvasState.layout[k];
+      var w = k.indexOf('touchpoint:') === 0 ? 240 : (k.indexOf('note:') === 0 ? 180 : 200);
+      var h = k.indexOf('touchpoint:') === 0 ? 200 : (k.indexOf('note:') === 0 ? 100 : 90);
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x + w > maxX) maxX = p.x + w;
+      if (p.y + h > maxY) maxY = p.y + h;
+    });
+    var pad = 40;
+    var contentW = (maxX - minX) + pad * 2;
+    var contentH = (maxY - minY) + pad * 2;
+    var rect = viewport.getBoundingClientRect();
+    var zoomX = rect.width / contentW;
+    var zoomY = rect.height / contentH;
+    var zoom = Math.min(zoomX, zoomY, 1);
+    // Allow zoom down to 0.2 so large graphs fit; below that anchor top-left and let content scroll within stage
+    canvasState.zoom = Math.max(0.2, zoom);
+    var z = canvasState.zoom;
+    var scaledW = contentW * z;
+    var scaledH = contentH * z;
+    // Horizontal: center if fits, else anchor left with pad
+    canvasState.x = (scaledW <= rect.width)
+      ? (rect.width - scaledW) / 2 - minX * z + pad * z
+      : pad - minX * z;
+    // Vertical: center if fits, else anchor top with pad — guarantees no node lands above the viewport
+    canvasState.y = (scaledH <= rect.height)
+      ? (rect.height - scaledH) / 2 - minY * z + pad * z
+      : pad - minY * z;
+    _applyTransform(stage);
+  }
+
+  function _selectCanvasNode(type, id) {
+    canvasState.selectedKey = type + ':' + id;
+    document.querySelectorAll('.cm-canvas-node.selected').forEach(function(n){ n.classList.remove('selected'); });
+    var sel = document.querySelector('[data-key="' + canvasState.selectedKey + '"]');
+    if (sel) sel.classList.add('selected');
+    if (type === 'touchpoint') _showCanvasDrawerTouchpoint(id);
+    else if (type === 'friction') _showCanvasDrawerFriction(id);
+    else if (type === 'note') _showCanvasDrawerNote(id);
+  }
+
+  function _closeCanvasDrawer() {
+    var drawer = document.querySelector('#cm-canvas-drawer');
+    if (drawer) drawer.classList.remove('open');
+    document.querySelectorAll('.cm-canvas-node.selected').forEach(function(n){ n.classList.remove('selected'); });
+    canvasState.selectedKey = null;
+  }
+
+  function _showCanvasDrawerTouchpoint(tpId) {
+    var tp = state.touchpoints.find(function(x){ return String(x.id) === String(tpId); });
+    if (!tp) return;
+    var fricts = _frictionsForTouchpoint(tp.id);
+    var inis = _initiativesForTouchpoint(tp.id);
+    var h = computeTouchpointHealth(tp);
+    var cfg = _healthCfg[h.level];
+    var resp = personName(tp.responsable_id) || tp.responsable || 'Sin responsable';
+
+    var html = '';
+    html += '<div class="cm-canvas-drawer-header">';
+    html += '<div style="display:flex;align-items:center;gap:10px"><span class="cm-mv-dot" style="background:' + cfg.dot + ';width:12px;height:12px"></span><span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Touchpoint #' + tp.id + '</span></div>';
+    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close">×</button>';
+    html += '</div>';
+    html += '<div class="cm-canvas-drawer-title">' + escHtml(tp.name) + '</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+    if (tp.canal) html += '<span class="cm-mv-tag">' + escHtml(tp.canal) + '</span>';
+    html += '<span class="cm-mv-tag cm-mv-tag-resp">' + escHtml(resp) + '</span>';
+    html += '<span class="cm-mv-tag" style="background:' + cfg.bg + ';color:' + cfg.dot + ';border-color:' + cfg.border + '">' + cfg.label + '</span>';
+    html += '</div>';
+
+    html += '<div class="cm-canvas-drawer-section">';
+    html += '<div class="cm-canvas-drawer-section-title">Iniciativas (' + inis.length + ')</div>';
+    if (inis.length === 0) {
+      html += '<div class="cm-canvas-drawer-empty">Sin iniciativas vinculadas</div>';
+    } else {
+      inis.forEach(function(ii) {
+        var prog = ii.progress || 0;
+        var col = prog >= 100 ? '#10B981' : (prog >= 50 ? '#6366F1' : (prog > 0 ? '#F59E0B' : '#94A3B8'));
+        html += '<div class="cm-canvas-drawer-item">';
+        html += '<div style="font-size:.78rem;font-weight:600">' + escHtml(ii.title) + ' ' + statusBadge(ii.status||'pending') + '</div>';
+        html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div style="flex:1;height:4px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + prog + '%;background:' + col + '"></div></div><span style="font-size:.7rem;font-weight:700;color:' + col + '">' + prog + '%</span></div>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+
+    html += '<div class="cm-canvas-drawer-section">';
+    html += '<div class="cm-canvas-drawer-section-title">Fricciones (' + fricts.length + ')</div>';
+    if (fricts.length === 0) {
+      html += '<div class="cm-canvas-drawer-empty">Sin fricciones reportadas</div>';
+    } else {
+      fricts.forEach(function(f) {
+        var icfg = _impactCfg[f.impact||'medium'] || _impactCfg.medium;
+        html += '<div class="cm-canvas-drawer-item" style="border-left:3px solid ' + icfg.color + '">';
+        html += '<div style="font-size:.78rem"><b>' + escHtml(f.id) + '</b> · ' + escHtml(f.name) + '</div>';
+        html += '<div style="font-size:.66rem;color:' + icfg.color + ';font-weight:700;text-transform:uppercase;margin-top:3px">' + icfg.label + ' · ' + escHtml(f.status||'pending') + '</div>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+
+    html += '<div class="cm-canvas-drawer-actions">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-canvas-goto-proceso">Editar en Mapa de Procesos</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-canvas-goto-fricciones">Ver fricciones</button>';
+    html += '</div>';
+
+    var drawer = document.querySelector('#cm-canvas-drawer');
+    var content = document.querySelector('#cm-canvas-drawer-content');
+    if (drawer && content) {
+      content.innerHTML = html;
+      drawer.classList.add('open');
+      var btnClose = document.querySelector('#cm-canvas-drawer-close');
+      if (btnClose) btnClose.addEventListener('click', _closeCanvasDrawer);
+      var btn1 = document.querySelector('#cm-canvas-goto-proceso');
+      if (btn1) btn1.addEventListener('click', function() { activeTab = 'proceso'; render(); });
+      var btn2 = document.querySelector('#cm-canvas-goto-fricciones');
+      if (btn2) btn2.addEventListener('click', function() { activeTab = 'fricciones'; render(); });
+    }
+  }
+
+  function _showCanvasDrawerFriction(fId) {
+    var f = (state.frictions || []).find(function(x){ return String(x.id) === String(fId); });
+    if (!f) return;
+    var fInis = _initiativesForFriction(f.id);
+    var icfg = _impactCfg[f.impact||'medium'] || _impactCfg.medium;
+
+    var html = '';
+    html += '<div class="cm-canvas-drawer-header">';
+    html += '<div style="display:flex;align-items:center;gap:10px"><span class="cm-mv-fr-impact" style="background:' + icfg.bg + ';color:' + icfg.color + '">' + icfg.label + '</span><span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Fricción ' + escHtml(f.id) + '</span></div>';
+    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close">×</button>';
+    html += '</div>';
+    html += '<div class="cm-canvas-drawer-title">' + escHtml(f.name) + '</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+    html += '<span class="cm-mv-tag">' + statusBadge(f.status||'pending') + '</span>';
+    html += '</div>';
+
+    if (f.expected_outcome) {
+      html += '<div class="cm-canvas-drawer-section">';
+      html += '<div class="cm-canvas-drawer-section-title">Resultado esperado</div>';
+      html += '<div style="font-size:.82rem;color:var(--text-secondary);line-height:1.4">' + escHtml(f.expected_outcome) + '</div>';
+      html += '</div>';
+    }
+
+    html += '<div class="cm-canvas-drawer-section">';
+    html += '<div class="cm-canvas-drawer-section-title">Iniciativas que la atienden (' + fInis.length + ')</div>';
+    if (fInis.length === 0) {
+      html += '<div class="cm-canvas-drawer-empty" style="color:#DC2626">⚠ Sin iniciativas vinculadas</div>';
+    } else {
+      fInis.forEach(function(ii) {
+        var prog = ii.progress || 0;
+        var col = prog >= 100 ? '#10B981' : (prog >= 50 ? '#6366F1' : (prog > 0 ? '#F59E0B' : '#94A3B8'));
+        html += '<div class="cm-canvas-drawer-item">';
+        html += '<div style="font-size:.78rem;font-weight:600">' + escHtml(ii.title) + ' ' + statusBadge(ii.status||'pending') + '</div>';
+        html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px"><div style="flex:1;height:4px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + prog + '%;background:' + col + '"></div></div><span style="font-size:.7rem;font-weight:700;color:' + col + '">' + prog + '%</span></div>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+
+    html += '<div class="cm-canvas-drawer-actions">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-canvas-goto-fr">Editar fricción</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-canvas-create-ini">+ Crear iniciativa</button>';
+    html += '</div>';
+
+    var drawer = document.querySelector('#cm-canvas-drawer');
+    var content = document.querySelector('#cm-canvas-drawer-content');
+    if (drawer && content) {
+      content.innerHTML = html;
+      drawer.classList.add('open');
+      var btnClose = document.querySelector('#cm-canvas-drawer-close');
+      if (btnClose) btnClose.addEventListener('click', _closeCanvasDrawer);
+      var btn1 = document.querySelector('#cm-canvas-goto-fr');
+      if (btn1) btn1.addEventListener('click', function() { activeTab = 'fricciones'; render(); });
+      var btn2 = document.querySelector('#cm-canvas-create-ini');
+      if (btn2) btn2.addEventListener('click', function() {
+        showInitiativeModal(null, document.querySelector('#cm-main'), { friction_ids: [f.id] });
+      });
+    }
+  }
+
+  function _showCanvasDrawerNote(noteId) {
+    var n = (state.canvas_notes || []).find(function(x){ return String(x.id) === String(noteId); });
+    if (!n) return;
+    var palette = { yellow:'#FEF3C7', blue:'#DBEAFE', pink:'#FCE7F3', green:'#D1FAE5' };
+    var html = '';
+    html += '<div class="cm-canvas-drawer-header">';
+    html += '<div style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Nota libre</div>';
+    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close">×</button>';
+    html += '</div>';
+    html += '<div class="cm-canvas-drawer-section"><div class="cm-canvas-drawer-section-title">Texto</div>';
+    html += '<textarea id="cm-canvas-note-text" rows="6" class="cm-textarea">' + escHtml(n.text||'') + '</textarea>';
+    html += '</div>';
+    html += '<div class="cm-canvas-drawer-section"><div class="cm-canvas-drawer-section-title">Color</div><div style="display:flex;gap:8px">';
+    ['yellow','blue','pink','green'].forEach(function(c) {
+      html += '<label style="cursor:pointer"><input type="radio" name="cm-note-color" value="' + c + '" ' + (n.color===c?'checked':'') + ' style="display:none"><span class="cm-color-chip" style="background:' + palette[c] + ';width:30px;height:30px;border-radius:6px;display:inline-block;border:2px solid ' + (n.color===c ? '#4F46E5' : '#E2E8F0') + '"></span></label>';
+    });
+    html += '</div></div>';
+    html += '<div class="cm-canvas-drawer-actions">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-canvas-note-del">Eliminar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-canvas-note-save">Guardar</button>';
+    html += '</div>';
+
+    var drawer = document.querySelector('#cm-canvas-drawer');
+    var content = document.querySelector('#cm-canvas-drawer-content');
+    if (drawer && content) {
+      content.innerHTML = html;
+      drawer.classList.add('open');
+      document.querySelector('#cm-canvas-drawer-close').addEventListener('click', _closeCanvasDrawer);
+      document.querySelector('#cm-canvas-note-save').addEventListener('click', function() {
+        var text = document.querySelector('#cm-canvas-note-text').value;
+        var color = (document.querySelector('input[name=cm-note-color]:checked')||{}).value || n.color;
+        fetch('/api/comercial/canvas-notes/' + n.id, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text, color: color })
+        }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(updated) {
+            state.canvas_notes = state.canvas_notes.map(function(x){ return x.id===updated.id ? updated : x; });
+            var main = document.querySelector('#cm-main');
+            if (main) renderMapaVisual(main);
+            toast('Nota guardada', 'success');
+          }).catch(function(){ toast('Error al guardar','error'); });
+      });
+      document.querySelector('#cm-canvas-note-del').addEventListener('click', function() {
+        if (!confirm('¿Eliminar esta nota?')) return;
+        fetch('/api/comercial/canvas-notes/' + n.id, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function() {
+            state.canvas_notes = state.canvas_notes.filter(function(x){ return x.id !== n.id; });
+            delete canvasState.layout[_layoutKey('note', String(n.id))];
+            var main = document.querySelector('#cm-main');
+            if (main) renderMapaVisual(main);
+          }).catch(function(){ toast('Error al eliminar','error'); });
+      });
+    }
+  }
+
+
 
   function showEditPillarModal(pillarId, parentEl) {
     var p = state.trust_pillars.find(function(pp) { return pp.id === pillarId; });
@@ -1583,12 +4368,26 @@ window.ComercialModule = (function() {
     html += '<textarea class="cm-textarea" id="cm-ep-current" rows="2">' + escHtml(p.current_state || '') + '</textarea></div>';
     html += '<div class="cm-modal-field"><label>Estado Objetivo</label>';
     html += '<textarea class="cm-textarea" id="cm-ep-target" rows="2">' + escHtml(p.target_state || '') + '</textarea></div>';
-    html += '<div class="cm-modal-field"><label>Iniciativas (una por linea)</label>';
-    var actionsText = '';
-    if (p.actions) {
-      try { actionsText = JSON.parse(p.actions).join('\\n'); } catch(e) { actionsText = p.actions; }
+    var linkedInis = state.iniciativas.filter(function(ii) {
+      var pids = ii.pillar_ids || (ii.pillar_id ? [ii.pillar_id] : []);
+      return pids.indexOf(p.id) >= 0;
+    });
+    html += '<div class="cm-modal-field"><label>Iniciativas vinculadas (' + linkedInis.length + ')</label>';
+    if (linkedInis.length > 0) {
+      html += '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px">';
+      linkedInis.forEach(function(ii) {
+        var resp = personName(ii.responsable_id) || 'Sin asignar';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;font-size:.78rem">';
+        html += '<span>' + escHtml(ii.title || '') + '</span>';
+        html += '<span style="color:var(--text-muted);font-size:.7rem">' + statusBadge(ii.status || 'pending') + ' &middot; ' + escHtml(resp) + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="color:var(--text-muted);font-size:.78rem;font-style:italic">Sin iniciativas. Agrégalas desde el botón + en la card del pilar.</div>';
     }
-    html += '<textarea class="cm-textarea" id="cm-ep-actions" rows="4">' + escHtml(actionsText) + '</textarea></div>';
+    html += '<div style="font-size:.7rem;color:var(--text-muted);margin-top:6px">Las iniciativas se gestionan desde la card del pilar (botón + y ✎).</div>';
+    html += '</div>';
     html += '<div class="cm-modal-actions">';
     html += '<button class="cm-btn cm-btn-ghost" id="cm-ep-cancel">Cancelar</button>';
     html += '<button class="cm-btn cm-btn-primary" id="cm-ep-save">Guardar</button>';
@@ -1603,11 +4402,9 @@ window.ComercialModule = (function() {
     });
     document.querySelector('#cm-ep-cancel').addEventListener('click', closeModal);
     document.querySelector('#cm-ep-save').addEventListener('click', function() {
-      var actionsArr = document.querySelector('#cm-ep-actions').value.split('\\n').filter(function(l) { return l.trim(); });
       var data = {
         current_state: document.querySelector('#cm-ep-current').value.trim(),
         target_state: document.querySelector('#cm-ep-target').value.trim(),
-        actions: JSON.stringify(actionsArr),
       };
       apiPatch('trust-pillars', pillarId, data).then(function(updated) {
         closeModal();
@@ -1615,13 +4412,565 @@ window.ComercialModule = (function() {
           if (pp.id === pillarId) {
             pp.current_state = data.current_state;
             pp.target_state = data.target_state;
-            pp.actions = data.actions;
           }
         });
         toast('Pilar actualizado', 'success');
         renderProceso(parentEl);
       }).catch(function() { toast('Error', 'error'); });
     });
+  }
+
+  function renderIniciativas(el) {
+    var filtered = state.iniciativas.filter(function(i) {
+      if (iniciativasFilter.status !== 'all' && i.status !== iniciativasFilter.status) return false;
+      if (iniciativasFilter.responsable !== 'all' && String(i.responsable_id || '') !== String(iniciativasFilter.responsable || '')) return false;
+      if (iniciativasFilter.priority !== 'all' && (i.priority || 'medium') !== iniciativasFilter.priority) return false;
+      if (iniciativasFilter.area !== 'all' && (i.area || '') !== iniciativasFilter.area) return false;
+      if (iniciativasFilter.tipo !== 'all' && (i.tipo || 'operativa') !== iniciativasFilter.tipo) return false;
+      if (iniciativasFilter.text) {
+        var q = iniciativasFilter.text.toLowerCase();
+        var hay = (i.title + ' ' + (i.target||'') + ' ' + (i.description||'') + ' ' + (i.area||'')).toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+    var total = state.iniciativas.length;
+    var completed = state.iniciativas.filter(function(i) { return i.status === 'completed'; }).length;
+    var overdue = state.iniciativas.filter(function(i) { return i.status !== 'completed' && i.due_date && daysDiff(i.due_date) < 0; }).length;
+    var noOwner = state.iniciativas.filter(function(i) { return !i.responsable_id; }).length;
+    var avgProgress = total > 0 ? Math.round(state.iniciativas.reduce(function(s, ii){ return s + (ii.progress || 0); }, 0) / total) : 0;
+    var highPending = state.iniciativas.filter(function(i){ return (i.priority||'medium') === 'high' && i.status !== 'completed'; }).length;
+    var html = '';
+    html += '<div class="cm-kpi-grid">';
+    html += '<div class="cm-kpi-card"><div class="label">Total iniciativas</div><div class="value">' + total + '</div><div class="sub">Backlog comercial</div></div>';
+    html += '<div class="cm-kpi-card"><div class="label">Progreso promedio</div><div class="value">' + avgProgress + '%</div><div class="sub" style="margin-top:4px"><div style="height:5px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + avgProgress + '%;background:#6366F1"></div></div></div></div>';
+    html += '<div class="cm-kpi-card"><div class="label">Alta prioridad activas</div><div class="value' + (highPending > 0 ? ' danger' : '') + '">' + highPending + '</div><div class="sub">Foco semanal</div></div>';
+    html += '<div class="cm-kpi-card"><div class="label">Completadas</div><div class="value success">' + completed + '</div><div class="sub">Cierre operativo</div></div>';
+    html += '<div class="cm-kpi-card"><div class="label">Vencidas</div><div class="value' + (overdue > 0 ? ' danger' : '') + '">' + overdue + '</div><div class="sub">Requieren atención</div></div>';
+    html += '<div class="cm-kpi-card"><div class="label">Sin responsable</div><div class="value">' + noOwner + '</div><div class="sub">Asignación pendiente</div></div>';
+    html += '</div>';
+
+    var areas = {};
+    state.iniciativas.forEach(function(i){ if (i.area) areas[i.area] = true; });
+    html += '<div class="cm-friction-filters" style="margin-top:16px;flex-wrap:wrap">';
+    html += '<input type="text" class="cm-input" id="cm-iniciativas-filter-text" placeholder="Buscar..." value="' + escHtml(iniciativasFilter.text) + '" style="max-width:200px">';
+    html += '<select class="cm-select" id="cm-iniciativas-filter-status">';
+    html += '<option value="all"' + (iniciativasFilter.status === 'all' ? ' selected' : '') + '>Todos los estados</option>';
+    html += '<option value="pending"' + (iniciativasFilter.status === 'pending' ? ' selected' : '') + '>Abierta</option>';
+    html += '<option value="in_progress"' + (iniciativasFilter.status === 'in_progress' ? ' selected' : '') + '>En ejecución</option>';
+    html += '<option value="completed"' + (iniciativasFilter.status === 'completed' ? ' selected' : '') + '>Completada</option>';
+    html += '</select>';
+    html += '<select class="cm-select" id="cm-iniciativas-filter-priority">';
+    html += '<option value="all"' + (iniciativasFilter.priority === 'all' ? ' selected' : '') + '>Toda prioridad</option>';
+    ['high','medium','low'].forEach(function(p) {
+      var lbl = {high:'Alta',medium:'Media',low:'Baja'}[p];
+      html += '<option value="' + p + '"' + (iniciativasFilter.priority === p ? ' selected' : '') + '>' + lbl + '</option>';
+    });
+    html += '</select>';
+    html += '<select class="cm-select" id="cm-iniciativas-filter-tipo">';
+    html += '<option value="all"' + (iniciativasFilter.tipo === 'all' ? ' selected' : '') + '>Todo tipo</option>';
+    [['estrategica','Estratégica'],['operativa','Operativa'],['hito','Hito']].forEach(function(t) {
+      html += '<option value="' + t[0] + '"' + (iniciativasFilter.tipo === t[0] ? ' selected' : '') + '>' + t[1] + '</option>';
+    });
+    html += '</select>';
+    if (Object.keys(areas).length > 0) {
+      html += '<select class="cm-select" id="cm-iniciativas-filter-area">';
+      html += '<option value="all"' + (iniciativasFilter.area === 'all' ? ' selected' : '') + '>Toda área</option>';
+      Object.keys(areas).sort().forEach(function(a) {
+        html += '<option value="' + escHtml(a) + '"' + (iniciativasFilter.area === a ? ' selected' : '') + '>' + escHtml(a) + '</option>';
+      });
+      html += '</select>';
+    }
+    html += '<select class="cm-select" id="cm-iniciativas-filter-responsable">';
+    html += '<option value="all"' + (iniciativasFilter.responsable === 'all' ? ' selected' : '') + '>Todos los responsables</option>';
+    state.people.forEach(function(p) {
+      html += '<option value="' + p.id + '"' + (String(iniciativasFilter.responsable) === String(p.id) ? ' selected' : '') + '>' + escHtml(p.name) + '</option>';
+    });
+    html += '</select>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-new-initiative">+ Nueva Iniciativa</button>';
+    html += '</div>';
+
+    if (filtered.length === 0) {
+      html += '<div class="cm-empty"><div class="cm-empty-icon">&#128221;</div>No hay iniciativas que coincidan con los filtros</div>';
+      el.innerHTML = html;
+      bindIniciativasEvents(el);
+      return;
+    }
+
+    html += '<div class="cm-table-wrap" style="margin-top:12px"><table class="cm-table cm-table-iniciativas">';
+    html += '<thead><tr><th style="min-width:240px">Iniciativa</th><th style="width:110px">Prioridad</th><th style="width:130px">Tipo</th><th style="width:130px">Progreso</th><th style="min-width:140px">Impacta en</th><th style="width:140px">Estado</th><th style="min-width:160px">Responsable</th><th style="width:140px">Compromiso</th><th style="text-align:center;width:80px">Acciones</th></tr></thead><tbody>';
+    filtered.forEach(function(i) {
+      var resp = personName(i.responsable_id) || 'Sin asignar';
+      var due = i.due_date ? fmtDate(i.due_date) : 'Sin fecha';
+      var dueDays = i.due_date ? daysDiff(i.due_date) : null;
+      var rowCls = initiativeRowClass(i);
+      var st = i.status || 'pending';
+      var tpNm = touchpointName(i.touchpoint_id);
+      var prog = i.progress || 0;
+      var progColor = prog >= 100 ? '#10B981' : (prog >= 50 ? '#6366F1' : (prog > 0 ? '#F59E0B' : '#94A3B8'));
+      var pIds = i.pillar_ids || (i.pillar_id ? [i.pillar_id] : []);
+      var fIds = i.friction_ids || [];
+      var tIds = i.touchpoint_ids || (i.touchpoint_id ? [i.touchpoint_id] : []);
+      var involvedIds = i.involved_ids || [];
+      html += '<tr class="' + rowCls + '">';
+      html += '<td style="vertical-align:top"><div style="font-weight:600;color:var(--text-primary,#1E293B)">' + escHtml(i.title || '') + initiativePriorityChip(i) + '</div>';
+      if (i.target) html += '<div style="font-size:.74rem;color:#475569;margin-top:4px;display:flex;gap:4px"><span style="color:#94A3B8;flex-shrink:0">&#127919;</span><span><b>Meta:</b> ' + escHtml(i.target) + '</span></div>';
+      if (i.description) html += '<div class="cm-ini-detail" style="margin-top:3px">' + escHtml(i.description) + '</div>';
+      if (i.area) html += '<div style="font-size:.66rem;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:.3px">' + escHtml(i.area) + '</div>';
+      html += '</td>';
+      // Priority inline
+      html += '<td>';
+      html += '<select class="cm-select cm-ini-priority-inline" data-ini-id="' + escHtml(i.id) + '">';
+      [['high','Alta'],['medium','Media'],['low','Baja']].forEach(function(opt) {
+        html += '<option value="' + opt[0] + '"' + ((i.priority||'medium') === opt[0] ? ' selected' : '') + '>' + opt[1] + '</option>';
+      });
+      html += '</select>';
+      html += '</td>';
+      // Tipo inline
+      html += '<td>';
+      html += '<select class="cm-select cm-ini-tipo-inline" data-ini-id="' + escHtml(i.id) + '">';
+      [['operativa','Operativa'],['estrategica','Estratégica'],['hito','Hito']].forEach(function(opt) {
+        html += '<option value="' + opt[0] + '"' + ((i.tipo||'operativa') === opt[0] ? ' selected' : '') + '>' + opt[1] + '</option>';
+      });
+      html += '</select>';
+      html += '</td>';
+      html += '<td style="vertical-align:middle">';
+      html += '<div class="cm-ini-prog-cell" data-ini-id="' + escHtml(i.id) + '">';
+      html += '<input type="range" class="cm-ini-prog-slider" min="0" max="100" step="5" value="' + prog + '" data-ini-id="' + escHtml(i.id) + '" style="flex:1;min-width:60px;accent-color:' + progColor + '">';
+      html += '<span class="cm-ini-prog-label" style="font-size:.72rem;font-weight:700;color:' + progColor + ';min-width:34px;text-align:right">' + prog + '%</span>';
+      html += '</div>';
+      html += '</td>';
+      html += '<td style="vertical-align:top">';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:3px">';
+      pIds.forEach(function(pid) {
+        var pp = state.trust_pillars.find(function(x){ return String(x.id) === String(pid); });
+        if (pp) html += '<span class="cm-ini-scope-tag" style="background:#EEF2FF;color:#4F46E5;border-color:#C7D2FE">' + escHtml(pp.name) + '</span>';
+      });
+      tIds.forEach(function(tid) {
+        var tp = state.touchpoints.find(function(x){ return x.id === tid; });
+        if (tp) html += '<span class="cm-ini-scope-tag" style="background:#F0F9FF;color:#0284C7;border-color:#BAE6FD" title="Touchpoint: ' + escHtml(tp.name) + '">TP #' + tp.id + '</span>';
+      });
+      fIds.forEach(function(fid) {
+        var f = (state.frictions || []).find(function(x){ return String(x.id) === String(fid); });
+        if (f) html += '<span class="cm-ini-scope-tag" style="background:#FEF2F2;color:#DC2626;border-color:#FECACA" title="' + escHtml(f.name) + '">' + escHtml(fid) + '</span>';
+      });
+      if (pIds.length === 0 && tIds.length === 0 && fIds.length === 0) {
+        html += '<span style="font-size:.7rem;color:var(--text-muted);font-style:italic">Sin vincular</span>';
+      }
+      html += '</div>';
+      html += '</td>';
+      html += '<td style="vertical-align:middle"><select class="cm-select cm-initiative-status-inline" data-ini-id="' + escHtml(i.id) + '" title="Cambiar estado">';
+      ['pending', 'in_progress', 'completed'].forEach(function(s) {
+        html += '<option value="' + s + '"' + (st === s ? ' selected' : '') + '>' + escHtml(initiativeStatusLabel(s)) + '</option>';
+      });
+      html += '</select></td>';
+      html += '<td>';
+      html += '<select class="cm-select cm-ini-resp-inline" data-ini-id="' + escHtml(i.id) + '" title="Asignar responsable">';
+      html += '<option value="">Sin asignar</option>';
+      state.people.forEach(function(pp) {
+        html += '<option value="' + pp.id + '"' + (String(i.responsable_id || '') === String(pp.id) ? ' selected' : '') + '>' + escHtml(pp.name) + '</option>';
+      });
+      html += '</select>';
+      if (involvedIds.length > 0) {
+        var involvedNames = involvedIds.map(function(pid){ return personName(pid) || ('#' + pid); }).join(', ');
+        html += '<div style="font-size:.66rem;color:var(--text-muted);margin-top:3px" title="Involucrados: ' + escHtml(involvedNames) + '">+' + involvedIds.length + ' involucrado' + (involvedIds.length > 1 ? 's' : '') + '</div>';
+      }
+      html += '</td>';
+      html += '<td>';
+      html += '<input type="date" class="cm-input cm-ini-due-inline" data-ini-id="' + escHtml(i.id) + '" value="' + escHtml(i.due_date || '') + '">';
+      if (dueDays !== null) {
+        html += dueDays < 0 ? '<div style="margin-top:3px"><span class="cm-badge cm-badge-red">Vencida</span></div>' : (dueDays <= 7 && st !== 'completed' ? '<div style="margin-top:3px"><span class="cm-badge cm-badge-yellow">' + dueDays + ' d</span></div>' : '');
+      }
+      html += '</td>';
+      html += '<td style="text-align:center;vertical-align:middle">';
+      html += '<button class="cm-icon-btn cm-edit-initiative" data-id="' + escHtml(i.id) + '" title="Editar">&#9998;</button>';
+      html += '<button class="cm-icon-btn danger cm-delete-initiative" data-id="' + escHtml(i.id) + '" title="Eliminar">&#128465;</button>';
+      html += '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+    var iniTable = el.querySelector('table.cm-table-iniciativas');
+    if (iniTable) _makeTableResizable(iniTable, 'iniciativas');
+    bindIniciativasEvents(el);
+  }
+
+  function bindIniciativasEvents(el) {
+    var fs = el.querySelector('#cm-iniciativas-filter-status');
+    var fr = el.querySelector('#cm-iniciativas-filter-responsable');
+    var fp = el.querySelector('#cm-iniciativas-filter-priority');
+    var ft = el.querySelector('#cm-iniciativas-filter-tipo');
+    var fa = el.querySelector('#cm-iniciativas-filter-area');
+    var ftext = el.querySelector('#cm-iniciativas-filter-text');
+    if (fs) fs.addEventListener('change', function() { iniciativasFilter.status = this.value; renderIniciativas(el); });
+    if (fr) fr.addEventListener('change', function() { iniciativasFilter.responsable = this.value; renderIniciativas(el); });
+    if (fp) fp.addEventListener('change', function() { iniciativasFilter.priority = this.value; renderIniciativas(el); });
+    if (ft) ft.addEventListener('change', function() { iniciativasFilter.tipo = this.value; renderIniciativas(el); });
+    if (fa) fa.addEventListener('change', function() { iniciativasFilter.area = this.value; renderIniciativas(el); });
+    if (ftext) {
+      var deb;
+      ftext.addEventListener('input', function() {
+        clearTimeout(deb);
+        var v = this.value;
+        deb = setTimeout(function() { iniciativasFilter.text = v; renderIniciativas(el); }, 200);
+      });
+    }
+    var createBtn = el.querySelector('#cm-new-initiative');
+    if (createBtn) createBtn.addEventListener('click', function() { showInitiativeModal(null, el); });
+    el.querySelectorAll('.cm-edit-initiative').forEach(function(btn) {
+      btn.addEventListener('click', function() { showInitiativeModal(this.dataset.id, el); });
+    });
+    el.querySelectorAll('.cm-delete-initiative').forEach(function(btn) {
+      btn.addEventListener('click', function() { deleteInitiative(this.dataset.id, el); });
+    });
+    el.querySelectorAll('.cm-initiative-status-inline').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        var iniId = this.dataset.iniId;
+        var newStatus = this.value;
+        var item = state.iniciativas.find(function(x) { return String(x.id) === String(iniId); });
+        var prev = item ? (item.status || 'pending') : 'pending';
+        if (newStatus === prev) return;
+        apiPatch('iniciativas', iniId, { status: newStatus }).then(function() {
+          state.iniciativas.forEach(function(x) {
+            if (String(x.id) === String(iniId)) x.status = newStatus;
+          });
+          toast('Estado actualizado', 'success');
+          renderIniciativas(el);
+          render();
+        }).catch(function() {
+          sel.value = prev;
+          toast('Error al actualizar estado', 'error');
+        });
+      });
+    });
+
+    // Progress slider — live label, save on release
+    el.querySelectorAll('.cm-ini-prog-slider').forEach(function(slider) {
+      var label = slider.parentElement.querySelector('.cm-ini-prog-label');
+      slider.addEventListener('input', function() {
+        var v = parseInt(this.value, 10);
+        var color = v >= 100 ? '#10B981' : (v >= 50 ? '#6366F1' : (v > 0 ? '#F59E0B' : '#94A3B8'));
+        label.textContent = v + '%';
+        label.style.color = color;
+        slider.style.accentColor = color;
+      });
+      slider.addEventListener('change', function() {
+        var iniId = this.dataset.iniId;
+        var v = parseInt(this.value, 10) || 0;
+        var item = state.iniciativas.find(function(x) { return String(x.id) === String(iniId); });
+        var prev = item ? (item.progress || 0) : 0;
+        if (v === prev) return;
+        apiPatch('iniciativas', iniId, { progress: v }).then(function() {
+          state.iniciativas.forEach(function(x) { if (String(x.id) === String(iniId)) x.progress = v; });
+          toast('Progreso actualizado', 'success');
+        }).catch(function() {
+          slider.value = prev;
+          slider.dispatchEvent(new Event('input'));
+          toast('Error al actualizar progreso', 'error');
+        });
+      });
+    });
+
+    // Pillar select inline
+    el.querySelectorAll('.cm-ini-pillar-inline').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        var iniId = this.dataset.iniId;
+        var newPillar = this.value || null;
+        var item = state.iniciativas.find(function(x) { return String(x.id) === String(iniId); });
+        var prev = item ? (item.pillar_id || null) : null;
+        apiPatch('iniciativas', iniId, { pillar_id: newPillar }).then(function() {
+          state.iniciativas.forEach(function(x) { if (String(x.id) === String(iniId)) x.pillar_id = newPillar; });
+          toast('Pilar actualizado', 'success');
+          renderIniciativas(el);
+        }).catch(function() {
+          sel.value = prev || '';
+          toast('Error', 'error');
+        });
+      });
+    });
+
+    // Responsable select inline
+    el.querySelectorAll('.cm-ini-resp-inline').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        var iniId = this.dataset.iniId;
+        var newResp = this.value ? parseInt(this.value, 10) : null;
+        var item = state.iniciativas.find(function(x) { return String(x.id) === String(iniId); });
+        var prev = item ? (item.responsable_id || null) : null;
+        apiPatch('iniciativas', iniId, { responsable_id: newResp }).then(function() {
+          state.iniciativas.forEach(function(x) { if (String(x.id) === String(iniId)) x.responsable_id = newResp; });
+          toast('Responsable actualizado', 'success');
+          renderIniciativas(el);
+        }).catch(function() {
+          sel.value = prev || '';
+          toast('Error', 'error');
+        });
+      });
+    });
+
+    // Due date inline
+    el.querySelectorAll('.cm-ini-due-inline').forEach(function(input) {
+      input.addEventListener('change', function() {
+        var iniId = this.dataset.iniId;
+        var newDue = this.value || null;
+        var item = state.iniciativas.find(function(x) { return String(x.id) === String(iniId); });
+        var prev = item ? (item.due_date || null) : null;
+        apiPatch('iniciativas', iniId, { due_date: newDue }).then(function() {
+          state.iniciativas.forEach(function(x) { if (String(x.id) === String(iniId)) x.due_date = newDue; });
+          toast('Fecha actualizada', 'success');
+          renderIniciativas(el);
+        }).catch(function() {
+          input.value = prev || '';
+          toast('Error', 'error');
+        });
+      });
+    });
+
+    // Priority inline
+    el.querySelectorAll('.cm-ini-priority-inline').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        var iniId = this.dataset.iniId;
+        var v = this.value;
+        apiPatch('iniciativas', iniId, { priority: v }).then(function() {
+          state.iniciativas.forEach(function(x) { if (String(x.id) === String(iniId)) x.priority = v; });
+          toast('Prioridad actualizada', 'success');
+          renderIniciativas(el);
+        }).catch(function() { toast('Error', 'error'); });
+      });
+    });
+
+    // Tipo inline
+    el.querySelectorAll('.cm-ini-tipo-inline').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        var iniId = this.dataset.iniId;
+        var v = this.value;
+        apiPatch('iniciativas', iniId, { tipo: v }).then(function() {
+          state.iniciativas.forEach(function(x) { if (String(x.id) === String(iniId)) x.tipo = v; });
+          toast('Tipo actualizado', 'success');
+        }).catch(function() { toast('Error', 'error'); });
+      });
+    });
+  }
+
+  function _multiCheckList(idPrefix, items, selectedSet, labelFn) {
+    var selectedCount = items.filter(function(i){ return selectedSet[String(i.id)] === true; }).length;
+    var html = '<div class="cm-multicheck" data-prefix="' + idPrefix + '" style="border:1px solid var(--border,#E2E8F0);border-radius:8px;background:#fff;overflow:hidden">';
+    // Header: count + search
+    html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#F8FAFC;border-bottom:1px solid #E2E8F0">';
+    html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+    html += '<input type="text" class="cm-multicheck-search" placeholder="Buscar..." style="flex:1;border:none;background:transparent;font-size:.74rem;outline:none">';
+    html += '<span class="cm-multicheck-count" style="font-size:.66rem;color:var(--text-muted);font-weight:700;white-space:nowrap">' + selectedCount + '/' + items.length + '</span>';
+    html += '</div>';
+    // List
+    html += '<div class="cm-multicheck-list" style="max-height:160px;overflow-y:auto;padding:6px 8px">';
+    if (items.length === 0) {
+      html += '<div style="font-size:.74rem;color:var(--text-muted);font-style:italic;padding:6px 0">Sin opciones</div>';
+    } else {
+      items.forEach(function(item) {
+        var isSel = selectedSet[String(item.id)] === true;
+        var label = labelFn(item);
+        html += '<label class="cm-multicheck-item" data-search="' + escHtml(label.toLowerCase()) + '" style="display:flex;gap:8px;align-items:center;padding:5px 6px;font-size:.78rem;cursor:pointer;border-radius:4px;transition:background .1s">';
+        html += '<input type="checkbox" class="' + idPrefix + '" value="' + escHtml(item.id) + '"' + (isSel ? ' checked' : '') + '>';
+        html += '<span style="flex:1">' + escHtml(label) + '</span>';
+        html += '</label>';
+      });
+    }
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function _bindMultiCheckSearch(scope) {
+    (scope || document).querySelectorAll('.cm-multicheck').forEach(function(box) {
+      var search = box.querySelector('.cm-multicheck-search');
+      var count = box.querySelector('.cm-multicheck-count');
+      var list = box.querySelector('.cm-multicheck-list');
+      var prefix = box.dataset.prefix;
+      var items = list.querySelectorAll('.cm-multicheck-item');
+      if (search) {
+        search.addEventListener('input', function() {
+          var q = this.value.toLowerCase().trim();
+          items.forEach(function(it) {
+            it.style.display = (!q || it.dataset.search.indexOf(q) >= 0) ? '' : 'none';
+          });
+        });
+      }
+      // Update count on change
+      box.querySelectorAll('input.' + prefix).forEach(function(cb) {
+        cb.addEventListener('change', function() {
+          var sel = box.querySelectorAll('input.' + prefix + ':checked').length;
+          count.textContent = sel + '/' + items.length;
+        });
+      });
+      // Hover effect via JS (avoids inline pseudo)
+      items.forEach(function(it) {
+        it.addEventListener('mouseenter', function(){ this.style.background = '#F1F5F9'; });
+        it.addEventListener('mouseleave', function(){ this.style.background = ''; });
+      });
+    });
+  }
+
+  function _readMultiCheck(className, asInt) {
+    var out = [];
+    document.querySelectorAll('.' + className + ':checked').forEach(function(cb) {
+      out.push(asInt ? parseInt(cb.value, 10) : cb.value);
+    });
+    return out;
+  }
+
+  function showInitiativeModal(initiativeId, parentEl, defaults) {
+    defaults = defaults || {};
+    var existing = null;
+    if (initiativeId != null) {
+      existing = state.iniciativas.find(function(i) { return String(i.id) === String(initiativeId); });
+      if (!existing) return;
+    }
+    var isEdit = !!existing;
+    var pillarSet = {}, tpSet = {}, frSet = {}, invSet = {}, depSet = {};
+    var srcPillars = existing ? (existing.pillar_ids || (existing.pillar_id ? [existing.pillar_id] : [])) : (defaults.pillar_ids || (defaults.pillar_id ? [defaults.pillar_id] : []));
+    var srcTps = existing ? (existing.touchpoint_ids || (existing.touchpoint_id ? [existing.touchpoint_id] : [])) : (defaults.touchpoint_ids || []);
+    var srcFr = existing ? (existing.friction_ids || []) : (defaults.friction_ids || []);
+    var srcInv = existing ? (existing.involved_ids || []) : (defaults.involved_ids || []);
+    var srcDep = existing ? (existing.depends_on_ids || []) : [];
+    srcPillars.forEach(function(x){ pillarSet[String(x)] = true; });
+    srcTps.forEach(function(x){ tpSet[String(x)] = true; });
+    srcFr.forEach(function(x){ frSet[String(x)] = true; });
+    srcInv.forEach(function(x){ invSet[String(x)] = true; });
+    srcDep.forEach(function(x){ depSet[String(x)] = true; });
+
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
+    html += '<div class="cm-modal" style="max-width:780px">';
+    html += '<div class="cm-modal-title">' + (isEdit ? 'Editar' : 'Nueva') + ' iniciativa</div>';
+
+    // Identidad
+    html += '<div class="cm-modal-field"><label>Título <span class="required">*</span></label>';
+    html += '<input type="text" class="cm-input" id="cm-ini-title" value="' + escHtml(existing ? (existing.title || '') : '') + '" placeholder="Describe la iniciativa"></div>';
+    html += '<div class="cm-modal-field"><label>Descripción</label>';
+    html += '<textarea class="cm-textarea" id="cm-ini-description" rows="2" placeholder="Qué se va a hacer, alcance...">' + escHtml(existing ? (existing.description || '') : '') + '</textarea></div>';
+    html += '<div class="cm-modal-field"><label>Meta / objetivo</label>';
+    html += '<input type="text" class="cm-input" id="cm-ini-target" value="' + escHtml(existing ? (existing.target || '') : '') + '" placeholder="Ej. 10 testimonios capturados al mes"></div>';
+
+    // Clasificación
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Prioridad</label><select class="cm-select" id="cm-ini-priority">';
+    [['high','Alta'],['medium','Media'],['low','Baja']].forEach(function(o) {
+      html += '<option value="' + o[0] + '"' + ((existing ? (existing.priority||'medium') : 'medium') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="cm-modal-field"><label>Tipo</label><select class="cm-select" id="cm-ini-tipo">';
+    [['operativa','Operativa'],['estrategica','Estratégica'],['hito','Hito']].forEach(function(o) {
+      html += '<option value="' + o[0] + '"' + ((existing ? (existing.tipo||'operativa') : 'operativa') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="cm-modal-field"><label>Área</label>';
+    html += '<input type="text" class="cm-input" id="cm-ini-area" list="cm-ini-area-opts" value="' + escHtml(existing ? (existing.area || '') : '') + '" placeholder="Marketing, Ventas, ...">';
+    var existingAreas = {};
+    state.iniciativas.forEach(function(ii){ if (ii.area) existingAreas[ii.area] = true; });
+    html += '<datalist id="cm-ini-area-opts">';
+    Object.keys(existingAreas).sort().forEach(function(a){ html += '<option value="' + escHtml(a) + '">'; });
+    html += '</datalist></div>';
+    html += '</div>';
+
+    // Estado / fecha / progreso
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Estado</label><select class="cm-select" id="cm-ini-status">';
+    ['pending', 'in_progress', 'completed'].forEach(function(s) {
+      var selected = (existing ? existing.status : 'pending') === s;
+      html += '<option value="' + s + '"' + (selected ? ' selected' : '') + '>' + initiativeStatusLabel(s) + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="cm-modal-field"><label>Fecha compromiso</label><input type="date" class="cm-input" id="cm-ini-due" value="' + escHtml(existing && existing.due_date ? existing.due_date : '') + '"></div>';
+    html += '<div class="cm-modal-field"><label>Progreso (' + (existing ? (existing.progress || 0) : 0) + '%)</label>';
+    html += '<input type="range" min="0" max="100" step="5" id="cm-ini-progress" value="' + (existing ? (existing.progress || 0) : 0) + '" style="width:100%">';
+    html += '</div>';
+    html += '</div>';
+
+    // Equipo
+    html += '<div class="cm-modal-field"><label>Responsable principal</label>' + personSelect(existing ? existing.responsable_id : null, 'cm-ini-responsable', true) + '</div>';
+    html += '<div class="cm-modal-field"><label>Involucrados (apoyan, no son responsables)</label>';
+    html += _multiCheckList('cm-ini-inv', state.people, invSet, function(p){ return p.name + (p.role ? ' (' + p.role + ')' : ''); });
+    html += '</div>';
+
+    // Vínculos
+    html += '<div class="cm-modal-field" style="border-top:1px solid var(--border,#E2E8F0);padding-top:14px"><label style="font-weight:700;color:var(--text-primary)">Impacta en</label></div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Pilares (Motor de Confianza)</label>';
+    html += _multiCheckList('cm-ini-pillars', state.trust_pillars, pillarSet, function(p){ return (p.icon ? p.icon + ' ' : '') + p.name; });
+    html += '</div>';
+    html += '<div class="cm-modal-field"><label>Touchpoints</label>';
+    var tpSorted = state.touchpoints.slice().sort(function(a,b){
+      var pa = (state.phases.find(function(x){return x.id===a.phase_id;}) || {order:0}).order || 0;
+      var pb = (state.phases.find(function(x){return x.id===b.phase_id;}) || {order:0}).order || 0;
+      return (pa - pb) || ((a.order||0) - (b.order||0));
+    });
+    html += _multiCheckList('cm-ini-tps', tpSorted, tpSet, function(t){ return '#' + t.id + ' ' + t.name + ' (' + (phaseName(t.phase_id) || '?') + ')'; });
+    html += '</div>';
+    html += '<div class="cm-modal-field"><label>Fricciones</label>';
+    html += _multiCheckList('cm-ini-frs', (state.frictions||[]), frSet, function(f){ return f.id + ' — ' + f.name.substring(0, 50) + (f.name.length > 50 ? '…' : ''); });
+    html += '</div>';
+    html += '</div>';
+
+    // Dependencias
+    html += '<div class="cm-modal-field"><label>Depende de (otras iniciativas)</label>';
+    var depCandidates = state.iniciativas.filter(function(x){ return !existing || x.id !== existing.id; });
+    html += _multiCheckList('cm-ini-deps', depCandidates, depSet, function(d){ return d.title; });
+    html += '</div>';
+
+    html += '<div class="cm-modal-actions">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-ini-cancel">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-ini-save">' + (isEdit ? 'Guardar' : 'Crear') + '</button>';
+    html += '</div></div></div>';
+
+    var modalDiv = document.createElement('div');
+    modalDiv.innerHTML = html;
+    document.body.appendChild(modalDiv.firstChild);
+    document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+    document.querySelector('#cm-ini-cancel').addEventListener('click', closeModal);
+    _bindMultiCheckSearch();
+    var progSlider = document.querySelector('#cm-ini-progress');
+    var progLabel = progSlider.parentElement.querySelector('label');
+    progSlider.addEventListener('input', function() { progLabel.textContent = 'Progreso (' + this.value + '%)'; });
+
+    document.querySelector('#cm-ini-save').addEventListener('click', function() {
+      var title = document.querySelector('#cm-ini-title').value.trim();
+      if (!title) { toast('El título es obligatorio', 'error'); return; }
+      var payload = {
+        title: title,
+        description: document.querySelector('#cm-ini-description').value.trim(),
+        motor: 'trust',
+        status: document.querySelector('#cm-ini-status').value || 'pending',
+        responsable_id: parseInt(document.querySelector('#cm-ini-responsable').value, 10) || null,
+        due_date: document.querySelector('#cm-ini-due').value || null,
+        target: document.querySelector('#cm-ini-target').value.trim(),
+        progress: parseInt(document.querySelector('#cm-ini-progress').value, 10) || 0,
+        priority: document.querySelector('#cm-ini-priority').value,
+        area: document.querySelector('#cm-ini-area').value.trim(),
+        tipo: document.querySelector('#cm-ini-tipo').value,
+        pillar_ids: _readMultiCheck('cm-ini-pillars', false),
+        touchpoint_ids: _readMultiCheck('cm-ini-tps', true),
+        friction_ids: _readMultiCheck('cm-ini-frs', false),
+        involved_ids: _readMultiCheck('cm-ini-inv', true),
+        depends_on_ids: _readMultiCheck('cm-ini-deps', true)
+      };
+      var req = isEdit ? apiPatch('iniciativas', existing.id, payload) : apiPost('iniciativas', payload);
+      req.then(function() {
+        closeModal();
+        toast(isEdit ? 'Iniciativa actualizada' : 'Iniciativa creada', 'success');
+        return loadBootstrap().then(function() { renderTab(); render(); });
+      }).catch(function(e) {
+        var msg = (e && e.message) ? e.message : 'Error al guardar iniciativa';
+        toast(msg, 'error');
+      });
+    });
+  }
+
+  function deleteInitiative(initiativeId, parentEl) {
+    var item = state.iniciativas.find(function(i) { return String(i.id) === String(initiativeId); });
+    if (!item) return;
+    if (!confirm('Eliminar iniciativa "' + item.title + '"?')) return;
+    apiDelete('iniciativas', initiativeId).then(function() {
+      toast('Iniciativa eliminada', 'success');
+      return loadBootstrap().then(function() { renderTab(); render(); });
+    }).catch(function() { toast('Error al eliminar iniciativa', 'error'); });
   }
 
   /* ── Touchpoint CRUD ── */
@@ -2063,6 +5412,9 @@ window.ComercialModule = (function() {
     html += kpiCheckboxes(fLinkedKpis, 'cm-ef-' + f.id);
     html += '</div>';
 
+    // Iniciativas vinculadas que la atienden
+    html += renderFrictionInitiatives(f);
+
     // Action buttons
     html += '<div class="cm-detail-actions">';
     html += '<button class="cm-btn cm-btn-primary cm-save-friction" data-fid="' + escHtml(f.id) + '">Guardar</button>';
@@ -2073,6 +5425,116 @@ window.ComercialModule = (function() {
     // Comments section
     html += renderCommentsSection(f);
 
+    return html;
+  }
+
+  function showLinkInitiativeToFrictionModal(frictionId, parentEl) {
+    var unlinked = state.iniciativas.filter(function(ii) {
+      var fids = ii.friction_ids || [];
+      return fids.indexOf(frictionId) < 0 && fids.indexOf(String(frictionId)) < 0;
+    });
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
+    html += '<div class="cm-modal" style="max-width:520px">';
+    html += '<div class="cm-modal-title">Vincular iniciativa existente</div>';
+    html += '<div class="cm-modal-field" style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 12px;margin-bottom:10px">';
+    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+    html += '<input type="text" class="cm-input" id="cm-link-search" placeholder="Buscar por título, responsable, estado..." style="flex:1;border:none;background:transparent;outline:none;padding:0">';
+    html += '</div>';
+    html += '<div class="cm-modal-field"><label>Iniciativas disponibles (' + unlinked.length + ')</label>';
+    html += '<div id="cm-link-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px">';
+    if (unlinked.length === 0) {
+      html += '<div style="font-size:.8rem;color:var(--text-muted);font-style:italic;padding:10px">Todas las iniciativas ya están vinculadas o no hay iniciativas creadas.</div>';
+    } else {
+      unlinked.forEach(function(ii) {
+        var resp = personName(ii.responsable_id) || 'Sin asignar';
+        var searchBlob = ((ii.title||'') + ' ' + resp + ' ' + (ii.status||'') + ' ' + (ii.area||'')).toLowerCase();
+        html += '<div class="cm-link-item" data-id="' + escHtml(ii.id) + '" data-title="' + escHtml(searchBlob) + '" style="padding:8px;border-radius:6px;cursor:pointer;font-size:.8rem">';
+        html += '<div style="font-weight:600">' + escHtml(ii.title) + '</div>';
+        html += '<div style="font-size:.7rem;color:var(--text-muted)">' + escHtml(resp) + ' · ' + (ii.progress||0) + '% · ' + escHtml(ii.status||'pending') + '</div>';
+        html += '</div>';
+      });
+    }
+    html += '</div></div>';
+    html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-link-cancel">Cerrar</button></div>';
+    html += '</div></div>';
+
+    var modalDiv = document.createElement('div');
+    modalDiv.innerHTML = html;
+    document.body.appendChild(modalDiv.firstChild);
+
+    document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+    document.querySelector('#cm-link-cancel').addEventListener('click', closeModal);
+    var search = document.querySelector('#cm-link-search');
+    if (search) {
+      search.addEventListener('input', function() {
+        var q = this.value.toLowerCase();
+        document.querySelectorAll('.cm-link-item').forEach(function(el2) {
+          el2.style.display = el2.dataset.title.indexOf(q) >= 0 ? '' : 'none';
+        });
+      });
+    }
+    document.querySelectorAll('.cm-link-item').forEach(function(item) {
+      item.addEventListener('mouseenter', function(){ this.style.background = '#F1F5F9'; });
+      item.addEventListener('mouseleave', function(){ this.style.background = ''; });
+      item.addEventListener('click', function() {
+        var iniId = this.dataset.id;
+        var ii = state.iniciativas.find(function(x){ return String(x.id) === String(iniId); });
+        if (!ii) return;
+        var newFids = (ii.friction_ids || []).slice();
+        if (newFids.indexOf(frictionId) < 0) newFids.push(frictionId);
+        apiPatch('iniciativas', iniId, { friction_ids: newFids }).then(function() {
+          closeModal();
+          toast('Iniciativa vinculada', 'success');
+          return loadBootstrap().then(function() { renderTab(); render(); });
+        }).catch(function(e) { toast(e.message || 'Error', 'error'); });
+      });
+    });
+  }
+
+  function renderFrictionInitiatives(f) {
+    var linked = state.iniciativas.filter(function(ii) {
+      var fids = ii.friction_ids || [];
+      return fids.indexOf(f.id) >= 0 || fids.indexOf(String(f.id)) >= 0;
+    });
+    var avgProg = linked.length > 0 ? Math.round(linked.reduce(function(s,ii){ return s + (ii.progress||0); }, 0) / linked.length) : 0;
+    var done = linked.filter(function(ii){ return ii.status === 'completed'; }).length;
+
+    // Salud vs avance hint
+    var hint = '';
+    if (linked.length > 0 && avgProg >= 80 && (f.status === 'pending' || f.status === 'analysis')) {
+      hint = '<div style="font-size:.74rem;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:6px 10px;margin-bottom:10px">⚠️ Status de la fricción es "' + escHtml(f.status) + '" pero las iniciativas vinculadas están al ' + avgProg + '% — ¿revisar status?</div>';
+    }
+
+    var html = '<div class="cm-friction-initiatives" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border,#E2E8F0)">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    html += '<label style="font-size:.78rem;font-weight:700;color:var(--text-primary)">Iniciativas que la atienden (' + done + '/' + linked.length + ')';
+    if (linked.length > 0) html += ' · Avance ' + avgProg + '%';
+    html += '</label>';
+    html += '<div style="display:flex;gap:6px">';
+    html += '<button class="cm-btn cm-btn-sm cm-friction-link-ini" data-fid="' + escHtml(f.id) + '" type="button">+ Vincular existente</button>';
+    html += '<button class="cm-btn cm-btn-primary cm-btn-sm cm-friction-create-ini" data-fid="' + escHtml(f.id) + '" type="button">+ Crear iniciativa</button>';
+    html += '</div>';
+    html += '</div>';
+    html += hint;
+
+    if (linked.length === 0) {
+      html += '<div style="font-size:.78rem;color:var(--text-muted);font-style:italic;padding:8px 0">Sin iniciativas vinculadas. Crea una para empezar a resolverla.</div>';
+    } else {
+      linked.forEach(function(ii) {
+        var resp = personName(ii.responsable_id) || 'Sin asignar';
+        var prog = ii.progress || 0;
+        var color = prog >= 100 ? '#10B981' : (prog >= 50 ? '#6366F1' : (prog > 0 ? '#F59E0B' : '#94A3B8'));
+        html += '<div style="display:grid;grid-template-columns:1fr 100px 110px 28px;gap:10px;align-items:center;padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:6px">';
+        html += '<div><div style="font-weight:600;font-size:.82rem">' + escHtml(ii.title) + ' ' + statusBadge(ii.status||'pending') + '</div>';
+        if (ii.target) html += '<div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">🎯 ' + escHtml(ii.target) + '</div>';
+        html += '</div>';
+        html += '<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:5px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + prog + '%;background:' + color + '"></div></div><span style="font-size:.7rem;font-weight:700;color:' + color + '">' + prog + '%</span></div>';
+        html += '<div style="font-size:.74rem;color:var(--text-secondary)">' + escHtml(resp) + '</div>';
+        html += '<button class="cm-icon-btn cm-friction-edit-ini" data-id="' + escHtml(ii.id) + '" title="Editar" style="padding:2px 6px">&#9998;</button>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
     return html;
   }
 
@@ -2161,6 +5623,30 @@ window.ComercialModule = (function() {
         showCreateFrictionModal();
       });
     }
+
+    // Friction → create initiative
+    el.querySelectorAll('.cm-friction-create-ini').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showInitiativeModal(null, el, { friction_ids: [this.dataset.fid] });
+      });
+    });
+
+    // Friction → link existing initiative
+    el.querySelectorAll('.cm-friction-link-ini').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showLinkInitiativeToFrictionModal(this.dataset.fid, el);
+      });
+    });
+
+    // Friction initiative card → edit
+    el.querySelectorAll('.cm-friction-edit-ini').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showInitiativeModal(this.dataset.id, el);
+      });
+    });
 
     // Edit toggle (pencil icon)
     el.querySelectorAll('.cm-friction-edit-toggle').forEach(function(btn) {
@@ -3615,7 +7101,7 @@ window.ComercialModule = (function() {
   return {
     init: function(el) {
       container = el;
-      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], dashboard: null };
+      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], canvas_layout: [], canvas_notes: [], touchpoint_flows: [], iniciativas: [], dashboard: null };
       activeTab = 'dashboard';
       frictionFilterImpact = 'all';
       frictionFilterStatus = 'all';
@@ -3636,7 +7122,7 @@ window.ComercialModule = (function() {
       closeModal();
       removeStyles();
       container = null;
-      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], dashboard: null };
+      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], canvas_layout: [], canvas_notes: [], touchpoint_flows: [], iniciativas: [], dashboard: null };
       selectedPhase = 'atraccion';
       collapsedBands = {};
       expandedKpis = {};

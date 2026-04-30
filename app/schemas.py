@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -354,6 +354,7 @@ class EscenarioIngresoCreate(BaseModel):
 
 class ComercialTouchpointUpdate(BaseModel):
     name: Optional[str] = None
+    phase_id: Optional[str] = None
     canal: Optional[str] = None
     responsable: Optional[str] = None
     responsable_id: Optional[int] = None
@@ -361,6 +362,12 @@ class ComercialTouchpointUpdate(BaseModel):
     friction_text: Optional[str] = None
     has_friction: Optional[bool] = None
     notes: Optional[str] = None
+    order: Optional[int] = None
+
+
+class ComercialTouchpointReorderRequest(BaseModel):
+    phase_id: str
+    ids: List[int]
 
 
 class ComercialPersonCreate(BaseModel):
@@ -434,6 +441,109 @@ class ComercialTrustPillarUpdate(BaseModel):
     actions: Optional[str] = None
     current_state: Optional[str] = None
     target_state: Optional[str] = None
+
+
+class ComercialInitiativeCreate(BaseModel):
+    pillar_id: Optional[str] = None
+    title: str
+    description: str = ""
+    motor: str = "trust"
+    phase_id: Optional[str] = None
+    touchpoint_id: Optional[int] = None
+    status: str = "pending"
+    responsable_id: Optional[int] = None
+    due_date: Optional[str] = None
+    target: str = ""
+    progress: int = 0
+    priority: str = "medium"
+    area: str = ""
+    tipo: str = "operativa"
+    friction_ids: Optional[List[str]] = None
+    touchpoint_ids: Optional[List[int]] = None
+    pillar_ids: Optional[List[str]] = None
+    involved_ids: Optional[List[int]] = None
+    depends_on_ids: Optional[List[int]] = None
+
+
+class ComercialCanvasLayoutItem(BaseModel):
+    entity_type: str
+    entity_id: str
+    x: float
+    y: float
+    width: Optional[float] = None
+    height: Optional[float] = None
+
+
+class ComercialCanvasLayoutBulk(BaseModel):
+    view_id: str = "comercial_main"
+    items: List[ComercialCanvasLayoutItem]
+
+
+class ComercialPhaseUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    description: Optional[str] = None
+    order: Optional[int] = None
+
+
+class ComercialPhaseCreate(BaseModel):
+    id: str
+    name: str
+    icon: Optional[str] = ""
+    color: Optional[str] = "#6366f1"
+    description: Optional[str] = ""
+    order: Optional[int] = 0
+
+
+class ComercialTouchpointFlowCreate(BaseModel):
+    from_touchpoint_id: int
+    to_touchpoint_id: int
+    label: Optional[str] = None
+
+
+class ComercialTouchpointFlowUpdate(BaseModel):
+    label: Optional[str] = None
+    order: Optional[int] = None
+
+
+class ComercialCanvasNoteCreate(BaseModel):
+    text: str = ""
+    color: str = "yellow"
+
+
+class ComercialCanvasNoteUpdate(BaseModel):
+    text: Optional[str] = None
+    color: Optional[str] = None
+
+
+class ComercialCanvasLinkRequest(BaseModel):
+    from_type: str
+    from_id: str
+    to_type: str
+    to_id: str
+
+
+class ComercialInitiativeUpdate(BaseModel):
+    pillar_id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    motor: Optional[str] = None
+    phase_id: Optional[str] = None
+    touchpoint_id: Optional[int] = None
+    status: Optional[str] = None
+    responsable_id: Optional[int] = None
+    due_date: Optional[str] = None
+    target: Optional[str] = None
+    progress: Optional[int] = None
+    priority: Optional[str] = None
+    area: Optional[str] = None
+    tipo: Optional[str] = None
+    friction_ids: Optional[List[str]] = None
+    touchpoint_ids: Optional[List[int]] = None
+    pillar_ids: Optional[List[str]] = None
+    involved_ids: Optional[List[int]] = None
+    depends_on_ids: Optional[List[int]] = None
 
 
 class ComercialKpiCreate(BaseModel):

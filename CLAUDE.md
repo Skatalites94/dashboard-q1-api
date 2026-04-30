@@ -26,10 +26,32 @@ python3 migrate_comercial_v3.py
 
 # Migración comercial v4 (KPI hybrid tracking + tp_kpi config + tp_kpi_history)
 python3 migrate_comercial_v4.py
+
+# Migración comercial v5 (tabla comercial_iniciativas)
+python3 migrate_comercial_v5.py
+
+# Migración comercial v6 (description, motor en iniciativas)
+python3 migrate_comercial_v6.py
+
+# Migración comercial v7 (priority, area, tipo en iniciativas + M:N links)
+python3 migrate_comercial_v7.py
+
+# Migración comercial v8 (tabla comercial_canvas_layout — Mapa Visual)
+python3 migrate_comercial_v8.py
+
+# Migración comercial v9 (tabla comercial_canvas_notes — notas libres)
+python3 migrate_comercial_v9.py
+
+# Migración comercial v10 (tabla comercial_touchpoint_flow — journey editable)
+python3 migrate_comercial_v10.py
+
 # Solo SQLite local (ignora DATABASE_URL del .env):
 python3 migrate_comercial_v3.py --sqlite
 # URI explícita (p. ej. pooler Supabase para IPv4):
 python3 migrate_comercial_v3.py --database-url 'postgresql://...'
+
+# Para Railway/Supabase: correr v5..v10 en orden ANTES del próximo deploy.
+# Si no, el bootstrap del módulo comercial truena por relation does not exist.
 
 # Deploy to Railway
 railway up --detach
@@ -102,3 +124,17 @@ railway service status
 - **Render** (alternative): `render.yaml` blueprint
 - **Supabase pooler URL format:** `postgresql://postgres.{ref}:{password}@aws-1-us-west-2.pooler.supabase.com:5432/postgres`
 - Direct Supabase connection is IPv6 only — use the pooler for IPv4 environments (Railway, Render)
+
+## gstack
+
+Use the `/browse` skill from gstack for all web browsing. **Never** use `mcp__claude-in-chrome__*` tools.
+
+Teammates can install gstack with:
+
+```sh
+git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack && cd ~/.claude/skills/gstack && ./setup
+```
+
+### Available skills
+
+`/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`, `/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`, `/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`, `/setup-deploy`, `/setup-gbrain`, `/retro`, `/investigate`, `/document-release`, `/codex`, `/cso`, `/autoplan`, `/plan-devex-review`, `/devex-review`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`, `/learn`

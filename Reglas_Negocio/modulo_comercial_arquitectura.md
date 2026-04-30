@@ -122,6 +122,80 @@ Situaciones que justifican abrir o actualizar una fricción vinculada al KPI:
 - `capture_status = overdue` (responsable no está capturando a tiempo).
 - Tendencia negativa en últimas 3 capturas (valor decreciente en KPI creciente, o viceversa).
 
+## Fase 3 — Iniciativas comerciales (pestaña dedicada)
+
+### Objetivo operativo
+
+- Las iniciativas del módulo comercial se gestionan en una pestaña propia **Iniciativas**, separada de las iniciativas del dashboard general.
+- Esta separación evita mezclar iniciativas estratégicas globales con acciones de ejecución comercial.
+
+### Definición de iniciativa comercial
+
+- Unidad de trabajo ejecutable para cerrar brechas de confianza y mejorar operación comercial.
+- Puede ligarse opcionalmente a un pilar de confianza (`pillar_id`) o quedar como iniciativa general del módulo.
+- En esta fase, el motor de impacto de las iniciativas comerciales se define como **Motor de Confianza** (`motor = trust`).
+
+### Campos obligatorios y de seguimiento
+
+- `title` (obligatorio): descripción clara y accionable.
+- `description`: detalle operativo (qué se hará, alcance y resultado esperado).
+- `motor`: motor al que impacta (en esta versión: `trust`).
+- `phase_id` (opcional): fase del mapa de procesos donde impacta.
+- `touchpoint_id` (opcional): touchpoint específico donde impacta.
+- `status`: `pending`, `in_progress`, `completed`.
+- `responsable_id` (opcional): dueño de la ejecución.
+- `due_date` (opcional): fecha compromiso para seguimiento.
+
+### Vinculación con mapa de procesos
+
+- Si se captura `touchpoint_id`, el sistema valida que el touchpoint exista.
+- Si además se envía `phase_id`, debe coincidir con la fase real del touchpoint.
+- Si no se envía `phase_id` pero sí `touchpoint_id`, la fase se deriva automáticamente.
+- En la UI:
+  - La pestaña Iniciativas muestra chips de vínculo (`Motor`, `Pilar`, `Fase`, `Touchpoint`).
+  - El Mapa de Procesos muestra conteo de iniciativas por fase y resumen por pilar en Motor de Confianza.
+
+### Reglas de estado
+
+1. **pending** (Abierta): iniciativa registrada sin ejecución activa.
+2. **in_progress** (En ejecución): iniciativa en implementación.
+3. **completed** (Completada): iniciativa cerrada.
+
+### Responsable y asignación
+
+- Si `responsable_id` existe, se toma desde el catálogo `comercial_people`.
+- Si no hay responsable, la iniciativa se considera pendiente de asignación y debe aparecer en revisión operativa semanal.
+
+### Fecha compromiso y seguimiento
+
+- Si `due_date` ya pasó y la iniciativa no está en `completed`, se considera **vencida**.
+- Las métricas mínimas operativas de la pestaña son:
+  - Total de iniciativas
+  - Completadas
+  - Vencidas
+  - Sin responsable
+
+### API operativa
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/comercial/iniciativas/` | GET | Lista iniciativas (filtro opcional por `status` y `responsable_id`) |
+| `/api/comercial/iniciativas/` | POST | Crea iniciativa |
+| `/api/comercial/iniciativas/{id}` | PATCH | Actualiza estado, responsable, fecha, título, descripción y vínculo de proceso |
+| `/api/comercial/iniciativas/{id}` | DELETE | Elimina iniciativa |
+
+### Trazabilidad
+
+- Cada alta, cambio de estado, cambio de responsable o eliminación debe registrarse en `comercial_activity_log` con `entity_type = "iniciativa"`.
+
+### Prioridad visual en la pestaña (UX)
+
+- **Vencida**: iniciativa no `completed` con `due_date` anterior a hoy (fila con acento rojo).
+- **Próxima**: no `completed`, fecha compromiso en los próximos **7 días** inclusive (acento ámbar).
+- **Sin responsable**: no `completed` y sin `responsable_id` (acento gris; si aplica también vencida o próxima, prevalece el estilo de fecha).
+- **Completada**: fila atenuada para lectura rápida del backlog activo.
+- El **estado** se puede cambiar desde un selector en la tabla (sin abrir modal); el cambio persiste vía `PATCH /api/comercial/iniciativas/{id}`.
+
 ## Integridad y limpieza
 
 - Al **eliminar** una fricción se borran vínculos `comercial_kpi_friction` y comentarios asociados.
@@ -131,6 +205,8 @@ Situaciones que justifican abrir o actualizar una fricción vinculada al KPI:
 
 - `migrate_comercial_v3.py`: añade `resolution_checklist` en `comercial_frictions`.
 - `migrate_comercial_v4.py`: añade campos híbridos (`tracking_mode`, `frequency`, `grace_days`) en `comercial_kpis`, campos de config (`is_critical`, `target_value_local`, `responsable_id`) en `comercial_kpi_touchpoint`, y crea tabla `comercial_tp_kpi_history`.
+- `migrate_comercial_v5.py`: crea tabla `comercial_iniciativas` para seguimiento básico de iniciativas del módulo comercial.
+- `migrate_comercial_v6.py`: amplía `comercial_iniciativas` con `description`, `motor`, `phase_id`, `touchpoint_id` para robustecer contexto y vínculo al mapa de procesos.
 - **Dirección de base de datos**
   - Por defecto se usa `DATABASE_URL` del archivo `.env` (cargado al importar `app.database`).
   - Si el host `db.*.supabase.co` no resuelve o falla por IPv4, en Supabase usa la **URI del pooler** (Project Settings → Database → Connection string), no la conexión directa.

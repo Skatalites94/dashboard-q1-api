@@ -304,6 +304,90 @@ class ComercialTrustPillar(Base):
     order: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class ComercialInitiative(Base):
+    __tablename__ = "comercial_iniciativas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    pillar_id: Mapped[str] = mapped_column(String(50), nullable=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    motor: Mapped[str] = mapped_column(String(40), default="trust")
+    phase_id: Mapped[str] = mapped_column(String(50), nullable=True)
+    touchpoint_id = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    responsable_id = mapped_column(Integer, nullable=True)
+    due_date = mapped_column(Date, nullable=True)
+    target: Mapped[str] = mapped_column(Text, default="")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    priority: Mapped[str] = mapped_column(String(10), default="medium")
+    area: Mapped[str] = mapped_column(String(60), default="")
+    tipo: Mapped[str] = mapped_column(String(20), default="operativa")
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ComercialInitiativeFriction(Base):
+    __tablename__ = "comercial_initiative_friction"
+    initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    friction_id: Mapped[str] = mapped_column(String(10), primary_key=True)
+
+
+class ComercialInitiativeTouchpoint(Base):
+    __tablename__ = "comercial_initiative_touchpoint"
+    initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    touchpoint_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+
+class ComercialInitiativePillar(Base):
+    __tablename__ = "comercial_initiative_pillar"
+    initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pillar_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+
+
+class ComercialInitiativeInvolved(Base):
+    __tablename__ = "comercial_initiative_involved"
+    initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    person_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+
+class ComercialInitiativeDependency(Base):
+    __tablename__ = "comercial_initiative_dependency"
+    initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    depends_on_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+
+class ComercialCanvasLayout(Base):
+    __tablename__ = "comercial_canvas_layout"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    view_id: Mapped[str] = mapped_column(String(50), default="comercial_main")
+    entity_type: Mapped[str] = mapped_column(String(20))
+    entity_id: Mapped[str] = mapped_column(String(50))
+    x: Mapped[float] = mapped_column(Float, default=0.0)
+    y: Mapped[float] = mapped_column(Float, default=0.0)
+    width = mapped_column(Float, nullable=True)
+    height = mapped_column(Float, nullable=True)
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ComercialTouchpointFlow(Base):
+    __tablename__ = "comercial_touchpoint_flow"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    from_touchpoint_id: Mapped[int] = mapped_column(Integer, index=True)
+    to_touchpoint_id: Mapped[int] = mapped_column(Integer, index=True)
+    label = mapped_column(String(80), nullable=True)
+    order = mapped_column(Integer, default=0)
+    created_at = mapped_column(DateTime, server_default=func.now())
+
+
+class ComercialCanvasNote(Base):
+    __tablename__ = "comercial_canvas_notes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    text: Mapped[str] = mapped_column(Text, default="")
+    color: Mapped[str] = mapped_column(String(20), default="yellow")
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class ComercialKpi(Base):
     __tablename__ = "comercial_kpis"
 

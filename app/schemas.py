@@ -361,8 +361,17 @@ class ComercialTouchpointUpdate(BaseModel):
     kpi: Optional[str] = None
     friction_text: Optional[str] = None
     has_friction: Optional[bool] = None
+    description: Optional[str] = None
     notes: Optional[str] = None
     order: Optional[int] = None
+    # v13: 8 atributos formales
+    internal_checklist: Optional[List[dict]] = None  # [{text, done}, ...]
+    duration_minutes: Optional[int] = None
+    duration_label: Optional[str] = None
+    classification: Optional[str] = None  # 'critical' | 'invisible' | 'redundant' | 'unnecessary' | 'normal'
+    leverage_point: Optional[str] = None  # 'speed' | 'diagnosis' | 'persistence' | 'none'
+    # Optimistic locking — autoplan E5
+    expected_updated_at: Optional[str] = None
 
 
 class ComercialTouchpointReorderRequest(BaseModel):
@@ -400,7 +409,14 @@ class ComercialTouchpointCreate(BaseModel):
     friction_text: Optional[str] = None
     has_friction: bool = False
     order: int = 0
+    description: str = ""
     notes: str = ""
+    # v13: 8 atributos formales (todos opcionales al CREATE — two-tier completeness)
+    internal_checklist: Optional[List[dict]] = None
+    duration_minutes: Optional[int] = None
+    duration_label: str = ""
+    classification: str = "normal"
+    leverage_point: str = "none"
 
 
 class ComercialFrictionCreate(BaseModel):
@@ -408,16 +424,21 @@ class ComercialFrictionCreate(BaseModel):
     phase_id: str
     name: str
     impact: str = "medium"
+    description: str = ""
     solution: str = ""
     expected_outcome: str = ""
     status: str = "pending"
     deadline: Optional[str] = None
     notes: str = ""
+    is_critical: bool = False
     responsable: str = ""
     responsable_id: Optional[int] = None
     touchpoint_id: Optional[int] = None
     priority: int = 0
     resolution_checklist: Optional[list] = None
+    # v13: tipo de fricción ∈ {time, repetition, channel_switch, incomplete_info,
+    # unmet_expectations, cognitive_effort} — Manifesto §20
+    friction_type: Optional[str] = None
 
 
 class ComercialFrictionUpdate(BaseModel):
@@ -427,13 +448,18 @@ class ComercialFrictionUpdate(BaseModel):
     deadline: Optional[str] = None
     notes: Optional[str] = None
     impact: Optional[str] = None
+    description: Optional[str] = None
     solution: Optional[str] = None
     expected_outcome: Optional[str] = None
+    is_critical: Optional[bool] = None
     responsable: Optional[str] = None
     responsable_id: Optional[int] = None
     touchpoint_id: Optional[int] = None
     priority: Optional[int] = None
     resolution_checklist: Optional[list] = None
+    friction_type: Optional[str] = None
+    # Optimistic locking — autoplan E5
+    expected_updated_at: Optional[str] = None
 
 
 class ComercialTrustPillarUpdate(BaseModel):
@@ -553,6 +579,9 @@ class ComercialKpiCreate(BaseModel):
     unit: str = ""
     phase_id: Optional[str] = None
     owner_id: Optional[int] = None
+    # v13: tag para 4 maestras (Utilidad, LTV, CAC, Conversión)
+    is_master: bool = False
+    master_metric: Optional[str] = None  # 'utility' | 'ltv' | 'cac' | 'conversion'
 
 
 class ComercialKpiUpdate(BaseModel):
@@ -574,12 +603,109 @@ class ComercialKpiUpdate(BaseModel):
     desc_green: Optional[str] = None
     desc_yellow: Optional[str] = None
     desc_red: Optional[str] = None
+    # v13
+    is_master: Optional[bool] = None
+    master_metric: Optional[str] = None
 
 
 class ComercialTpKpiConfigUpdate(BaseModel):
     is_critical: Optional[bool] = None
     target_value_local: Optional[float] = None
     responsable_id: Optional[int] = None
+
+
+# v14 — Wizard Motor de Confianza (task #64)
+class ComercialTrustPillarStepCreate(BaseModel):
+    pillar_id: str
+    title: str
+    description: str = ""
+    evidence: str = ""
+    responsable_id: Optional[int] = None
+    due_date: Optional[str] = None  # ISO date
+    status: str = "pending"
+    order: int = 0
+
+
+class ComercialTrustPillarStepUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    evidence: Optional[str] = None
+    responsable_id: Optional[int] = None
+    due_date: Optional[str] = None
+    status: Optional[str] = None
+    order: Optional[int] = None
+
+
+# v15 — F4 Gobernanza (task #66)
+class ComercialGovernanceCharterUpdate(BaseModel):
+    owner_id: Optional[int] = None
+    cadence: Optional[str] = None
+    change_criteria: Optional[str] = None
+    principles: Optional[str] = None
+
+
+# task #92 — Company Context (singleton id=1)
+class ComercialCompanyContextUpdate(BaseModel):
+    company_name: Optional[str] = None
+    industry: Optional[str] = None
+    business_model: Optional[str] = None
+    target_segment: Optional[str] = None
+    geographies: Optional[str] = None
+    team_size: Optional[int] = None
+    sales_team_size: Optional[int] = None
+    avg_ticket_mxn: Optional[float] = None
+    sales_cycle_days: Optional[int] = None
+    main_value_prop: Optional[str] = None
+    top_competitors: Optional[str] = None
+    main_pains_today: Optional[str] = None
+    main_objectives: Optional[str] = None
+    language_style: Optional[str] = None
+    notes: Optional[str] = None
+    # v19: atestaciones de las 3 pruebas de validación del workbook
+    validated_terreno: Optional[bool] = None
+    validated_terreno_notes: Optional[str] = None
+    validated_fantasma: Optional[bool] = None
+    validated_fantasma_notes: Optional[str] = None
+    validated_datos: Optional[bool] = None
+    validated_datos_notes: Optional[str] = None
+
+
+class ComercialGovernanceGapCreate(BaseModel):
+    gap_type: str
+    reference_id: Optional[str] = None
+    description: str
+    priority: str = "medium"
+    status: str = "open"
+    owner_id: Optional[int] = None
+
+
+class ComercialGovernanceGapUpdate(BaseModel):
+    gap_type: Optional[str] = None
+    reference_id: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    owner_id: Optional[int] = None
+
+
+class ComercialGovernanceTestCreate(BaseModel):
+    test_type: str
+    subject: str
+    hypothesis: str = ""
+    evidence: str = ""
+    status: str = "planned"
+    performed_at: Optional[str] = None
+    owner_id: Optional[int] = None
+
+
+class ComercialGovernanceTestUpdate(BaseModel):
+    test_type: Optional[str] = None
+    subject: Optional[str] = None
+    hypothesis: Optional[str] = None
+    evidence: Optional[str] = None
+    status: Optional[str] = None
+    performed_at: Optional[str] = None
+    owner_id: Optional[int] = None
 
 
 class ComercialTpKpiMeasurement(BaseModel):
@@ -604,3 +730,23 @@ class ComercialCommentCreate(BaseModel):
     text: str
     author: str = ""
     link: str = ""
+
+
+# ── Canales ──────────────────────────────────────────────────
+
+
+class ComercialChannelCreate(BaseModel):
+    id: str
+    name: str
+    icon: str = ""
+    color: str = "#94A3B8"
+    description: str = ""
+    order: int = 0
+
+
+class ComercialChannelUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    description: Optional[str] = None
+    order: Optional[int] = None

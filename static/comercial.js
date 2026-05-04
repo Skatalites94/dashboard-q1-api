@@ -18,7 +18,10 @@ window.ComercialModule = (function() {
     canvas_layout: [],
     canvas_notes: [],
     touchpoint_flows: [],
-    dashboard: null
+    channels: [],
+    touchpoint_channels: [],
+    dashboard: null,
+    workbook: null
   };
   var activeTab = 'dashboard';
   var iniciativasFilter = { status: 'all', responsable: 'all', priority: 'all', area: 'all', tipo: 'all', text: '' };
@@ -39,6 +42,31 @@ window.ComercialModule = (function() {
   }
   var kpiSegFilter = { phase: 'all', responsable: 'all', status: 'all', search: '' };
   var expandedKpis = {};
+
+  /* ── Persona actual (sin auth real, persistido en localStorage) ── */
+  var currentPersonaId = null;
+  function loadCurrentPersona() {
+    try {
+      var v = localStorage.getItem('comercial.currentPersonaId');
+      currentPersonaId = v ? parseInt(v, 10) : null;
+    } catch (e) { currentPersonaId = null; }
+  }
+  function setCurrentPersona(id) {
+    try {
+      if (id) {
+        localStorage.setItem('comercial.currentPersonaId', String(id));
+        currentPersonaId = parseInt(id, 10);
+      } else {
+        localStorage.removeItem('comercial.currentPersonaId');
+        currentPersonaId = null;
+      }
+    } catch (e) {}
+    render();
+  }
+  function getCurrentPersona() {
+    if (!currentPersonaId) return null;
+    return state.people.find(function(p){ return String(p.id) === String(currentPersonaId); }) || null;
+  }
   var frictionFilterImpact = 'all';
   var frictionFilterStatus = 'all';
   var frictionFilterPhase = 'all';
@@ -264,6 +292,94 @@ window.ComercialModule = (function() {
       }
     });
     return html;
+  }
+
+  /* ── KPI status by thresholds (mirror backend logic) ── */
+  function _kpiStatusByThresholds(kpi, value) {
+    if (value === null || value === undefined) return 'gray';
+    if (!kpi || kpi.target_value === null || kpi.target_value === undefined) return 'gray';
+    var dir = kpi.direction || 'higher';
+    var target = kpi.target_value;
+    var ty = kpi.threshold_yellow;
+    var tr = kpi.threshold_red;
+    if (dir === 'higher') {
+      if (value >= target) return 'super_green';
+      if (ty !== null && ty !== undefined && value >= ty) return 'green';
+      if (tr !== null && tr !== undefined && value >= tr) return 'yellow';
+      return 'red';
+    } else {
+      if (value <= target) return 'super_green';
+      if (ty !== null && ty !== undefined && value <= ty) return 'green';
+      if (tr !== null && tr !== undefined && value <= tr) return 'yellow';
+      return 'red';
+    }
+  }
+
+  function _phaseKpisSummary(phaseId) {
+    // Get TPs in phase
+    var tpIds = state.touchpoints
+      .filter(function(tp){ return String(tp.phase_id) === String(phaseId); })
+      .map(function(tp){ return tp.id; });
+    // KPIs linked directly to phase
+    var directKpis = state.kpis.filter(function(k){ return String(k.phase_id || '') === String(phaseId); });
+    // KPIs linked via touchpoints
+    var indirectKpiIds = (state.kpi_touchpoints || [])
+      .filter(function(lk){ return tpIds.indexOf(lk.touchpoint_id) >= 0; })
+      .map(function(lk){ return lk.kpi_id; });
+    var seen = {};
+    var all = [];
+    directKpis.concat(state.kpis.filter(function(k){ return indirectKpiIds.indexOf(k.id) >= 0; })).forEach(function(k) {
+      if (seen[k.id]) return;
+      seen[k.id] = true;
+      var v = (k.current_value !== null && k.current_value !== undefined) ? k.current_value : null;
+      all.push({ kpi: k, value: v, status: _kpiStatusByThresholds(k, v) });
+    });
+    return all;
+  }
+
+  function _phaseKpisSummaryHTML(phaseId) {
+    var rows = _phaseKpisSummary(phaseId);
+    if (rows.length === 0) return '';
+    var counts = { super_green: 0, green: 0, yellow: 0, red: 0, gray: 0 };
+    rows.forEach(function(r){ counts[r.status] = (counts[r.status]||0) + 1; });
+    var dotColor = { super_green: '#059669', green: '#10B981', yellow: '#F59E0B', red: '#EF4444', gray: '#94A3B8' };
+    var html = '<div style="display:inline-flex;align-items:center;gap:10px;font-size:.7rem;color:var(--text-muted);margin-left:12px">';
+    html += '<span style="font-weight:700;color:var(--text-secondary)">KPIs (' + rows.length + ')</span>';
+    ['super_green','green','yellow','red','gray'].forEach(function(s) {
+      if (counts[s] > 0) {
+        html += '<span style="display:inline-flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:50%;background:' + dotColor[s] + '"></span>' + counts[s] + '</span>';
+      }
+    });
+    html += '</div>';
+    return html;
+  }
+
+  /* ── Channels (M:N) helpers ── */
+  function getChannelsForTouchpoint(tpId) {
+    var ids = (state.touchpoint_channels || [])
+      .filter(function(r){ return String(r.touchpoint_id) === String(tpId); })
+      .map(function(r){ return r.channel_id; });
+    return ids
+      .map(function(cid){ return (state.channels || []).find(function(c){ return c.id === cid; }); })
+      .filter(Boolean);
+  }
+
+  function channelChip(ch, opts) {
+    if (!ch) return '';
+    var size = (opts && opts.size) || 'sm';
+    var fontSize = size === 'md' ? '.72rem' : '.64rem';
+    var pad = size === 'md' ? '3px 9px' : '2px 7px';
+    var icon = ch.icon ? '<span style="margin-right:3px">' + ch.icon + '</span>' : '';
+    return '<span class="cm-channel-chip" style="display:inline-flex;align-items:center;font-size:' + fontSize +
+      ';font-weight:600;padding:' + pad + ';border-radius:9999px;background:' + (ch.color || '#94A3B8') +
+      '20;color:' + (ch.color || '#475569') + ';border:1px solid ' + (ch.color || '#94A3B8') +
+      '40;margin:0 3px 3px 0;white-space:nowrap">' + icon + escHtml(ch.name) + '</span>';
+  }
+
+  function channelChipsHTML(tpId, opts) {
+    var chs = getChannelsForTouchpoint(tpId);
+    if (chs.length === 0) return '<span style="color:var(--text-muted);font-size:.72rem;font-style:italic">Sin canal</span>';
+    return chs.map(function(c){ return channelChip(c, opts); }).join('');
   }
 
   /**
@@ -710,9 +826,36 @@ window.ComercialModule = (function() {
       .cm-canvas-fr-resolved{margin-left:auto;font-size:.7rem;color:#10B981;font-weight:700}
       .cm-canvas-fr-name{font-size:.72rem;font-weight:600;line-height:1.3;color:#1E293B}
       .cm-canvas-fr-progress{display:flex;align-items:center;gap:5px;margin-top:5px}
-      .cm-canvas-controls{position:absolute;left:14px;bottom:14px;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:5px;box-shadow:0 2px 8px rgba(15,23,42,.08);z-index:10}
+      .cm-canvas-controls{position:absolute;right:14px;bottom:14px;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:5px;box-shadow:0 2px 8px rgba(15,23,42,.08);z-index:10}
       .cm-canvas-ctrl-btn{width:30px;height:30px;border:none;background:transparent;border-radius:6px;font-size:1rem;font-weight:700;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s}
       .cm-canvas-ctrl-btn:hover{background:#F1F5F9;color:#1E293B}
+      /* Figma-style floating toolbar — bottom-left dentro del canvas, 2 filas compactas */
+      .cm-canvas-figma-toolbar{position:absolute;bottom:14px;left:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:3px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:4px;box-shadow:0 6px 20px rgba(15,23,42,.10);z-index:11}
+      .cm-figma-tool-sep{display:none}
+      .cm-figma-tool{position:relative;width:34px;height:34px;border:none;background:transparent;border-radius:7px;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,transform .08s;line-height:1;color:#475569}
+      .cm-figma-tool:hover{background:#F1F5F9;color:#1E293B}
+      .cm-figma-tool.active{background:#4F46E5;color:#fff;box-shadow:0 1px 4px rgba(79,70,229,.35)}
+      .cm-figma-tool.active:hover{background:#4338CA}
+      .cm-figma-tool-ico{font-size:1.05rem;line-height:1}
+      .cm-figma-tool-kbd{position:absolute;bottom:2px;right:3px;font-size:.54rem;font-weight:800;color:#94A3B8;background:rgba(255,255,255,.85);border-radius:3px;padding:1px 3px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.2px;line-height:1;pointer-events:none}
+      .cm-figma-tool.active .cm-figma-tool-kbd{color:#fff;background:rgba(255,255,255,.18)}
+      .cm-figma-tool-sep{width:1px;height:24px;background:#E2E8F0;margin:0 3px}
+      /* Tooltip de shortcut/acción (aparece al hover, hacia ARRIBA porque toolbox está abajo) */
+      .cm-figma-tool::after{content:attr(aria-label) "  ·  " attr(data-shortcut);position:absolute;bottom:42px;left:50%;transform:translateX(-50%);background:#1E293B;color:#fff;font-size:.66rem;font-weight:600;padding:4px 8px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s ease;z-index:20}
+      .cm-figma-tool:hover::after{opacity:1}
+      /* Hint contextual ENCIMA del toolbox (porque toolbox está bottom-left) */
+      .cm-canvas-figma-hint{position:absolute;bottom:108px;left:14px;background:rgba(15,23,42,.72);color:#fff;font-size:.7rem;font-weight:500;padding:4px 10px;border-radius:6px;white-space:nowrap;z-index:10;pointer-events:none;backdrop-filter:blur(2px);max-width:calc(100vw - 40px);overflow:hidden;text-overflow:ellipsis}
+      .cm-canvas-viewport{cursor:default}
+      .cm-canvas-viewport.cm-canvas-tool-select{cursor:default}
+      .cm-canvas-viewport.cm-canvas-tool-create{cursor:crosshair}
+      .cm-canvas-viewport.cm-canvas-tool-link{cursor:cell}
+      .cm-canvas-viewport.cm-canvas-tool-pan{cursor:grab}
+      .cm-canvas-viewport.cm-canvas-tool-pan .cm-canvas-node{cursor:grab}
+      .cm-canvas-viewport .cm-canvas-node{cursor:pointer}
+      /* Quick menu en dblclick / right-click sobre canvas vacío */
+      .cm-canvas-quick-menu{position:absolute;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:6px;box-shadow:0 8px 24px rgba(15,23,42,.14);z-index:1100;display:flex;flex-direction:column;min-width:180px}
+      .cm-canvas-quick-menu button{padding:8px 12px;border:none;background:transparent;border-radius:6px;font-size:.82rem;color:#1E293B;cursor:pointer;text-align:left;font-family:inherit;display:flex;align-items:center;gap:8px}
+      .cm-canvas-quick-menu button:hover{background:#EEF2FF;color:#4338CA}
       .cm-canvas-zoom-label{font-size:.74rem;font-weight:700;color:#475569;padding:0 8px;min-width:46px;text-align:center}
       .cm-canvas-drawer{position:fixed;top:0;right:0;bottom:0;width:380px;background:#fff;border-left:1px solid #E2E8F0;box-shadow:-4px 0 16px rgba(15,23,42,.08);transform:translateX(100%);transition:transform .22s ease;z-index:1000;overflow-y:auto}
       .cm-canvas-drawer.open{transform:translateX(0)}
@@ -760,6 +903,7 @@ window.ComercialModule = (function() {
       .cm-drawer-edit-input{width:100%;font-size:.78rem;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;background:#fff;font-family:inherit;color:#1E293B;transition:border-color .12s,background .12s}
       .cm-drawer-edit-input:hover{border-color:#CBD5E1}
       .cm-drawer-edit-input:focus{outline:none;border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+      .cm-drawer-edit-textarea{resize:vertical;line-height:1.45;min-height:64px}
       /* Sección Secuencia */
       .cm-drawer-seq-block{margin-bottom:10px}
       .cm-drawer-seq-block:last-child{margin-bottom:0}
@@ -836,6 +980,10 @@ window.ComercialModule = (function() {
       .cm-fullscreen-mode .cm-tabs,.cm-fullscreen-mode .topbar,.cm-fullscreen-mode .sidebar{display:none !important}
       .cm-fullscreen-mode #cm-main{padding:14px}
       .cm-fullscreen-mode .cm-canvas-viewport{height:calc(100vh - 160px) !important;border-radius:6px}
+      /* Fullscreen background fix — sin esto el browser pone fondo negro detrás del elemento. */
+      #comercial-module:fullscreen,#comercial-module:-webkit-full-screen{background:#F8FAFC;width:100vw;height:100vh;overflow-y:auto;padding:0}
+      #comercial-module:fullscreen .cm-canvas-viewport,#comercial-module:-webkit-full-screen .cm-canvas-viewport{background:#fff}
+      #comercial-module:fullscreen #cm-main,#comercial-module:-webkit-full-screen #cm-main{background:#F8FAFC;min-height:100vh}
       .cm-flow-hit:hover ~ .cm-flow-visible,.cm-flow-visible.cm-flow-hover{stroke:#3730A3;stroke-width:3.5}
       .cm-flow-visible.selected{filter:drop-shadow(0 0 4px rgba(67,56,202,.6))}
 
@@ -921,7 +1069,96 @@ window.ComercialModule = (function() {
       .cm-btn-danger{background:#FEE2E2;color:#B91C1C;border:1px solid #FECACA}
       .cm-btn-danger:hover{background:#FECACA}
 
+      /* 4 Maestras strip — autoplan §6.1 (task #62/#69) */
+      .cm-maestras-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 16px 0;padding:10px 12px;background:#fff;border:1px solid var(--border,#E2E8F0);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .cm-maestra-card{padding:10px 12px;border-radius:10px;border:1px solid #E2E8F0;background:#FAFBFC;cursor:pointer;transition:all .12s ease;display:flex;flex-direction:column;gap:4px;position:relative;overflow:hidden}
+      .cm-maestra-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);border-color:var(--primary,#4C6EF5)}
+      .cm-maestra-card-label{font-size:.7rem;font-weight:700;color:var(--text-muted,#94A3B8);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+      .cm-maestra-card-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+      .cm-maestra-card-value{font-size:1.5rem;font-weight:800;line-height:1.05;color:var(--text-primary,#1E293B)}
+      .cm-maestra-card-value--gray{color:#94A3B8}
+      .cm-maestra-card-meta{font-size:.65rem;color:var(--text-muted,#94A3B8);font-weight:600}
+      .cm-maestra-card--green{background:#ECFDF5;border-color:#A7F3D0}
+      .cm-maestra-card--yellow{background:#FFFBEB;border-color:#FDE68A}
+      .cm-maestra-card--red{background:#FEF2F2;border-color:#FECACA}
+      .cm-maestra-card--gray{background:#F8FAFC;border-color:#E2E8F0}
+      .cm-maestra-card--green .cm-maestra-card-dot{background:#10B981}
+      .cm-maestra-card--yellow .cm-maestra-card-dot{background:#F59E0B}
+      .cm-maestra-card--red .cm-maestra-card-dot{background:#DC2626}
+      .cm-maestra-card--gray .cm-maestra-card-dot{background:#94A3B8}
+      @media (max-width: 720px) { .cm-maestras-strip{grid-template-columns:repeat(2,1fr)} }
+
+      /* Friction type chip — autoplan §3.1 (task #63) */
+      .cm-fr-type-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:9999px;font-size:.66rem;font-weight:600;background:#EEF2FF;color:#3730A3;border:1px solid #C7D2FE;cursor:help}
+
+      /* View mode toggle 3 ejes (task #67) */
+      .cm-viewmode-toggle{display:inline-flex;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;padding:3px;margin-left:auto;align-self:center}
+      .cm-vm-btn{padding:5px 12px;font-size:.72rem;font-weight:600;border:none;background:transparent;color:#64748B;cursor:pointer;border-radius:6px;font-family:inherit;transition:all .12s}
+      .cm-vm-btn:hover{color:#1E293B}
+      .cm-vm-btn.active{background:#fff;color:#4F46E5;box-shadow:0 1px 2px rgba(15,23,42,.08)}
+
+      /* Compose mode section headers (#67 — vista 3 ejes) */
+      .cm-compose-section-header{display:flex;align-items:baseline;gap:12px;margin:24px 0 12px 0;padding-bottom:8px;border-bottom:2px solid #E2E8F0}
+      .cm-compose-section-header:first-child{margin-top:0}
+      .cm-compose-title{font-size:1.05rem;font-weight:700;color:#0F172A;letter-spacing:-.01em}
+      .cm-compose-hint{font-size:.74rem;color:#64748B}
+
+      /* Progressive disclosure tiers — autoplan UC-3 (task #75) */
+      .cm-tier-toggle{display:flex;gap:0;margin:0 0 12px 0;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;padding:3px;width:fit-content}
+      .cm-tier-btn{padding:5px 12px;font-size:.72rem;font-weight:600;border:none;background:transparent;color:#64748B;cursor:pointer;border-radius:6px;font-family:inherit;transition:all .12s}
+      .cm-tier-btn:hover{color:#1E293B}
+      .cm-tier-btn.active{background:#fff;color:#4F46E5;box-shadow:0 1px 2px rgba(15,23,42,.08)}
+      .cm-tier-hint{font-size:.66rem;color:#94A3B8;margin-left:8px;align-self:center}
+      .cm-tier-section--b,.cm-tier-section--c{display:none}
+      body.cm-tier-b .cm-tier-section--b{display:block}
+      body.cm-tier-c .cm-tier-section--b,body.cm-tier-c .cm-tier-section--c{display:block}
+
+      /* Two-tier completeness badge (drawer + tabla) — autoplan UC-3 (task #62) */
+      .cm-comp-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:9999px;font-size:.66rem;font-weight:700;line-height:1.4;cursor:help}
+      .cm-comp-badge--usable{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}
+      .cm-comp-badge--complete{background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0}
+      .cm-comp-badge--incomplete{background:#FEF2F2;color:#991B1B;border:1px solid #FECACA}
+      .cm-comp-checks{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 12px;margin-top:6px}
+      .cm-comp-check{font-size:.72rem;color:var(--text-secondary);display:flex;align-items:center;gap:6px}
+      .cm-comp-check.done{color:#065F46}
+      .cm-comp-check-icon{display:inline-block;width:12px;text-align:center}
+
       /* Tabs */
+      .cm-topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:24px;border-bottom:1px solid var(--border,#E2E8F0);flex-wrap:wrap}
+      .cm-topbar .cm-tabs{margin-bottom:0;border-bottom:none;flex:1 1 auto}
+      .cm-persona-switcher{display:flex;align-items:center;gap:6px;padding:0 4px 8px;flex-shrink:0}
+      .cm-persona-select{font-size:.78rem;font-weight:600;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text-primary);cursor:pointer;min-width:160px}
+      .cm-persona-select:focus{outline:none;border-color:var(--primary,#4C6EF5);box-shadow:0 0 0 3px rgba(76,110,245,.15)}
+      .cm-mt-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+      .cm-mt-stat{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .cm-mt-stat-value{font-size:1.9rem;font-weight:800;line-height:1.05}
+      .cm-mt-stat-label{font-size:.78rem;font-weight:700;color:var(--text-primary);margin-top:4px}
+      .cm-mt-stat-sub{font-size:.7rem;color:var(--text-muted);margin-top:1px}
+      .cm-mt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}
+      .cm-mt-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .cm-mt-card-title{font-weight:700;font-size:.95rem;color:var(--text-primary);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+      .cm-mt-card-count{background:#F1F5F9;color:var(--text-muted);font-size:.7rem;padding:2px 8px;border-radius:9999px;font-weight:700}
+      .cm-mt-empty{font-size:.78rem;color:var(--text-muted);font-style:italic;padding:10px 0}
+      .cm-mt-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+      .cm-mt-item{display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid transparent;border-radius:8px;cursor:pointer;transition:all .12s ease}
+      .cm-mt-item:hover{background:#F8FAFC;border-color:var(--border)}
+      .cm-mt-status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:5px}
+      .cm-mt-item-body{flex:1;min-width:0}
+      .cm-mt-item-title{font-size:.82rem;font-weight:600;color:var(--text-primary);margin-bottom:3px}
+      .cm-mt-item-meta{font-size:.7rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+      .cm-mt-more{margin-top:10px;background:none;border:none;color:var(--primary,#4C6EF5);font-weight:600;font-size:.78rem;cursor:pointer;padding:6px 0}
+      .cm-mt-more:hover{text-decoration:underline}
+      .cm-salud-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px}
+      .cm-salud-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .12s ease;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .cm-salud-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);border-color:var(--primary,#4C6EF5)}
+      .cm-salud-label{font-size:.74rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
+      .cm-salud-pct{font-size:1.7rem;font-weight:800;line-height:1.05;margin-bottom:8px}
+      .cm-salud-bar{height:6px;background:#E2E8F0;border-radius:3px;overflow:hidden;margin-bottom:6px}
+      .cm-salud-fill{height:100%;border-radius:3px;transition:width .3s ease}
+      .cm-salud-meta{font-size:.7rem;color:var(--text-muted)}
+      .cm-salud-miss-list{list-style:none;padding:0;margin:8px 0;display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow:auto}
+      .cm-salud-miss-item{padding:10px 12px;border-radius:6px;cursor:pointer;border:1px solid var(--border);transition:all .1s ease}
+      .cm-salud-miss-item:hover{background:#F8FAFC;border-color:var(--primary,#4C6EF5)}
       .cm-tabs{display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--border,#E2E8F0);padding-bottom:0;flex-wrap:wrap}
       .cm-tab{padding:10px 18px;font-size:.85rem;font-weight:600;color:var(--text-secondary,#64748B);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;font-family:inherit;transition:all .15s ease;display:flex;align-items:center;gap:6px}
       .cm-tab:hover{color:var(--text-primary,#1E293B);background:var(--bg-hover,#F0F2F5)}
@@ -1098,6 +1335,33 @@ window.ComercialModule = (function() {
       .cm-icon-btn{background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:var(--radius-sm,4px);color:var(--text-muted,#94A3B8);font-size:.82rem;transition:all .15s ease}
       .cm-icon-btn:hover{background:var(--bg-hover,#F0F2F5);color:var(--text-primary,#1E293B)}
       .cm-icon-btn.danger:hover{color:var(--danger,#EF4444);background:#FEF2F2}
+      .cm-friction-critical-toggle{font-size:.95rem;line-height:1;color:#94A3B8}
+      .cm-friction-critical-toggle:hover{color:#F59E0B;background:#FEF3C7}
+      .cm-friction-critical-toggle.is-on{color:#F59E0B;background:#FEF3C7}
+      .cm-friction-critical-toggle.is-on:hover{background:#FDE68A}
+      .cm-friction-crit-pill{display:inline-block;font-size:.6rem;font-weight:800;letter-spacing:.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;padding:2px 7px;border-radius:10px;vertical-align:middle;margin-right:6px;text-transform:uppercase}
+      /* AI suggest modal */
+      .cm-drawer-ai-btn{background:linear-gradient(135deg,#F5F3FF,#EEF2FF) !important;color:#4F46E5 !important;border:1px dashed #C7D2FE !important;font-weight:700}
+      .cm-drawer-ai-btn:hover{background:linear-gradient(135deg,#EDE9FE,#E0E7FF) !important;color:#4338CA !important}
+      .cm-ai-spinner{width:32px;height:32px;border:3px solid #E2E8F0;border-top-color:#4F46E5;border-radius:50%;animation:cmSpin .8s linear infinite}
+      @keyframes cmSpin{to{transform:rotate(360deg)}}
+      .cm-ai-fr-draft{padding:12px;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:8px;background:#fff;transition:border-color .12s}
+      .cm-ai-fr-draft:hover{border-color:#C7D2FE}
+      .cm-ai-fr-draft input[type=text],.cm-ai-fr-draft textarea{outline:none}
+      .cm-ai-fr-draft input[type=text]:focus,.cm-ai-fr-draft textarea:focus{background:#F8FAFC;border:1px solid #C7D2FE}
+      /* AI initiative drafts grid */
+      .cm-ai-ini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+      .cm-ai-ini-card{background:#fff;border:2px solid #E2E8F0;border-radius:12px;padding:14px;cursor:pointer;transition:all .12s;display:flex;flex-direction:column;gap:6px}
+      .cm-ai-ini-card:hover{border-color:#C7D2FE;box-shadow:0 4px 16px rgba(79,70,229,.12);transform:translateY(-1px)}
+      .cm-ai-ini-card.selected{border-color:#4F46E5;background:#EEF2FF;box-shadow:0 0 0 3px rgba(79,70,229,.15)}
+      .cm-ai-ini-card .ai-ini-title{font-size:.92rem;font-weight:700;color:#1E293B;line-height:1.3}
+      .cm-ai-ini-card .ai-ini-desc{font-size:.78rem;color:#475569;line-height:1.45}
+      .cm-ai-ini-card .ai-ini-target{font-size:.72rem;color:#059669;font-weight:600;background:#ECFDF5;padding:4px 8px;border-radius:6px;border:1px solid #A7F3D0}
+      .cm-ai-ini-card .ai-ini-meta{display:flex;flex-wrap:wrap;gap:4px;font-size:.66rem;color:#64748B}
+      .cm-ai-ini-card .ai-ini-meta span{background:#F1F5F9;padding:2px 6px;border-radius:4px}
+      .cm-ai-ini-card .ai-ini-steps{font-size:.72rem;color:#475569}
+      .cm-ai-ini-card .ai-ini-steps li{margin-left:14px;line-height:1.5}
+      .cm-ai-ini-card .ai-ini-rationale{font-size:.7rem;color:#64748B;font-style:italic;border-top:1px dashed #E2E8F0;padding-top:6px;margin-top:auto}
 
       /* Inline edit row */
       .cm-inline-edit{background:#FAFBFC}
@@ -1235,6 +1499,16 @@ window.ComercialModule = (function() {
 
       /* Equipo tab */
       .cm-people-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:24px}
+      /* Channels grid */
+      .cm-channels-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+      .cm-channel-card{background:#fff;border:1px solid var(--border,#E2E8F0);border-radius:10px;padding:12px 14px;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+      .cm-channel-card:hover{box-shadow:0 4px 12px rgba(15,23,42,.08);border-color:#C7D2FE}
+      .cm-channel-card-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+      .cm-channel-card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+      .cm-channel-card-name{font-size:.88rem;font-weight:700;color:#1E293B;line-height:1.2}
+      .cm-channel-card-id{font-size:.66rem;color:#94A3B8;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.4px}
+      .cm-channel-card-desc{font-size:.74rem;color:#475569;line-height:1.4;margin-bottom:6px}
+      .cm-channel-card-meta{font-size:.68rem;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
       .cm-person-card{background:var(--bg-white,#fff);border:1px solid var(--border,#E2E8F0);border-radius:var(--radius-xl,12px);padding:20px;box-shadow:var(--shadow-sm);transition:all var(--transition-base,.2s ease);cursor:pointer}
       .cm-person-card:hover{box-shadow:var(--shadow-md);border-color:var(--border-hover,#CBD5E1)}
       .cm-person-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
@@ -1382,6 +1656,127 @@ window.ComercialModule = (function() {
 
       /* Expand row */
       .cm-kpi-expand-row td{background:#F8FAFC}
+
+      /* ────────────────────────────────────────────
+         Quick Start (Launching Pad) — task #92
+         ──────────────────────────────────────────── */
+      .cm-qs-header{background:linear-gradient(135deg,#F5F3FF,#EFF6FF);border:1px solid #E0E7FF;border-radius:14px;padding:24px 28px;margin-bottom:20px}
+      .cm-qs-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:14px}
+      .cm-qs-title{font-size:1.6rem;font-weight:800;color:#1E1B4B;line-height:1.1;margin-bottom:4px;letter-spacing:-.02em}
+      .cm-qs-subtitle{font-size:.86rem;color:#4338CA;line-height:1.4;max-width:580px}
+      .cm-qs-progress-circle{flex-shrink:0;text-align:right}
+      .cm-qs-pct{font-size:2rem;font-weight:800;color:#4F46E5;line-height:1;font-variant-numeric:tabular-nums}
+      .cm-qs-pct-meta{font-size:.7rem;color:#6366F1;font-weight:600;margin-top:4px}
+      .cm-qs-progress-bar{height:8px;background:rgba(99,102,241,.15);border-radius:9999px;overflow:hidden}
+      .cm-qs-progress-fill{height:100%;background:linear-gradient(90deg,#7C3AED,#4F46E5);border-radius:9999px;transition:width .3s ease}
+
+      .cm-qs-section{background:#fff;border:1px solid var(--border,#E2E8F0);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
+      .cm-qs-section-header{display:flex;align-items:center;gap:10px;padding-bottom:14px;margin-bottom:10px;border-bottom:1px solid #F1F5F9}
+      .cm-qs-section-icon{font-size:1.1rem}
+      .cm-qs-section-title{font-size:.94rem;font-weight:700;color:#1E293B}
+      .cm-qs-section-meta{font-size:.72rem;color:#94A3B8;margin-left:auto;font-weight:500}
+
+      .cm-qs-item{display:flex;align-items:flex-start;gap:12px;padding:14px 12px;border-bottom:1px solid #F1F5F9;transition:background .12s;flex-wrap:wrap}
+      .cm-qs-item:last-child{border-bottom:none}
+      .cm-qs-item:hover{background:#F8FAFC;border-radius:8px}
+      .cm-qs-item--done{opacity:.85}
+      .cm-qs-item--active{background:linear-gradient(90deg,rgba(79,70,229,.06),transparent);border-left:3px solid #4F46E5;padding-left:10px;border-radius:0 8px 8px 0}
+      .cm-qs-item--future{opacity:.55}
+      .cm-qs-item--future .cm-qs-item-title{color:#94A3B8}
+      .cm-qs-step-num{flex-shrink:0;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.72rem;background:#F1F5F9;color:#94A3B8;margin-top:2px}
+      .cm-qs-item--active .cm-qs-step-num{background:#4F46E5;color:#fff}
+      .cm-qs-step-pill{display:inline-block;font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:9999px;text-transform:uppercase;letter-spacing:.4px;margin-left:6px;vertical-align:middle}
+      .cm-qs-step-pill--active{background:#EEF2FF;color:#4F46E5}
+      .cm-qs-step-pill--future{background:#F1F5F9;color:#94A3B8}
+      .cm-qs-step-pill--done{background:#D1FAE5;color:#047857}
+
+      .cm-qs-wb{margin-top:10px;background:#FAFAF9;border:1px solid #E7E5E4;border-radius:8px;padding:0;width:100%}
+      .cm-qs-wb summary{cursor:pointer;list-style:none;padding:8px 12px;font-size:.74rem;font-weight:600;color:#57534E;display:flex;align-items:center;gap:6px;user-select:none}
+      .cm-qs-wb summary::-webkit-details-marker{display:none}
+      .cm-qs-wb summary::after{content:'▸';margin-left:auto;transition:transform .15s;color:#A8A29E}
+      .cm-qs-wb[open] summary::after{transform:rotate(90deg)}
+      .cm-qs-wb-body{padding:6px 14px 12px;border-top:1px solid #E7E5E4}
+      .cm-qs-wb-q{font-size:.78rem;color:#44403C;line-height:1.5;padding:4px 0;border-left:2px solid #D6D3D1;padding-left:10px;margin:6px 0}
+      .cm-qs-wb-sanity{font-size:.74rem;color:#92400E;background:#FEF3C7;border-radius:6px;padding:8px 10px;margin-top:10px;line-height:1.45}
+      .cm-qs-wb-sanity strong{font-weight:700;display:block;margin-bottom:2px}
+      .cm-qs-wb-flags{margin-top:8px}
+      .cm-qs-wb-flag{font-size:.72rem;color:#991B1B;padding:3px 0 3px 16px;background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='5' fill='%23DC2626'/></svg>") left center/10px no-repeat;line-height:1.4}
+
+      .cm-qs-check{flex-shrink:0;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-top:2px;font-weight:700;font-size:.78rem}
+      .cm-qs-check--pending{border:2px dashed #CBD5E1;background:#fff}
+      .cm-qs-check--done{background:#10B981;color:#fff;border:none}
+
+      .cm-qs-item-body{flex:1;min-width:0}
+      .cm-qs-item-title{font-size:.92rem;font-weight:600;color:#1E293B;margin-bottom:3px}
+      .cm-qs-item-title--done{text-decoration:line-through;color:#94A3B8}
+      .cm-qs-item-desc{font-size:.78rem;color:#64748B;line-height:1.45}
+
+      .cm-qs-item-actions{flex-shrink:0;display:flex;gap:6px;align-items:center}
+      .cm-qs-btn-ai{background:linear-gradient(135deg,#7C3AED,#4F46E5) !important;color:#fff !important;border:none !important;font-weight:600}
+      .cm-qs-btn-ai:hover{background:linear-gradient(135deg,#6D28D9,#4338CA) !important}
+
+      @media(max-width:768px){
+        .cm-qs-title-row{flex-direction:column;gap:10px}
+        .cm-qs-progress-circle{text-align:left}
+        .cm-qs-item{flex-direction:column}
+        .cm-qs-item-actions{margin-top:8px;align-self:stretch}
+        .cm-qs-item-actions button{flex:1}
+      }
+
+      /* ────────────────────────────────────────────
+         A11y: focus visible + skip helpers (#77)
+         ──────────────────────────────────────────── */
+      .cm-tab:focus-visible,
+      .cm-vm-btn:focus-visible,
+      .cm-tier-btn:focus-visible,
+      .cm-btn:focus-visible,
+      .cm-icon-btn:focus-visible,
+      .cm-maestra-card:focus-visible,
+      .cm-comp-toggle:focus-visible,
+      [role="button"]:focus-visible{
+        outline:2px solid #4F46E5;outline-offset:2px;border-radius:6px
+      }
+      .cm-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+      @media (prefers-reduced-motion: reduce){
+        *,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important}
+      }
+
+      /* ────────────────────────────────────────────
+         Mobile layout (#77 — F7 Mobile lectura)
+         < 768px: stacking, tighter padding, scrollable tabs
+         ──────────────────────────────────────────── */
+      @media (max-width: 768px){
+        .cm-topbar{flex-direction:column;align-items:stretch;gap:8px;margin-bottom:16px}
+        .cm-tabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+        .cm-tabs::-webkit-scrollbar{height:4px}
+        .cm-tabs::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:2px}
+        .cm-tab{padding:8px 12px;font-size:.78rem;white-space:nowrap;flex-shrink:0}
+        .cm-viewmode-toggle{align-self:flex-start;margin-left:0}
+        .cm-maestras-strip{grid-template-columns:repeat(2,1fr) !important;gap:8px}
+        .cm-maestra-card{padding:10px 12px}
+        .cm-maestra-card-value{font-size:1.4rem !important}
+        .cm-kpi-grid{grid-template-columns:1fr !important;gap:10px}
+        .cm-kpi-card{padding:14px}
+        .cm-mt-stats{grid-template-columns:repeat(2,1fr) !important;gap:8px}
+        .cm-mt-grid{grid-template-columns:1fr !important;gap:10px}
+        .cm-salud-grid{grid-template-columns:repeat(2,1fr) !important;gap:8px}
+        .cm-drawer-edit-grid{grid-template-columns:1fr !important;gap:6px}
+        .cm-comp-checks{grid-template-columns:1fr !important}
+        .cm-section-title{font-size:.95rem}
+        .cm-compose-section-header{flex-direction:column;align-items:flex-start;gap:2px}
+        .cm-compose-title{font-size:.95rem}
+        /* Drawer near full-width on phones */
+        .cm-drawer{width:100% !important;max-width:100% !important}
+        /* Canvas a touch shorter so user can still see tabs */
+        .cm-canvas-stage{min-height:380px}
+        /* Tables: horizontal scroll on overflow already provided by .cm-table-wrap */
+      }
+      @media (max-width: 480px){
+        .cm-maestras-strip{grid-template-columns:1fr !important}
+        .cm-mt-stats{grid-template-columns:1fr !important}
+        .cm-salud-grid{grid-template-columns:1fr !important}
+        .cm-tab{padding:7px 10px;font-size:.72rem}
+      }
     `;
     document.head.appendChild(style);
   }
@@ -1455,6 +1850,15 @@ window.ComercialModule = (function() {
       state.canvas_layout = data.canvas_layout || [];
       state.canvas_notes = data.canvas_notes || [];
       state.touchpoint_flows = data.touchpoint_flows || [];
+      state.channels = data.channels || [];
+      state.touchpoint_channels = data.touchpoint_channels || [];
+      // Quick Start (#92)
+      state.config = data.config || {};
+      state.company_context = data.company_context || null;
+      state.trust_pillar_steps = data.trust_pillar_steps || state.trust_pillar_steps || [];
+      state.governance_charter = data.governance_charter || state.governance_charter || null;
+      state.governance_gaps = data.governance_gaps || state.governance_gaps || [];
+      state.governance_tests = data.governance_tests || state.governance_tests || [];
     });
   }
 
@@ -1464,8 +1868,18 @@ window.ComercialModule = (function() {
     });
   }
 
+  function loadWorkbook() {
+    // Cris Urzua workbook (preguntas verbatim, atributos, validation tests).
+    // Cargado solo una vez por sesion; si falla, los hints se ocultan pero el resto sigue.
+    if (state.workbook) return Promise.resolve();
+    return fetch('/workbook.json', { cache: 'force-cache' })
+      .then(function(r){ if (!r.ok) throw new Error('workbook ' + r.status); return r.json(); })
+      .then(function(data){ state.workbook = data; })
+      .catch(function(err){ console.warn('Workbook no cargo:', err); state.workbook = null; });
+  }
+
   function refreshAll() {
-    return Promise.all([loadBootstrap(), loadDashboard()]);
+    return Promise.all([loadBootstrap(), loadDashboard(), loadWorkbook()]);
   }
 
   function loadAll() {
@@ -1495,8 +1909,25 @@ window.ComercialModule = (function() {
 
     var overdueCount = getOverdueCount();
 
+    // Mi Trabajo: counts to badge la tab personal
+    var miBadge = '';
+    if (currentPersonaId) {
+      var miCount = _miTrabajoPendingCount();
+      if (miCount > 0) miBadge = '<span class="cm-tab-badge cm-tab-badge-blue">' + miCount + '</span>';
+    }
+
     var html = '';
-    html += '<div class="cm-tabs">';
+    // Maestras strip: solo en Dashboard. En el resto de tabs liberamos espacio
+    // vertical para el canvas / tablas / drawers.
+    if (activeTab === 'dashboard') html += _renderMaestrasStripHTML();
+    html += '<div class="cm-topbar">';
+    html += '<div class="cm-tabs" role="tablist" aria-label="Navegación módulo Comercial">';
+    // task #68: Mi Trabajo desactivado en favor del 3-tab redesign (#67)
+    // html += tabBtn('mitrabajo', '★ Mi Trabajo', miBadge);
+    // Quick Start solo en :8001 (DEMO_MODE=1) — task #92
+    if (state.config && state.config.demo_mode) {
+      html += tabBtn('quickstart', '🚀 Quick Start', '');
+    }
     html += tabBtn('dashboard', 'Dashboard', '');
     html += tabBtn('proceso', 'Mapa de Procesos', '');
     html += tabBtn('mapavisual', 'Mapa Visual', '');
@@ -1509,7 +1940,42 @@ window.ComercialModule = (function() {
     html += tabBtn('iniciativas', 'Iniciativas', iniciBadge);
     var critCount = state.kpi_touchpoints.filter(function(lk) { return lk.is_critical; }).length;
     var kpiBadge2 = critCount > 0 ? '<span class="cm-tab-badge cm-tab-badge-blue">' + critCount + '</span>' : '';
+    var viewMode = _getViewMode();
+    if (viewMode === 'compact') {
+      // task #67: 3-axis simplified view
+      html = ''; // reset
+      // Maestras strip solo en Mediciones (equivalente al dashboard en vista compacta).
+      if (activeTab === 'mediciones3') html += _renderMaestrasStripHTML();
+      html += '<div class="cm-topbar"><div class="cm-tabs" role="tablist" aria-label="Vista 3 ejes — Comercial">';
+      var fBadgeC = overdueCount > 0 ? '<span class="cm-tab-badge cm-tab-badge-red">(' + overdueCount + ')</span>' : '';
+      html += tabBtn('mapa3', '🗺️ Mapa', '');
+      html += tabBtn('trabajo3', '✅ Trabajo', fBadgeC);
+      html += tabBtn('mediciones3', '📊 Mediciones', '');
+      html += '</div>' + _renderViewModeToggleHTML() + '</div>';
+      html += '<div id="cm-main"></div>';
+      root.innerHTML = html;
+      root.querySelectorAll('.cm-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          activeTab = this.dataset.tab;
+          render();
+        });
+      });
+      _bindViewModeToggle(root);
+      root.querySelectorAll('.cm-maestra-card').forEach(function(card) {
+        card.addEventListener('click', function(e){ _showMaestraDetail(this.getAttribute('data-maestra'), e.clientX, e.clientY); });
+      });
+      renderTab();
+      return;
+    }
     html += tabBtn('kpis', 'KPIs Seguimiento', kpiBadge2);
+    // task #66: Gobernanza
+    var openGaps = (state.governance_gaps || []).filter(function(g){ return g.status !== 'closed'; }).length;
+    var govBadge = openGaps > 0 ? '<span class="cm-tab-badge cm-tab-badge-red">' + openGaps + '</span>' : '';
+    html += tabBtn('gobernanza', 'Gobernanza', govBadge);
+    html += '</div>';
+    html += _renderViewModeToggleHTML();
+    // task #68: persona switcher desactivado (planeado: post-onboarding podría volver)
+    // html += _renderPersonaSwitcherHTML();
     html += '</div>';
     html += '<div id="cm-main"></div>';
     root.innerHTML = html;
@@ -1520,18 +1986,166 @@ window.ComercialModule = (function() {
         render();
       });
     });
+    var personaSel = root.querySelector('#cm-persona-select');
+    if (personaSel) {
+      personaSel.addEventListener('change', function() {
+        setCurrentPersona(this.value || null);
+      });
+    }
+    root.querySelectorAll('.cm-maestra-card').forEach(function(card) {
+      card.addEventListener('click', function(e) {
+        _showMaestraDetail(this.getAttribute('data-maestra'), e.clientX, e.clientY);
+      });
+    });
+    _bindViewModeToggle(root);
 
     renderTab();
   }
 
+  // task #67 — View mode toggle: detail vs compact (3-axis)
+  function _getViewMode() {
+    try { return localStorage.getItem('cm.viewMode') || 'detail'; } catch(e) { return 'detail'; }
+  }
+  function _setViewMode(m) {
+    try { localStorage.setItem('cm.viewMode', m); } catch(e) {}
+  }
+  function _renderViewModeToggleHTML() {
+    var m = _getViewMode();
+    return '<div class="cm-viewmode-toggle" title="Cambia entre detalle (todas las pestañas) y vista 3 ejes">' +
+      '<button class="cm-vm-btn' + (m === 'detail' ? ' active' : '') + '" data-vm="detail">Detalle</button>' +
+      '<button class="cm-vm-btn' + (m === 'compact' ? ' active' : '') + '" data-vm="compact">3 ejes</button>' +
+      '</div>';
+  }
+  function _bindViewModeToggle(root) {
+    root.querySelectorAll('.cm-vm-btn').forEach(function(b) {
+      b.addEventListener('click', function() {
+        var m = this.getAttribute('data-vm');
+        if (_getViewMode() === m) return;
+        _setViewMode(m);
+        // Reset activeTab to default for the new mode
+        if (m === 'compact') activeTab = 'mapa3';
+        else activeTab = 'dashboard';
+        render();
+      });
+    });
+  }
+
+  function _showMaestraDetail(metric, clientX, clientY) {
+    var existing = document.querySelector('#cm-maestra-popup');
+    if (existing) existing.remove();
+    var mm = (state.dashboard && state.dashboard.master_metrics) || {};
+    var d = mm[metric];
+    if (!d) return;
+    var pop = document.createElement('div');
+    pop.id = 'cm-maestra-popup';
+    pop.className = 'cm-flow-popover';
+    pop.style.left = (clientX + 8) + 'px';
+    pop.style.top = (clientY + 8) + 'px';
+    pop.style.maxWidth = '380px';
+    var html = '<div class="cm-flow-popover-title">' + escHtml(d.label) + ' — Maestra</div>';
+    if (d.score_pct == null) {
+      if (d.driver_count === 0) {
+        html += '<div style="font-size:.82rem;color:#64748B;line-height:1.5;margin-top:6px">';
+        html += 'Aún no hay KPIs marcados como <b>maestros</b> de esta métrica.<br>';
+        html += 'Marca un KPI con <code>is_master=true</code> y <code>master_metric="' + metric + '"</code> en la pestaña KPIs Seguimiento.';
+        html += '</div>';
+      } else {
+        html += '<div style="font-size:.82rem;color:#64748B;margin-top:6px">' + d.driver_count + ' maestro(s) sin medición todavía.</div>';
+      }
+    } else {
+      html += '<div style="font-size:1.6rem;font-weight:800;margin:6px 0;color:' + (d.color === 'green' ? '#10B981' : d.color === 'yellow' ? '#F59E0B' : '#DC2626') + '">' + d.score_pct + '%</div>';
+      html += '<div style="font-size:.74rem;color:#64748B;margin-bottom:8px">Promedio de logro vs target de los KPIs maestros (n=' + d.drivers_with_data + ')</div>';
+    }
+    if (d.drivers && d.drivers.length > 0) {
+      html += '<div style="font-size:.7rem;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-top:10px;margin-bottom:4px">Drivers</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      d.drivers.forEach(function(dr) {
+        var pct = dr.pct == null ? '—' : dr.pct + '%';
+        html += '<div style="padding:8px 10px;border:1px solid #E2E8F0;border-radius:6px;background:#fff">';
+        html += '<div style="font-size:.78rem;font-weight:600">' + escHtml(dr.name) + '</div>';
+        html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">' + (dr.current_value != null ? dr.current_value : '—') + (dr.unit || '') + ' / ' + (dr.target_value != null ? dr.target_value : '—') + (dr.unit || '') + ' · <b>' + pct + '</b></div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '<div style="display:flex;gap:6px;margin-top:10px"><button class="cm-btn cm-btn-ghost" id="cm-maestra-close" style="flex:1">Cerrar</button></div>';
+    pop.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(pop);
+    var rect = pop.getBoundingClientRect();
+    if (rect.right > window.innerWidth - 10) pop.style.left = (window.innerWidth - rect.width - 10) + 'px';
+    if (rect.bottom > window.innerHeight - 10) pop.style.top = (window.innerHeight - rect.height - 10) + 'px';
+    var close = function() { pop.remove(); };
+    document.querySelector('#cm-maestra-close').addEventListener('click', close);
+    setTimeout(function() {
+      document.addEventListener('click', function dismiss(e) {
+        if (!pop.contains(e.target)) { close(); document.removeEventListener('click', dismiss); }
+      });
+    }, 50);
+  }
+
+  function _renderMaestrasStripHTML() {
+    // 4 maestras del CEO: Utilidad, LTV, CAC, Conversión.
+    // Lee state.dashboard.master_metrics (rollup §6.1 del backend).
+    var mm = (state.dashboard && state.dashboard.master_metrics) || {};
+    var order = ['utility', 'ltv', 'cac', 'conversion'];
+    var html = '<div class="cm-maestras-strip" id="cm-maestras-strip" title="Maestras: las 4 métricas que el CEO mira para decidir">';
+    order.forEach(function(m) {
+      var d = mm[m] || { metric: m, label: m, score_pct: null, color: 'gray', driver_count: 0, drivers_with_data: 0 };
+      var color = d.color || 'gray';
+      var pct = d.score_pct == null ? '—' : d.score_pct + '%';
+      var pctCls = d.score_pct == null ? ' cm-maestra-card-value--gray' : '';
+      var meta;
+      if (d.driver_count === 0) meta = 'Sin KPI maestro definido';
+      else if (d.drivers_with_data === 0) meta = d.driver_count + ' maestro(s) · sin medición';
+      else meta = d.drivers_with_data + '/' + d.driver_count + ' maestros con dato';
+      html += '<div class="cm-maestra-card cm-maestra-card--' + color + '" data-maestra="' + m + '" title="' + escHtml(d.label) + ' — clic para detalle">';
+      html += '<div class="cm-maestra-card-label"><span class="cm-maestra-card-dot"></span>' + escHtml(d.label || m) + '</div>';
+      html += '<div class="cm-maestra-card-value' + pctCls + '">' + pct + '</div>';
+      html += '<div class="cm-maestra-card-meta">' + meta + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function _renderPersonaSwitcherHTML() {
+    var current = getCurrentPersona();
+    var label = current ? '' : '<span style="font-size:.7rem;color:#DC2626;font-weight:600;margin-right:6px">Selecciona quién eres →</span>';
+    var html = '<div class="cm-persona-switcher">';
+    html += label;
+    html += '<span style="font-size:.7rem;color:var(--text-muted);font-weight:600;margin-right:6px">Yo soy:</span>';
+    html += '<select id="cm-persona-select" class="cm-persona-select">';
+    html += '<option value="">— Selecciona —</option>';
+    (state.people || []).forEach(function(p) {
+      var sel = (currentPersonaId && String(p.id) === String(currentPersonaId)) ? ' selected' : '';
+      html += '<option value="' + p.id + '"' + sel + '>' + escHtml(p.name) + '</option>';
+    });
+    html += '</select>';
+    html += '</div>';
+    return html;
+  }
+
+  function _miTrabajoPendingCount() {
+    if (!currentPersonaId) return 0;
+    var pid = currentPersonaId;
+    var tps = state.touchpoints.filter(function(t){ return String(t.responsable_id) === String(pid); }).length;
+    var fr = state.frictions.filter(function(f){ return String(f.responsable_id) === String(pid) && f.status !== 'completed'; }).length;
+    var inis = state.iniciativas.filter(function(i){ return String(i.responsable_id) === String(pid) && i.status !== 'completed'; }).length;
+    var kpis = state.kpis.filter(function(k){ return String(k.owner_id) === String(pid); }).length;
+    return tps + fr + inis + kpis;
+  }
+
   function tabBtn(id, label, badge) {
-    return '<button class="cm-tab' + (activeTab === id ? ' active' : '') + '" data-tab="' + id + '">' + label + (badge || '') + '</button>';
+    var sel = activeTab === id ? 'true' : 'false';
+    return '<button class="cm-tab' + (activeTab === id ? ' active' : '') + '" data-tab="' + id + '" role="tab" aria-selected="' + sel + '">' + label + (badge || '') + '</button>';
   }
 
   function renderTab() {
     var main = container.querySelector('#cm-main');
     if (!main) return;
-    if (activeTab === 'dashboard') renderDashboard(main);
+    if (activeTab === 'quickstart') renderQuickStart(main);
+    else if (activeTab === 'mitrabajo') renderMiTrabajo(main);
+    else if (activeTab === 'dashboard') renderDashboard(main);
     else if (activeTab === 'proceso') renderProceso(main);
     else if (activeTab === 'mapavisual') renderMapaVisual(main);
     else if (activeTab === 'fricciones') renderFricciones(main);
@@ -1539,6 +2153,291 @@ window.ComercialModule = (function() {
     else if (activeTab === 'equipo') renderEquipo(main);
     else if (activeTab === 'iniciativas') renderIniciativas(main);
     else if (activeTab === 'kpis') renderKpisSeguimiento(main);
+    else if (activeTab === 'gobernanza') renderGobernanza(main);
+    // Compact mode (3 ejes) — task #67
+    else if (activeTab === 'mapa3') renderMapa3(main);
+    else if (activeTab === 'trabajo3') renderTrabajo3(main);
+    else if (activeTab === 'mediciones3') renderMediciones3(main);
+  }
+
+  // Compact mode renderers (#67 — vista 3 ejes)
+  // Stack existing renders with section headers so the user keeps
+  // the same UI pieces but sees them grouped by intent.
+  function _composeSection(title, hint) {
+    return '<div class="cm-compose-section-header">' +
+      '<div class="cm-compose-title">' + escHtml(title) + '</div>' +
+      (hint ? '<div class="cm-compose-hint">' + escHtml(hint) + '</div>' : '') +
+      '</div>';
+  }
+
+  function renderMapa3(el) {
+    el.innerHTML =
+      _composeSection('Mapa Visual', 'Canvas del journey con flechas y fases') +
+      '<div id="cm-compose-mapavisual"></div>' +
+      _composeSection('Mapa de Procesos', 'Tabla de touchpoints ordenable') +
+      '<div id="cm-compose-proceso"></div>';
+    var mv = el.querySelector('#cm-compose-mapavisual');
+    var pr = el.querySelector('#cm-compose-proceso');
+    if (mv) renderMapaVisual(mv);
+    if (pr) renderProceso(pr);
+  }
+
+  function renderTrabajo3(el) {
+    el.innerHTML =
+      _composeSection('Fricciones & Tareas', 'Bloqueos detectados y trabajo en curso') +
+      '<div id="cm-compose-fricciones"></div>' +
+      _composeSection('Iniciativas', 'Proyectos estratégicos del trimestre') +
+      '<div id="cm-compose-iniciativas"></div>' +
+      _composeSection('Equipo', 'Personas y responsabilidades') +
+      '<div id="cm-compose-equipo"></div>' +
+      _composeSection('Gobernanza', 'Carta, huecos y pruebas de validación') +
+      '<div id="cm-compose-gobernanza"></div>';
+    var f = el.querySelector('#cm-compose-fricciones');
+    var i = el.querySelector('#cm-compose-iniciativas');
+    var eq = el.querySelector('#cm-compose-equipo');
+    var g = el.querySelector('#cm-compose-gobernanza');
+    if (f) renderFricciones(f);
+    if (i) renderIniciativas(i);
+    if (eq) renderEquipo(eq);
+    if (g) renderGobernanza(g);
+  }
+
+  function renderMediciones3(el) {
+    el.innerHTML =
+      _composeSection('Dashboard', 'Estado general del módulo y maestras') +
+      '<div id="cm-compose-dashboard"></div>' +
+      _composeSection('KPIs Seguimiento', 'Histórico de medición de KPIs') +
+      '<div id="cm-compose-kpis"></div>' +
+      _composeSection('Linea de Tiempo', 'Bitácora de cambios') +
+      '<div id="cm-compose-timeline"></div>';
+    var d = el.querySelector('#cm-compose-dashboard');
+    var k = el.querySelector('#cm-compose-kpis');
+    var t = el.querySelector('#cm-compose-timeline');
+    if (d) renderDashboard(d);
+    if (k) renderKpisSeguimiento(k);
+    if (t) renderTimeline(t);
+  }
+
+  /* ──────────────────────────────────────────────────
+     TAB 0: MI TRABAJO (vista filtrada por persona)
+     ────────────────────────────────────────────────── */
+  function renderMiTrabajo(el) {
+    var persona = getCurrentPersona();
+    var html = '';
+    html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">';
+    html += '<div class="cm-section-title" style="margin:0">★ Mi Trabajo</div>';
+    if (persona) {
+      html += personAvatar(persona.id, 28);
+      html += '<span style="font-weight:600;color:var(--text-primary)">' + escHtml(persona.name) + '</span>';
+      if (persona.role) html += '<span style="color:var(--text-muted);font-size:.78rem">— ' + escHtml(persona.role) + '</span>';
+    }
+    html += '</div>';
+
+    if (!persona) {
+      html += '<div style="padding:48px 24px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;text-align:center">';
+      html += '<div style="font-size:2rem;margin-bottom:8px">👋</div>';
+      html += '<div style="font-weight:700;font-size:1.1rem;color:#92400E;margin-bottom:6px">¿Quién eres?</div>';
+      html += '<div style="color:#92400E;font-size:.85rem;margin-bottom:14px">Selecciona tu nombre en el dropdown <strong>"Yo soy"</strong> de arriba a la derecha para ver tu tablero personal.</div>';
+      html += '<div style="color:var(--text-muted);font-size:.75rem">Mi Trabajo te muestra solo lo tuyo: touchpoints donde eres responsable, fricciones que tienes que resolver, iniciativas activas y KPIs que mides.</div>';
+      html += '</div>';
+      el.innerHTML = html;
+      return;
+    }
+
+    var pid = persona.id;
+    var myTps = state.touchpoints.filter(function(t){ return String(t.responsable_id) === String(pid); });
+    var myFr = state.frictions.filter(function(f){ return String(f.responsable_id) === String(pid); });
+    var myInis = state.iniciativas.filter(function(i){ return String(i.responsable_id) === String(pid); });
+    var myKpis = state.kpis.filter(function(k){ return String(k.owner_id) === String(pid); });
+
+    // Quick-stats strip
+    html += '<div class="cm-mt-stats">';
+    html += _miStatCard('Touchpoints', myTps.length, 'donde soy responsable', '#4C6EF5');
+    var openFr = myFr.filter(function(f){ return f.status !== 'completed'; }).length;
+    html += _miStatCard('Fricciones', openFr, 'abiertas a mi cargo', '#F59E0B');
+    var openInis = myInis.filter(function(i){ return i.status !== 'completed'; }).length;
+    html += _miStatCard('Iniciativas', openInis, 'activas', '#8B5CF6');
+    html += _miStatCard('KPIs', myKpis.length, 'que mido', '#10B981');
+    html += '</div>';
+
+    // Two-column layout
+    html += '<div class="cm-mt-grid">';
+
+    // ── Mis Fricciones (priority: vencidas primero)
+    html += '<div class="cm-mt-card">';
+    html += '<div class="cm-mt-card-title">⚡ Mis Fricciones <span class="cm-mt-card-count">' + openFr + '</span></div>';
+    var sortedFr = myFr.filter(function(f){ return f.status !== 'completed'; }).sort(function(a,b) {
+      var ad = a.due_date ? daysDiff(a.due_date) : 9999;
+      var bd = b.due_date ? daysDiff(b.due_date) : 9999;
+      return ad - bd;
+    });
+    if (sortedFr.length === 0) {
+      html += '<div class="cm-mt-empty">Sin fricciones a tu cargo. ¡Limpio!</div>';
+    } else {
+      html += '<ul class="cm-mt-list">';
+      sortedFr.slice(0, 8).forEach(function(f) {
+        var statusCfg = { pending: ['Pendiente','#94A3B8'], analysis: ['Análisis','#3B82F6'], in_progress: ['En curso','#F59E0B'], validation: ['Validación','#8B5CF6'], completed: ['Completada','#10B981'] };
+        var sc = statusCfg[f.status] || statusCfg.pending;
+        var dueLabel = '';
+        if (f.due_date) {
+          var dd = daysDiff(f.due_date);
+          if (dd < 0) dueLabel = '<span style="color:#DC2626;font-weight:700;font-size:.7rem">Vencida hace ' + Math.abs(dd) + 'd</span>';
+          else if (dd === 0) dueLabel = '<span style="color:#F59E0B;font-weight:700;font-size:.7rem">Vence hoy</span>';
+          else if (dd <= 7) dueLabel = '<span style="color:#F59E0B;font-size:.7rem">En ' + dd + 'd</span>';
+          else dueLabel = '<span style="color:var(--text-muted);font-size:.7rem">En ' + dd + 'd</span>';
+        }
+        html += '<li class="cm-mt-item" data-mt-friction="' + f.id + '">';
+        html += '<span class="cm-mt-status-dot" style="background:' + sc[1] + '"></span>';
+        html += '<div class="cm-mt-item-body">';
+        html += '<div class="cm-mt-item-title">' + escHtml(f.name) + '</div>';
+        html += '<div class="cm-mt-item-meta">' + sc[0] + (dueLabel ? ' · ' + dueLabel : '') + '</div>';
+        html += '</div>';
+        html += '</li>';
+      });
+      html += '</ul>';
+      if (sortedFr.length > 8) {
+        html += '<button class="cm-mt-more" data-mt-go="fricciones">Ver las ' + sortedFr.length + ' completas →</button>';
+      }
+    }
+    html += '</div>';
+
+    // ── Mis Iniciativas
+    html += '<div class="cm-mt-card">';
+    html += '<div class="cm-mt-card-title">🚀 Mis Iniciativas <span class="cm-mt-card-count">' + openInis + '</span></div>';
+    var sortedInis = myInis.filter(function(i){ return i.status !== 'completed'; }).sort(function(a,b) {
+      var ad = a.due_date ? daysDiff(a.due_date) : 9999;
+      var bd = b.due_date ? daysDiff(b.due_date) : 9999;
+      return ad - bd;
+    });
+    if (sortedInis.length === 0) {
+      html += '<div class="cm-mt-empty">Sin iniciativas activas.</div>';
+    } else {
+      html += '<ul class="cm-mt-list">';
+      sortedInis.slice(0, 8).forEach(function(i) {
+        var dueLabel = '';
+        if (i.due_date) {
+          var dd = daysDiff(i.due_date);
+          if (dd < 0) dueLabel = '<span style="color:#DC2626;font-weight:700;font-size:.7rem">Vencida hace ' + Math.abs(dd) + 'd</span>';
+          else if (dd <= 7) dueLabel = '<span style="color:#F59E0B;font-size:.7rem">En ' + dd + 'd</span>';
+          else dueLabel = '<span style="color:var(--text-muted);font-size:.7rem">En ' + dd + 'd</span>';
+        }
+        var prog = i.progress || 0;
+        html += '<li class="cm-mt-item" data-mt-iniciativa="' + i.id + '">';
+        html += '<div class="cm-mt-item-body">';
+        html += '<div class="cm-mt-item-title">' + escHtml(i.name) + '</div>';
+        html += '<div class="cm-mt-item-meta" style="display:flex;align-items:center;gap:8px">';
+        html += '<div style="flex:1;height:6px;background:#E2E8F0;border-radius:3px;overflow:hidden"><div style="height:100%;background:#8B5CF6;width:' + prog + '%"></div></div>';
+        html += '<span style="font-size:.7rem;font-weight:700;color:var(--text-muted)">' + prog + '%</span>';
+        if (dueLabel) html += '<span>' + dueLabel + '</span>';
+        html += '</div>';
+        html += '</div>';
+        html += '</li>';
+      });
+      html += '</ul>';
+      if (sortedInis.length > 8) {
+        html += '<button class="cm-mt-more" data-mt-go="iniciativas">Ver las ' + sortedInis.length + ' completas →</button>';
+      }
+    }
+    html += '</div>';
+
+    // ── Mis Touchpoints
+    html += '<div class="cm-mt-card">';
+    html += '<div class="cm-mt-card-title">📍 Mis Touchpoints <span class="cm-mt-card-count">' + myTps.length + '</span></div>';
+    if (myTps.length === 0) {
+      html += '<div class="cm-mt-empty">No tienes touchpoints asignados como responsable.</div>';
+    } else {
+      html += '<ul class="cm-mt-list">';
+      myTps.slice(0, 8).forEach(function(t) {
+        var phaseObj = state.phases.find(function(p){ return String(p.id) === String(t.phase_id); }) || {};
+        var hasFr = state.frictions.some(function(f){ return f.touchpoint_id === t.id && f.status !== 'completed'; });
+        html += '<li class="cm-mt-item" data-mt-touchpoint="' + t.id + '">';
+        if (hasFr) html += '<span class="cm-mt-status-dot" style="background:#F59E0B"></span>';
+        else html += '<span class="cm-mt-status-dot" style="background:#10B981"></span>';
+        html += '<div class="cm-mt-item-body">';
+        html += '<div class="cm-mt-item-title">' + escHtml(t.name) + '</div>';
+        html += '<div class="cm-mt-item-meta">' + escHtml(phaseObj.name || '') + (hasFr ? ' · <span style="color:#F59E0B">con fricción</span>' : '') + '</div>';
+        html += '</div>';
+        html += '</li>';
+      });
+      html += '</ul>';
+      if (myTps.length > 8) {
+        html += '<button class="cm-mt-more" data-mt-go="proceso">Ver los ' + myTps.length + ' completos →</button>';
+      }
+    }
+    html += '</div>';
+
+    // ── Mis KPIs
+    html += '<div class="cm-mt-card">';
+    html += '<div class="cm-mt-card-title">📊 KPIs que mido <span class="cm-mt-card-count">' + myKpis.length + '</span></div>';
+    if (myKpis.length === 0) {
+      html += '<div class="cm-mt-empty">No tienes KPIs como owner.</div>';
+    } else {
+      html += '<ul class="cm-mt-list">';
+      myKpis.slice(0, 8).forEach(function(k) {
+        var status = _kpiStatusByThresholds(k, k.current_value);
+        var dotColor = { super_green: '#059669', green: '#10B981', yellow: '#F59E0B', red: '#EF4444', gray: '#94A3B8' }[status] || '#94A3B8';
+        html += '<li class="cm-mt-item" data-mt-kpi="' + escHtml(k.id) + '">';
+        html += '<span class="cm-mt-status-dot" style="background:' + dotColor + '"></span>';
+        html += '<div class="cm-mt-item-body">';
+        html += '<div class="cm-mt-item-title">' + escHtml(k.name) + '</div>';
+        var valStr = (k.current_value !== null && k.current_value !== undefined) ? k.current_value : '—';
+        var tgtStr = (k.target_value !== null && k.target_value !== undefined) ? k.target_value : '—';
+        html += '<div class="cm-mt-item-meta">Actual: <strong>' + valStr + '</strong> · Meta: ' + tgtStr + (k.unit ? ' ' + escHtml(k.unit) : '') + '</div>';
+        html += '</div>';
+        html += '</li>';
+      });
+      html += '</ul>';
+      if (myKpis.length > 8) {
+        html += '<button class="cm-mt-more" data-mt-go="kpis">Ver los ' + myKpis.length + ' completos →</button>';
+      }
+    }
+    html += '</div>';
+
+    html += '</div>'; // grid
+
+    el.innerHTML = html;
+
+    // Event bindings
+    el.querySelectorAll('[data-mt-touchpoint]').forEach(function(li) {
+      li.addEventListener('click', function() {
+        _showCanvasDrawerTouchpoint(parseInt(this.dataset.mtTouchpoint, 10));
+      });
+    });
+    el.querySelectorAll('[data-mt-friction]').forEach(function(li) {
+      li.addEventListener('click', function() {
+        var fid = parseInt(this.dataset.mtFriction, 10);
+        var f = state.frictions.find(function(x){ return x.id === fid; });
+        if (f && f.touchpoint_id) _showCanvasDrawerTouchpoint(f.touchpoint_id);
+        else { activeTab = 'fricciones'; render(); }
+      });
+    });
+    el.querySelectorAll('[data-mt-iniciativa]').forEach(function(li) {
+      li.addEventListener('click', function() {
+        activeTab = 'iniciativas';
+        render();
+      });
+    });
+    el.querySelectorAll('[data-mt-kpi]').forEach(function(li) {
+      li.addEventListener('click', function() {
+        activeTab = 'kpis';
+        render();
+      });
+    });
+    el.querySelectorAll('[data-mt-go]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        activeTab = this.dataset.mtGo;
+        render();
+      });
+    });
+  }
+
+  function _miStatCard(label, value, sub, color) {
+    var html = '<div class="cm-mt-stat" style="border-left:4px solid ' + color + '">';
+    html += '<div class="cm-mt-stat-value" style="color:' + color + '">' + value + '</div>';
+    html += '<div class="cm-mt-stat-label">' + escHtml(label) + '</div>';
+    html += '<div class="cm-mt-stat-sub">' + escHtml(sub) + '</div>';
+    html += '</div>';
+    return html;
   }
 
   /* ──────────────────────────────────────────────────
@@ -1579,6 +2478,10 @@ window.ComercialModule = (function() {
     html += '<div class="cm-progress-bar"><div class="cm-progress-fill" style="width:' + pct + '%"></div></div>';
     html += '<div class="cm-progress-label"><span>Progreso general de fricciones</span><span>' + fmtPct(pct) + '</span></div>';
     html += '</div>';
+
+    // task #68: Salud de Captura desactivada — el strip de 4 maestras + el badge
+    // por touchpoint sustituye este resumen agregado.
+    // html += _capturaSaludHTML();
 
     // Phase pipeline grid
     html += '<div class="cm-section-title">Pipeline de Fases</div>';
@@ -1718,7 +2621,125 @@ window.ComercialModule = (function() {
       });
   }
 
+  /* ── Salud de captura: completitud del modelo ── */
+  function _capturaSaludHTML() {
+    var tps = state.touchpoints;
+    var fr = state.frictions;
+    if (tps.length === 0) return '';
+
+    var withResp = tps.filter(function(t){ return t.responsable_id; }).length;
+    var tpIdsWithKpi = {};
+    (state.kpi_touchpoints || []).forEach(function(lk){ tpIdsWithKpi[lk.touchpoint_id] = true; });
+    var withKpi = tps.filter(function(t){ return tpIdsWithKpi[t.id]; }).length;
+    var tpIdsWithCh = {};
+    (state.touchpoint_channels || []).forEach(function(lc){ tpIdsWithCh[lc.touchpoint_id] = true; });
+    var withCh = tps.filter(function(t){ return tpIdsWithCh[t.id]; }).length;
+    var frWithIni = fr.filter(function(f) {
+      return state.iniciativas.some(function(i) {
+        var fids = i.friction_ids || (i.friction_id ? [i.friction_id] : []);
+        return fids.indexOf(f.id) >= 0;
+      });
+    }).length;
+
+    function metric(label, num, den, color, kind) {
+      var pct = den === 0 ? 0 : Math.round(num / den * 100);
+      var missing = den - num;
+      return '<div class="cm-salud-card" data-salud-kind="' + kind + '">' +
+        '<div class="cm-salud-label">' + label + '</div>' +
+        '<div class="cm-salud-pct" style="color:' + color + '">' + pct + '%</div>' +
+        '<div class="cm-salud-bar"><div class="cm-salud-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+        '<div class="cm-salud-meta">' + num + ' de ' + den + (missing > 0 ? ' · <strong style="color:#DC2626">faltan ' + missing + '</strong>' : ' · ✓ completo') + '</div>' +
+      '</div>';
+    }
+
+    var html = '<div class="cm-section-title">Salud de captura</div>';
+    html += '<div style="font-size:.78rem;color:var(--text-muted);margin-top:-12px;margin-bottom:14px">Qué tan completo está el modelo. Click en cada card para ver lo que falta.</div>';
+    html += '<div class="cm-salud-grid">';
+    html += metric('Touchpoints con responsable', withResp, tps.length, '#4C6EF5', 'no_responsable');
+    html += metric('Touchpoints con KPI', withKpi, tps.length, '#10B981', 'no_kpi');
+    html += metric('Touchpoints con canal', withCh, tps.length, '#06B6D4', 'no_canal');
+    html += metric('Fricciones con iniciativa', frWithIni, fr.length, '#8B5CF6', 'no_iniciativa');
+    html += '</div>';
+    return html;
+  }
+
+  function _showSaludMissingModal(kind) {
+    var title = '', items = [], renderItem;
+    if (kind === 'no_responsable') {
+      title = 'Touchpoints sin responsable';
+      items = state.touchpoints.filter(function(t){ return !t.responsable_id; });
+      renderItem = function(t) {
+        var phaseObj = state.phases.find(function(p){ return String(p.id) === String(t.phase_id); }) || {};
+        return '<li class="cm-salud-miss-item" data-tp-id="' + t.id + '"><strong>' + escHtml(t.name) + '</strong> <span style="color:var(--text-muted);font-size:.72rem">— ' + escHtml(phaseObj.name || '') + '</span></li>';
+      };
+    } else if (kind === 'no_kpi') {
+      title = 'Touchpoints sin KPI vinculado';
+      var kpiTpIds = {};
+      (state.kpi_touchpoints || []).forEach(function(lk){ kpiTpIds[lk.touchpoint_id] = true; });
+      items = state.touchpoints.filter(function(t){ return !kpiTpIds[t.id]; });
+      renderItem = function(t) {
+        var phaseObj = state.phases.find(function(p){ return String(p.id) === String(t.phase_id); }) || {};
+        return '<li class="cm-salud-miss-item" data-tp-id="' + t.id + '"><strong>' + escHtml(t.name) + '</strong> <span style="color:var(--text-muted);font-size:.72rem">— ' + escHtml(phaseObj.name || '') + '</span></li>';
+      };
+    } else if (kind === 'no_canal') {
+      title = 'Touchpoints sin canal asignado';
+      var chTpIds = {};
+      (state.touchpoint_channels || []).forEach(function(lc){ chTpIds[lc.touchpoint_id] = true; });
+      items = state.touchpoints.filter(function(t){ return !chTpIds[t.id]; });
+      renderItem = function(t) {
+        var phaseObj = state.phases.find(function(p){ return String(p.id) === String(t.phase_id); }) || {};
+        return '<li class="cm-salud-miss-item" data-tp-id="' + t.id + '"><strong>' + escHtml(t.name) + '</strong> <span style="color:var(--text-muted);font-size:.72rem">— ' + escHtml(phaseObj.name || '') + '</span></li>';
+      };
+    } else if (kind === 'no_iniciativa') {
+      title = 'Fricciones sin iniciativa';
+      items = state.frictions.filter(function(f) {
+        return !state.iniciativas.some(function(i) {
+          var fids = i.friction_ids || (i.friction_id ? [i.friction_id] : []);
+          return fids.indexOf(f.id) >= 0;
+        });
+      });
+      renderItem = function(f) {
+        var tp = state.touchpoints.find(function(t){ return t.id === f.touchpoint_id; });
+        return '<li class="cm-salud-miss-item" data-tp-id="' + (tp ? tp.id : '') + '"><strong>' + escHtml(f.name) + '</strong>' + (tp ? ' <span style="color:var(--text-muted);font-size:.72rem">— en ' + escHtml(tp.name) + '</span>' : '') + '</li>';
+      };
+    }
+    var html = '<div class="cm-modal-backdrop" data-modal="salud-miss"><div class="cm-modal" style="max-width:600px;max-height:80vh;overflow:auto">';
+    html += '<div class="cm-modal-header"><h3>' + escHtml(title) + ' (' + items.length + ')</h3><button class="cm-modal-close">&times;</button></div>';
+    if (items.length === 0) {
+      html += '<div style="padding:24px;text-align:center;color:var(--text-muted)">¡Todo completo en esta dimensión! 🎉</div>';
+    } else {
+      html += '<div style="font-size:.78rem;color:var(--text-muted);padding:0 4px 12px">Click en cualquiera para abrir su ficha y completar.</div>';
+      html += '<ul class="cm-salud-miss-list">';
+      items.forEach(function(it){ html += renderItem(it); });
+      html += '</ul>';
+    }
+    html += '</div></div>';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    var modal = div.firstChild;
+    (document.fullscreenElement || document.body).appendChild(modal);
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal || e.target.classList.contains('cm-modal-close')) {
+        modal.remove();
+      }
+    });
+    modal.querySelectorAll('[data-tp-id]').forEach(function(li) {
+      li.addEventListener('click', function() {
+        var tpId = this.dataset.tpId;
+        if (!tpId) return;
+        modal.remove();
+        _showCanvasDrawerTouchpoint(parseInt(tpId, 10));
+      });
+    });
+  }
+
   function bindDashboardEvents(el) {
+    // Salud de captura clicks
+    el.querySelectorAll('[data-salud-kind]').forEach(function(card) {
+      card.addEventListener('click', function() {
+        _showSaludMissingModal(this.dataset.saludKind);
+      });
+    });
     // Master KPI editing
     el.querySelectorAll('.cm-master-card').forEach(function(card) {
       var kpiId = card.dataset.kpiId;
@@ -1938,11 +2959,16 @@ window.ComercialModule = (function() {
       html += '<div class="ph-name">' + escHtml(phObj.name || '') + '</div>';
       if (phObj.description) {
         var phaseIniCount = state.iniciativas.filter(function(ii) { return String(ii.phase_id || '') === String(phObj.id); }).length;
-        html += '<div class="ph-desc">' + escHtml(phObj.description) + ' &mdash; ' + phaseTps.length + ' touchpoints &mdash; ' + phaseIniCount + ' iniciativas</div>';
+        html += '<div class="ph-desc">' + escHtml(phObj.description) + ' &mdash; ' + phaseTps.length + ' touchpoints &mdash; ' + phaseIniCount + ' iniciativas' + _phaseKpisSummaryHTML(phObj.id) + '</div>';
       }
       html += '</div>';
       if (!isAll) {
+        html += '<div style="display:flex;gap:6px;align-items:center">';
         html += '<button class="cm-btn cm-btn-primary cm-btn-sm cm-new-tp-btn" data-phase-id="' + escHtml(phObj.id) + '">+ Nuevo Touchpoint</button>';
+        html += '<button class="cm-btn cm-btn-sm cm-ai-generate-btn" data-phase-id="' + escHtml(phObj.id) + '" style="background:linear-gradient(135deg,#7C3AED,#4F46E5);color:#fff;border:none">✨ Generar con AI</button>';
+        html += '</div>';
+      } else {
+        html += '<button class="cm-btn cm-btn-sm cm-ai-generate-btn" data-phase-id="" style="background:linear-gradient(135deg,#7C3AED,#4F46E5);color:#fff;border:none">✨ Generar con AI</button>';
       }
       html += '</div>';
 
@@ -1962,12 +2988,14 @@ window.ComercialModule = (function() {
           html += '<td class="cm-tp-drag-handle" title="Arrastra para reordenar (display only)">⠿</td>';
           html += '<td>' + tp.id + '</td>';
           html += '<td style="font-weight:600"><a href="#" class="cm-tp-name-link" data-tp-id="' + escHtml(tp.id) + '" title="Ver ficha del touchpoint">' + escHtml(tp.name) + '</a>' + _badgesHTML(badges) + '</td>';
-          html += '<td>' + escHtml(tp.canal || '') + '</td>';
+          html += '<td>' + channelChipsHTML(tp.id) + '</td>';
           html += '<td>' + (tp.responsable_id ? personAvatar(tp.responsable_id, 20) + ' ' : '') + escHtml(respName) + '</td>';
           var tpKpis = getLinkedKpisForTouchpoint(tp.id);
-          html += '<td>' + escHtml(tp.kpi || '');
+          html += '<td>';
           if (tpKpis.length > 0) {
-            html += '<div style="margin-top:4px">' + kpiBadges(tpKpis) + '</div>';
+            html += kpiBadges(tpKpis);
+          } else {
+            html += '<span style="color:var(--text-muted);font-size:.72rem;font-style:italic">Sin KPI</span>';
           }
           html += '</td>';
           if (hasFriction && frictionText) {
@@ -2069,6 +3097,13 @@ window.ComercialModule = (function() {
       } else if (actions.length > 0) {
         html += '<div style="font-size:.72rem;color:var(--text-muted);font-style:italic">Sugerencias: ' + actions.map(escHtml).join(', ') + '</div>';
       }
+      // task #64: Pasos del Wizard Motor de Confianza
+      var stepCount = (state.trust_pillar_steps || []).filter(function(s){ return String(s.pillar_id) === String(p.id); }).length;
+      var doneSteps = (state.trust_pillar_steps || []).filter(function(s){ return String(s.pillar_id) === String(p.id) && s.status === 'completed'; }).length;
+      html += '<div style="margin-top:8px;padding:8px 10px;background:#FAFBFC;border:1px dashed #E2E8F0;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:6px">';
+      html += '<span style="font-size:.7rem;color:var(--text-muted)">📋 Pasos: <b>' + doneSteps + '/' + stepCount + '</b></span>';
+      html += '<button class="cm-drawer-inline-btn cm-pillar-steps-btn" data-pid="' + escHtml(p.id) + '">Abrir wizard →</button>';
+      html += '</div>';
       html += '<div style="margin-top:10px;display:flex;gap:6px">';
       html += '<select class="cm-select cm-pillar-status" data-pid="' + escHtml(p.id) + '" style="font-size:.76rem">';
       ['pending','in_progress','completed'].forEach(function(s) {
@@ -2101,6 +3136,13 @@ window.ComercialModule = (function() {
     el.querySelectorAll('.cm-new-tp-btn').forEach(function(btn) {
       btn.addEventListener('click', function() {
         showCreateTouchpointModal(this.dataset.phaseId, el);
+      });
+    });
+
+    // AI generator buttons (#65 — narrativa → arquitectura)
+    el.querySelectorAll('.cm-ai-generate-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        showAIGeneratorModal(this.dataset.phaseId || null);
       });
     });
 
@@ -2193,6 +3235,13 @@ window.ComercialModule = (function() {
     el.querySelectorAll('.cm-edit-pillar').forEach(function(btn) {
       btn.addEventListener('click', function() {
         showEditPillarModal(this.dataset.pid, el);
+      });
+    });
+
+    // Wizard pasos (#64)
+    el.querySelectorAll('.cm-pillar-steps-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        _showPillarStepsDrawer(this.dataset.pid);
       });
     });
 
@@ -2294,6 +3343,30 @@ window.ComercialModule = (function() {
     low:    { color: '#94A3B8', bg: '#F1F5F9', label: 'Bajo' }
   };
 
+  // Categorías de fricción — autoplan §3.1 / Manifesto (task #63)
+  // 6 tipos canónicos. friction_type es opcional (legacy=null).
+  var FRICTION_TYPES = [
+    { id: 'time',                  label: 'Tiempo',                    icon: '⏱',  desc: 'Espera o latencia excesiva' },
+    { id: 'repetition',            label: 'Repetición',                icon: '🔁',  desc: 'Cliente repite info ya dada' },
+    { id: 'channel_switch',        label: 'Cambio de canal',           icon: '🔀',  desc: 'Forzado a saltar de canal' },
+    { id: 'incomplete_info',       label: 'Información incompleta',    icon: '❓',  desc: 'Falta dato para decidir/actuar' },
+    { id: 'unmet_expectations',    label: 'Expectativas no cumplidas', icon: '😕',  desc: 'Promesa rota o esperanza fallida' },
+    { id: 'cognitive_effort',      label: 'Esfuerzo cognitivo',        icon: '🧠',  desc: 'Cliente tiene que entender demasiado' },
+  ];
+  function _frictionTypeOptionsHTML(selected) {
+    var html = '<option value="">— Sin tipo —</option>';
+    FRICTION_TYPES.forEach(function(t) {
+      html += '<option value="' + t.id + '"' + (selected === t.id ? ' selected' : '') + '>' + t.icon + ' ' + escHtml(t.label) + '</option>';
+    });
+    return html;
+  }
+  function _frictionTypeChipHTML(typeId) {
+    if (!typeId) return '';
+    var t = FRICTION_TYPES.find(function(x){ return x.id === typeId; });
+    if (!t) return '';
+    return '<span class="cm-fr-type-chip" title="' + escHtml(t.desc) + '">' + t.icon + ' ' + escHtml(t.label) + '</span>';
+  }
+
   /* ──────────────────────────────────────────────────
      MAPA VISUAL v2 — Canvas con toolbar, fullscreen,
      filtros, drag-to-link, crear nodos, bandas de fase
@@ -2316,6 +3389,7 @@ window.ComercialModule = (function() {
     fullscreen: false,
     linkDraft: null,        // { fromType, fromId, fromSide, fromX, fromY, currentX, currentY }
     dropMode: null,         // null | 'touchpoint' | 'friction' | 'note'
+    activeTool: 'select',   // select | pan | touchpoint | friction | note | link
     selectedFlowId: null,   // edge seleccionado
     dropTargetKey: null,    // key del nodo bajo cursor durante drag-to-link
     phaseDrag: null,        // { phaseId, startX, startY, originals: {tpId: {x,y}} }
@@ -2563,6 +3637,28 @@ window.ComercialModule = (function() {
     html += '<button class="cm-canvas-ctrl-btn" id="cm-canvas-reset" title="Reset">↺</button>';
     html += '<span class="cm-canvas-zoom-label" id="cm-canvas-zoom-label">100%</span>';
     html += '</div>';
+    // Floating Figma-style toolbox (top-center, dentro del viewport)
+    html += '<div class="cm-canvas-figma-toolbar" id="cm-canvas-figma-toolbar">';
+    html += '<button class="cm-figma-tool active" data-tool="select" data-shortcut="V" aria-label="Seleccionar"><span class="cm-figma-tool-ico">🖱️</span><span class="cm-figma-tool-kbd">V</span></button>';
+    html += '<button class="cm-figma-tool" data-tool="pan" data-shortcut="M" aria-label="Mover canvas"><span class="cm-figma-tool-ico">✋</span><span class="cm-figma-tool-kbd">M</span></button>';
+    html += '<div class="cm-figma-tool-sep"></div>';
+    html += '<button class="cm-figma-tool" data-tool="touchpoint" data-shortcut="T" aria-label="Crear touchpoint"><span class="cm-figma-tool-ico">📍</span><span class="cm-figma-tool-kbd">T</span></button>';
+    html += '<button class="cm-figma-tool" data-tool="friction" data-shortcut="F" aria-label="Crear fricción"><span class="cm-figma-tool-ico">⚠️</span><span class="cm-figma-tool-kbd">F</span></button>';
+    html += '<button class="cm-figma-tool" data-tool="note" data-shortcut="N" aria-label="Crear nota libre"><span class="cm-figma-tool-ico">📝</span><span class="cm-figma-tool-kbd">N</span></button>';
+    html += '<div class="cm-figma-tool-sep"></div>';
+    html += '<button class="cm-figma-tool" data-tool="link" data-shortcut="L" aria-label="Conectar nodos"><span class="cm-figma-tool-ico">🔗</span><span class="cm-figma-tool-kbd">L</span></button>';
+    html += '<div class="cm-figma-tool-sep"></div>';
+    html += '<button class="cm-figma-tool" data-action="autolayout" data-shortcut="R" aria-label="Reordenar todo (auto-layout)"><span class="cm-figma-tool-ico">📐</span><span class="cm-figma-tool-kbd">R</span></button>';
+    html += '<button class="cm-figma-tool" data-action="fit" data-shortcut="0" aria-label="Ajustar todo a la pantalla"><span class="cm-figma-tool-ico">🎯</span><span class="cm-figma-tool-kbd">0</span></button>';
+    html += '</div>';
+    // Helper hint debajo del toolbox (muestra acción del tool activo)
+    html += '<div class="cm-canvas-figma-hint" id="cm-canvas-figma-hint">Selección — clic para abrir un nodo · arrastra el canvas para mover</div>';
+    // Quick menu (aparece en dblclick / context menu en canvas vacío)
+    html += '<div class="cm-canvas-quick-menu" id="cm-canvas-quick-menu" style="display:none">';
+    html += '<button data-quick="touchpoint">📍 Touchpoint</button>';
+    html += '<button data-quick="friction">⚠️ Fricción</button>';
+    html += '<button data-quick="note">📝 Nota libre</button>';
+    html += '</div>';
     html += '</div>';
 
     // Drawer
@@ -2584,6 +3680,8 @@ window.ComercialModule = (function() {
       _canvasFit();
       _applyCanvasFilters();
       _bindMultiCheckSearch(document);
+      // Inicializa tool default = select (cursor flecha, hint contextual)
+      _setFigmaTool('select');
       // Focus opcional desde tabla
       if (pendingCanvasFocus) {
         var pf = pendingCanvasFocus;
@@ -2664,7 +3762,12 @@ window.ComercialModule = (function() {
     html += '<span class="cm-canvas-node-title">' + escHtml(tp.name) + '</span>';
     html += '</div>';
     html += '<div class="cm-canvas-node-meta">';
-    if (tp.canal) html += '<span class="cm-mv-tag">' + escHtml(tp.canal) + '</span>';
+    var tpCanvasChs = getChannelsForTouchpoint(tp.id);
+    if (tpCanvasChs.length > 0) {
+      tpCanvasChs.forEach(function(c){ html += channelChip(c); });
+    } else if (tp.canal) {
+      html += '<span class="cm-mv-tag">' + escHtml(tp.canal) + '</span>';
+    }
     if (resp) html += '<span class="cm-mv-tag cm-mv-tag-resp">' + escHtml(resp) + '</span>';
     if (isParallel) html += '<span class="cm-mv-tag cm-mv-tag-parallel" title="Sin dependencias en su fase, sucede durante esta etapa">⏱ paralelo</span>';
     html += '</div>';
@@ -2727,6 +3830,7 @@ window.ComercialModule = (function() {
     if (isResolved) html += '<span class="cm-canvas-fr-resolved">✓</span>';
     html += '</div>';
     html += '<div class="cm-canvas-fr-name">' + escHtml(f.name) + '</div>';
+    if (f.friction_type) html += '<div style="margin-top:4px">' + _frictionTypeChipHTML(f.friction_type) + '</div>';
     if (fInis.length > 0) {
       var col = avgProg >= 100 ? '#10B981' : (avgProg >= 50 ? '#6366F1' : '#F59E0B');
       html += '<div class="cm-canvas-fr-progress"><div style="flex:1;height:3px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + avgProg + '%;background:' + col + '"></div></div><span style="font-size:.62rem;font-weight:700;color:' + col + '">' + fInis.length + ' ini · ' + avgProg + '%</span></div>';
@@ -3066,7 +4170,7 @@ window.ComercialModule = (function() {
     pop.innerHTML = palette.map(function(c) {
       return '<button class="cm-color-swatch" data-color="' + c + '" style="background:' + c + '"></button>';
     }).join('');
-    document.body.appendChild(pop);
+    (document.fullscreenElement || document.body).appendChild(pop);
     pop.querySelectorAll('[data-color]').forEach(function(b) {
       b.addEventListener('click', function() {
         var col = this.getAttribute('data-color');
@@ -3107,7 +4211,7 @@ window.ComercialModule = (function() {
     pop.style.display = 'block';
     var btnDel = '<button data-action="delete"' + (hasTps ? ' disabled style="opacity:.5;cursor:not-allowed"' : '') + '>🗑️ Eliminar fase' + (hasTps ? ' (tiene touchpoints)' : '') + '</button>';
     pop.innerHTML = btnDel;
-    document.body.appendChild(pop);
+    (document.fullscreenElement || document.body).appendChild(pop);
     pop.querySelectorAll('[data-action]').forEach(function(b) {
       b.addEventListener('click', function() {
         var act = this.getAttribute('data-action');
@@ -3227,6 +4331,8 @@ window.ComercialModule = (function() {
       if (e.target.closest('.cm-canvas-node')) return;
       if (e.target.closest('.cm-canvas-controls')) return;
       if (e.target.closest('.cm-canvas-toolbar')) return;
+      if (e.target.closest('.cm-canvas-figma-toolbar')) return;
+      if (e.target.closest('.cm-canvas-quick-menu')) return;
       canvasState.isPanning = true;
       canvasState.panStart = { x: e.clientX - canvasState.x, y: e.clientY - canvasState.y };
       viewport.style.cursor = 'grabbing';
@@ -3250,12 +4356,80 @@ window.ComercialModule = (function() {
       if (e.target.closest('.cm-canvas-node')) return;
       if (e.target.closest('.cm-canvas-controls')) return;
       if (e.target.closest('.cm-canvas-toolbar')) return;
+      if (e.target.closest('.cm-canvas-figma-toolbar')) return;
+      if (e.target.closest('.cm-canvas-quick-menu')) return;
       if (canvasState.dropMode) {
         var coords = _viewportToStageCoords(e.clientX, e.clientY, viewport);
         _handleCanvasDrop(canvasState.dropMode, coords.x, coords.y);
+        // Vuelve a Selección (default) después de crear
+        _setFigmaTool('select');
         return;
       }
       _closeCanvasDrawer();
+      _hideQuickMenu();
+    });
+
+    // Double-click en canvas vacío → quick menu para crear
+    viewport.addEventListener('dblclick', function(e) {
+      if (e.target.closest('.cm-canvas-node')) return;
+      if (e.target.closest('.cm-canvas-controls')) return;
+      if (e.target.closest('.cm-canvas-toolbar')) return;
+      if (e.target.closest('.cm-canvas-figma-toolbar')) return;
+      e.preventDefault();
+      var coords = _viewportToStageCoords(e.clientX, e.clientY, viewport);
+      _showQuickMenu(viewport, e.clientX, e.clientY, coords.x, coords.y);
+    });
+
+    // Right-click en canvas vacío → mismo quick menu
+    viewport.addEventListener('contextmenu', function(e) {
+      if (e.target.closest('.cm-canvas-node')) return;
+      if (e.target.closest('.cm-canvas-controls')) return;
+      if (e.target.closest('.cm-canvas-figma-toolbar')) return;
+      e.preventDefault();
+      var coords = _viewportToStageCoords(e.clientX, e.clientY, viewport);
+      _showQuickMenu(viewport, e.clientX, e.clientY, coords.x, coords.y);
+    });
+
+    // Toolbox Figma: tool buttons + action buttons
+    var toolbox = el.querySelector('#cm-canvas-figma-toolbar');
+    if (toolbox) {
+      toolbox.querySelectorAll('.cm-figma-tool').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var tool = this.getAttribute('data-tool');
+          var action = this.getAttribute('data-action');
+          if (tool) {
+            _setFigmaTool(tool);
+          } else if (action === 'autolayout') {
+            // Re-aplica auto-layout: dispara el botón existente del top toolbar
+            var alBtn = el.querySelector('#cm-canvas-autolayout-btn');
+            if (alBtn) alBtn.click();
+          } else if (action === 'fit') {
+            _canvasFit();
+          }
+        });
+      });
+    }
+
+    // Quick menu: clicks en opciones
+    var quickMenu = el.querySelector('#cm-canvas-quick-menu');
+    if (quickMenu) {
+      quickMenu.querySelectorAll('button').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var type = this.getAttribute('data-quick');
+          var sx = parseFloat(quickMenu.getAttribute('data-stage-x'));
+          var sy = parseFloat(quickMenu.getAttribute('data-stage-y'));
+          _hideQuickMenu();
+          _handleCanvasDrop(type, sx, sy);
+        });
+      });
+    }
+    document.addEventListener('mousedown', function(e) {
+      var menu = document.querySelector('#cm-canvas-quick-menu');
+      if (!menu || menu.style.display === 'none') return;
+      if (e.target.closest('.cm-canvas-quick-menu')) return;
+      _hideQuickMenu();
     });
 
     // Wheel zoom
@@ -3407,10 +4581,12 @@ window.ComercialModule = (function() {
     });
     var autoBtn = el.querySelector('#cm-canvas-autolayout-btn');
     if (autoBtn) autoBtn.addEventListener('click', function() {
-      if (!confirm('Re-aplicar auto-layout sobrescribirá las posiciones actuales. ¿Continuar?')) return;
+      // Sin confirm — el usuario quiere flow fluido. Las posiciones manuales
+      // se pueden re-mover con drag, no es destructivo.
       _autoSeedLayout(true);
       _saveAllLayout();
       renderMapaVisual(el);
+      toast('Auto-layout aplicado · arrastra los nodos si quieres ajustar', 'success');
     });
 
     // Link mode
@@ -3450,6 +4626,86 @@ window.ComercialModule = (function() {
         }
       });
     }
+  }
+
+  /* ── Figma-style tool selector ───────────────────────────── */
+  function _setFigmaTool(tool) {
+    // tool ∈ {select, pan, touchpoint, friction, note, link}
+    var toolbox = document.querySelector('#cm-canvas-figma-toolbar');
+    var viewport = document.querySelector('#cm-canvas-viewport');
+    if (toolbox) {
+      toolbox.querySelectorAll('.cm-figma-tool').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-tool') === tool);
+      });
+    }
+    if (viewport) {
+      viewport.classList.remove('cm-canvas-tool-select','cm-canvas-tool-create','cm-canvas-tool-link','cm-canvas-tool-pan');
+      if (tool === 'pan') viewport.classList.add('cm-canvas-tool-pan');
+      else if (tool === 'link') viewport.classList.add('cm-canvas-tool-link');
+      else if (tool === 'touchpoint' || tool === 'friction' || tool === 'note') viewport.classList.add('cm-canvas-tool-create');
+      else viewport.classList.add('cm-canvas-tool-select');
+    }
+    // dropMode + linkMode wiring
+    if (tool === 'touchpoint' || tool === 'friction' || tool === 'note') {
+      canvasState.dropMode = tool;
+      canvasState.linkMode = false;
+    } else if (tool === 'link') {
+      canvasState.dropMode = null;
+      canvasState.linkMode = true;
+    } else {
+      canvasState.dropMode = null;
+      canvasState.linkMode = false;
+    }
+    canvasState.activeTool = tool || 'select';
+    var lmBtn = document.querySelector('#cm-canvas-linkmode-btn');
+    if (lmBtn) lmBtn.classList.toggle('active', canvasState.linkMode);
+    var vp2 = document.querySelector('#cm-canvas-viewport');
+    if (vp2) {
+      vp2.classList.toggle('linkmode', canvasState.linkMode);
+      vp2.classList.toggle('dropmode', !!canvasState.dropMode);
+    }
+    _updateFigmaHint(tool);
+    var rootEl = document.querySelector('#comercial-module') || document;
+    _updateModeBanner(rootEl);
+  }
+
+  function _updateFigmaHint(tool) {
+    var hint = document.querySelector('#cm-canvas-figma-hint');
+    if (!hint) return;
+    var hints = {
+      select: 'Selección — clic para abrir un nodo · arrastra el canvas para mover · doble clic para crear',
+      pan: 'Mover canvas — arrastra para desplazar el mapa',
+      touchpoint: 'Crear touchpoint — clic donde quieras colocarlo · Esc para cancelar',
+      friction: 'Crear fricción — clic donde quieras colocarla · Esc para cancelar',
+      note: 'Nota libre — clic donde quieras colocarla · Esc para cancelar',
+      link: 'Conectar — arrastra de un nodo a otro · Esc para salir',
+    };
+    hint.textContent = hints[tool || 'select'] || hints.select;
+  }
+
+  function _showQuickMenu(viewport, clientX, clientY, stageX, stageY) {
+    var menu = document.querySelector('#cm-canvas-quick-menu');
+    if (!menu) return;
+    var vpRect = viewport.getBoundingClientRect();
+    var x = clientX - vpRect.left;
+    var y = clientY - vpRect.top;
+    // Clamp dentro del viewport
+    var maxX = vpRect.width - 200;
+    var maxY = vpRect.height - 140;
+    if (x > maxX) x = maxX;
+    if (y > maxY) y = maxY;
+    if (x < 4) x = 4;
+    if (y < 4) y = 4;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
+    menu.setAttribute('data-stage-x', String(stageX));
+    menu.setAttribute('data-stage-y', String(stageY));
+  }
+
+  function _hideQuickMenu() {
+    var menu = document.querySelector('#cm-canvas-quick-menu');
+    if (menu) menu.style.display = 'none';
   }
 
   function _updateFilterTriggerLabels(el) {
@@ -3841,7 +5097,7 @@ window.ComercialModule = (function() {
     html += '<button class="cm-btn cm-btn-primary" id="cm-flow-save" style="flex:1">Guardar</button>';
     html += '</div>';
     pop.innerHTML = html;
-    document.body.appendChild(pop);
+    (document.fullscreenElement || document.body).appendChild(pop);
     // Reposition if off-screen
     var rect = pop.getBoundingClientRect();
     if (rect.right > window.innerWidth - 10) pop.style.left = (window.innerWidth - rect.width - 10) + 'px';
@@ -3889,21 +5145,28 @@ window.ComercialModule = (function() {
     window._cmCanvasKeyInited = true;
     document.addEventListener('keydown', function(e) {
       var isInput = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      // Atajos tipo Figma: V/M/T/F/N/L/R/0 (solo con canvas montado y no editando texto)
+      if (!isInput && document.querySelector('#cm-canvas-figma-toolbar')) {
+        var k = e.key.toLowerCase();
+        if (e.metaKey || e.ctrlKey) { /* no interceptar combos del sistema */ }
+        else if (k === 'v') { e.preventDefault(); _setFigmaTool('select'); _hideQuickMenu(); return; }
+        else if (k === 'm') { e.preventDefault(); _setFigmaTool('pan'); return; }
+        else if (k === 't') { e.preventDefault(); _setFigmaTool('touchpoint'); return; }
+        else if (k === 'f') { e.preventDefault(); _setFigmaTool('friction'); return; }
+        else if (k === 'n') { e.preventDefault(); _setFigmaTool('note'); return; }
+        else if (k === 'l') { e.preventDefault(); _setFigmaTool('link'); return; }
+        else if (k === 'r') {
+          e.preventDefault();
+          var alBtn = document.querySelector('#cm-canvas-autolayout-btn');
+          if (alBtn) alBtn.click();
+          return;
+        }
+        else if (e.key === '0') { e.preventDefault(); _canvasFit(); return; }
+      }
       if (e.key === 'Escape') {
-        if (canvasState.dropMode) {
-          canvasState.dropMode = null;
-          var vp = document.querySelector('#cm-canvas-viewport');
-          if (vp) vp.classList.remove('dropmode');
-          var el = document.querySelector('#cm-main');
-          if (el) _updateModeBanner(el);
-        } else if (canvasState.linkMode) {
-          canvasState.linkMode = false;
-          var btn = document.querySelector('#cm-canvas-linkmode-btn');
-          if (btn) btn.classList.remove('active');
-          var vp2 = document.querySelector('#cm-canvas-viewport');
-          if (vp2) vp2.classList.remove('linkmode');
-          var el2 = document.querySelector('#cm-main');
-          if (el2) _updateModeBanner(el2);
+        _hideQuickMenu();
+        if (canvasState.dropMode || canvasState.linkMode) {
+          _setFigmaTool('select');
         } else if (canvasState.selectedFlowId) {
           canvasState.selectedFlowId = null;
           _drawCanvasEdges();
@@ -3996,7 +5259,7 @@ window.ComercialModule = (function() {
     html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-mini-cancel">Cancelar</button><button class="cm-btn cm-btn-primary" id="cm-mini-save">Crear</button></div></div></div>';
     var div = document.createElement('div');
     div.innerHTML = html;
-    document.body.appendChild(div.firstChild);
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
     document.querySelector('#cm-mini-cancel').addEventListener('click', function(){ document.querySelector('#cm-mini-bd').remove(); });
     document.querySelector('#cm-mini-save').addEventListener('click', function() {
       var text = document.querySelector('#cm-mini-text').value || '';
@@ -4025,15 +5288,27 @@ window.ComercialModule = (function() {
 
   function _showCreateTouchpointMini(x, y) {
     var phaseOpts = state.phases.map(function(p){ return '<option value="' + escHtml(p.id) + '">' + escHtml(p.name) + '</option>'; }).join('');
-    var html = '<div class="cm-modal-backdrop" id="cm-mini-bd"><div class="cm-modal" style="max-width:420px">';
+    var html = '<div class="cm-modal-backdrop" id="cm-mini-bd"><div class="cm-modal" style="max-width:480px">';
     html += '<div class="cm-modal-title">Nuevo Touchpoint</div>';
-    html += '<div class="cm-modal-field"><label>Nombre *</label><input id="cm-mini-name" class="cm-input" placeholder="Ej: Llamada de descubrimiento"></div>';
+    html += '<div class="cm-modal-field"><label>Nombre *</label><input id="cm-mini-name" class="cm-input" placeholder="Ej: Cliente ve anuncio en Facebook (actividad, no actor)"></div>';
     html += '<div class="cm-modal-field"><label>Fase *</label><select id="cm-mini-phase" class="cm-input">' + phaseOpts + '</select></div>';
-    html += '<div class="cm-modal-field"><label>Canal</label><input id="cm-mini-canal" class="cm-input" placeholder="Email, Llamada, Web..."></div>';
+    html += '<div class="cm-modal-field"><label>Canal</label><input id="cm-mini-canal" class="cm-input" placeholder="Email, WhatsApp, llamada, presencial..."></div>';
+    // Workbook hint: 8 atributos (solo demo_mode, alineado con Quick Start)
+    var wb = state.workbook;
+    if (state.config && state.config.demo_mode && wb && Array.isArray(wb.tp_attributes)) {
+      html += '<details style="margin:6px 0 12px;background:#FAFAF9;border:1px solid #E7E5E4;border-radius:8px">';
+      html += '<summary style="cursor:pointer;list-style:none;padding:8px 12px;font-size:.74rem;font-weight:600;color:#57534E">📋 Los 8 atributos completos según el workbook</summary>';
+      html += '<div style="padding:6px 14px 12px;border-top:1px solid #E7E5E4;font-size:.74rem;color:#44403C;line-height:1.5">';
+      wb.tp_attributes.forEach(function(a) {
+        html += '<div style="padding:4px 0;border-left:2px solid #D6D3D1;padding-left:10px;margin:4px 0"><strong>' + escHtml(a.label) + ':</strong> ' + escHtml(a.rule) + '</div>';
+      });
+      html += '<div style="font-size:.7rem;color:#78716C;margin-top:6px;font-style:italic">Llenarás los demás (responsable, KPI, checklist, fricción) al editar el TP en el drawer.</div>';
+      html += '</div></details>';
+    }
     html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-mini-cancel">Cancelar</button><button class="cm-btn cm-btn-primary" id="cm-mini-save">Crear</button></div></div></div>';
     var div = document.createElement('div');
     div.innerHTML = html;
-    document.body.appendChild(div.firstChild);
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
     document.querySelector('#cm-mini-cancel').addEventListener('click', function(){ document.querySelector('#cm-mini-bd').remove(); });
     document.querySelector('#cm-mini-save').addEventListener('click', function() {
       var name = document.querySelector('#cm-mini-name').value.trim();
@@ -4080,7 +5355,7 @@ window.ComercialModule = (function() {
     bar.innerHTML = '<span>¿Conectar este touchpoint desde <b>' + escHtml(prev.name) + '</b>?</span>' +
       '<button data-yes>Sí, crear flecha</button>' +
       '<button data-no>No</button>';
-    document.body.appendChild(bar);
+    (document.fullscreenElement || document.body).appendChild(bar);
     var dismiss = function() { if (bar.parentNode) bar.parentNode.removeChild(bar); };
     var t = setTimeout(dismiss, 8000);
     bar.querySelector('[data-no]').addEventListener('click', function(){ clearTimeout(t); dismiss(); });
@@ -4120,10 +5395,11 @@ window.ComercialModule = (function() {
     html += '<div class="cm-modal-field"><label>Nombre *</label><input id="cm-mini-name" class="cm-input"></div>';
     html += '<div class="cm-modal-field"><label>Touchpoint</label><select id="cm-mini-tp" class="cm-input">' + tpOpts + '</select></div>';
     html += '<div class="cm-modal-field"><label>Impacto</label><select id="cm-mini-impact" class="cm-input"><option value="high">Alto</option><option value="medium" selected>Medio</option><option value="low">Bajo</option></select></div>';
+    html += '<div class="cm-modal-field"><label>Tipo</label><select id="cm-mini-type" class="cm-input">' + _frictionTypeOptionsHTML(null) + '</select></div>';
     html += '<div class="cm-modal-actions"><button class="cm-btn cm-btn-ghost" id="cm-mini-cancel">Cancelar</button><button class="cm-btn cm-btn-primary" id="cm-mini-save">Crear</button></div></div></div>';
     var div = document.createElement('div');
     div.innerHTML = html;
-    document.body.appendChild(div.firstChild);
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
     document.querySelector('#cm-mini-cancel').addEventListener('click', function(){ document.querySelector('#cm-mini-bd').remove(); });
     document.querySelector('#cm-mini-save').addEventListener('click', function() {
       var fid = document.querySelector('#cm-mini-fid').value.trim();
@@ -4131,9 +5407,17 @@ window.ComercialModule = (function() {
       if (!fid || !name) { toast('ID y nombre requeridos','error'); return; }
       var tpVal = document.querySelector('#cm-mini-tp').value;
       var impact = document.querySelector('#cm-mini-impact').value;
+      var typeVal = document.querySelector('#cm-mini-type').value || null;
+      // phase_id requerido por el schema; deriva del touchpoint o de la primera fase
+      var derivedPhase = '';
+      if (tpVal) {
+        var tpRow = state.touchpoints.find(function(t){ return String(t.id) === String(tpVal); });
+        if (tpRow) derivedPhase = tpRow.phase_id;
+      }
+      if (!derivedPhase && state.phases && state.phases.length > 0) derivedPhase = state.phases[0].id;
       fetch('/api/comercial/frictions/', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: fid, name: name, touchpoint_id: tpVal ? parseInt(tpVal,10) : null, impact: impact, status: 'pending' })
+        body: JSON.stringify({ id: fid, phase_id: derivedPhase, name: name, touchpoint_id: tpVal ? parseInt(tpVal,10) : null, impact: impact, friction_type: typeVal, status: 'pending' })
       }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
         .then(function(f) {
           var k = _layoutKey('friction', String(f.id));
@@ -4218,9 +5502,64 @@ window.ComercialModule = (function() {
 
   function _closeCanvasDrawer() {
     var drawer = document.querySelector('#cm-canvas-drawer');
-    if (drawer) drawer.classList.remove('open');
+    if (drawer) {
+      drawer.classList.remove('open');
+      drawer.setAttribute('aria-hidden', 'true');
+    }
     document.querySelectorAll('.cm-canvas-node.selected').forEach(function(n){ n.classList.remove('selected'); });
     canvasState.selectedKey = null;
+  }
+
+  // UX: cerrar drawer con Escape o click fuera (instalado una sola vez por sesión).
+  // Si hay un modal abierto encima del drawer, Escape lo cierra primero (LIFO).
+  function _setupDrawerDismissHandlers() {
+    if (window.__cmDrawerDismissInstalled) return;
+    window.__cmDrawerDismissInstalled = true;
+
+    // Click fuera → cierra drawer
+    document.addEventListener('mousedown', function(e) {
+      var drawer = document.querySelector('#cm-canvas-drawer.open');
+      if (!drawer) return;
+      var target = e.target;
+      // Si hay modal abierto, no cerrar drawer (deja al modal manejar su propio backdrop)
+      if (target.closest && target.closest('.cm-modal-backdrop')) return;
+      // Click dentro del drawer → no cerrar
+      if (drawer.contains(target)) return;
+      // Bloque autolink suggestion (notificación flotante post-create)
+      if (target.closest && target.closest('.cm-autolink-suggest')) return;
+      // Toast → no cerrar (puede ser sobre cualquier zona)
+      if (target.closest && target.closest('.cm-toast, #cm-toast-container')) return;
+      _closeCanvasDrawer();
+    }, true);
+
+    // Escape → primero modal, luego drawer
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Escape') return;
+      // Hay modal? cerrarlo primero
+      var modal = document.querySelector('.cm-modal-backdrop');
+      if (modal) {
+        e.preventDefault();
+        if (typeof closeModal === 'function') closeModal();
+        else modal.remove();
+        return;
+      }
+      var drawer = document.querySelector('#cm-canvas-drawer.open');
+      if (!drawer) return;
+      var target = e.target;
+      // Si el user está editando un input/textarea dentro del drawer, primer Escape blurea
+      // (auto-save vía blur handler), segundo Escape cierra drawer.
+      var isEditable = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      );
+      if (isEditable && drawer.contains(target)) {
+        target.blur();
+        return;
+      }
+      _closeCanvasDrawer();
+    });
   }
 
   function _ensureCanvasDrawerDOM() {
@@ -4240,6 +5579,10 @@ window.ComercialModule = (function() {
     var div = document.createElement('div');
     div.className = 'cm-canvas-drawer';
     div.id = 'cm-canvas-drawer';
+    div.setAttribute('role', 'dialog');
+    div.setAttribute('aria-modal', 'true');
+    div.setAttribute('aria-label', 'Ficha de detalle');
+    div.setAttribute('aria-hidden', 'true');
     div.innerHTML = '<div class="cm-canvas-drawer-content" id="cm-canvas-drawer-content"></div>';
     targetParent.appendChild(div);
   }
@@ -4351,6 +5694,329 @@ window.ComercialModule = (function() {
     if (ipt) ipt.focus();
   }
 
+  // task #75 — Progressive disclosure
+  function _getDrawerTier() {
+    try { return localStorage.getItem('cm.drawerTier') || 'a'; } catch(e) { return 'a'; }
+  }
+  function _setDrawerTier(t) {
+    try { localStorage.setItem('cm.drawerTier', t); } catch(e) {}
+    document.body.classList.remove('cm-tier-a', 'cm-tier-b', 'cm-tier-c');
+    document.body.classList.add('cm-tier-' + t);
+  }
+  function _renderTierToggleHTML() {
+    var t = _getDrawerTier();
+    var html = '<div style="display:flex;align-items:center;flex-wrap:wrap">';
+    html += '<div class="cm-tier-toggle" role="tablist" aria-label="Nivel de detalle">';
+    html += '<button class="cm-tier-btn' + (t==='a'?' active':'') + '" data-tier="a" title="5 campos esenciales">Simple</button>';
+    html += '<button class="cm-tier-btn' + (t==='b'?' active':'') + '" data-tier="b" title="11 campos: + secuencia, checklist, duración">Avanzado</button>';
+    html += '<button class="cm-tier-btn' + (t==='c'?' active':'') + '" data-tier="c" title="Todo: + diagnóstico + comentarios + actividad">Experto</button>';
+    html += '</div>';
+    html += '<span class="cm-tier-hint">Nivel de detalle del touchpoint</span>';
+    html += '</div>';
+    return html;
+  }
+  // Aplicar tier al body al boot
+  if (typeof window !== 'undefined') { _setDrawerTier(_getDrawerTier()); }
+
+  // Wizard Motor de Confianza (#64) — drawer overlay con pasos por pilar
+  function _showPillarStepsDrawer(pillarId) {
+    var existing = document.getElementById('cm-pillar-wizard-bd');
+    if (existing) existing.remove();
+    var pillar = state.trust_pillars.find(function(p){ return String(p.id) === String(pillarId); });
+    if (!pillar) return;
+    var steps = (state.trust_pillar_steps || []).filter(function(s){ return String(s.pillar_id) === String(pillarId); }).sort(function(a,b){ return (a.order||0)-(b.order||0); });
+
+    var html = '<div class="cm-modal-backdrop" id="cm-pillar-wizard-bd">';
+    html += '<div class="cm-modal" style="max-width:720px;max-height:90vh;overflow-y:auto">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+    html += '<div><div class="cm-modal-title" style="margin:0">' + (pillar.icon || '⚙') + ' Wizard Motor — ' + escHtml(pillar.name) + '</div>';
+    html += '<div style="font-size:.74rem;color:#64748B;margin-top:4px">Pasos accionables para cerrar la brecha entre estado actual y objetivo</div></div>';
+    html += '<button class="cm-canvas-drawer-close" id="cm-pillar-wizard-close" aria-label="Cerrar wizard">×</button>';
+    html += '</div>';
+
+    // Resumen progreso
+    var done = steps.filter(function(s){ return s.status === 'completed'; }).length;
+    var pct = steps.length > 0 ? Math.round(done / steps.length * 100) : 0;
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px;background:#FAFBFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:14px">';
+    html += '<div><div style="font-size:.66rem;color:#94A3B8;text-transform:uppercase;font-weight:700">Estado Actual</div>';
+    html += '<div style="font-size:.84rem;color:#1E293B;margin-top:2px">' + escHtml(pillar.current_state || 'Sin definir') + '</div></div>';
+    html += '<div><div style="font-size:.66rem;color:#94A3B8;text-transform:uppercase;font-weight:700">Estado Objetivo</div>';
+    html += '<div style="font-size:.84rem;color:#1E293B;margin-top:2px">' + escHtml(pillar.target_state || 'Sin definir') + '</div></div>';
+    html += '</div>';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">';
+    html += '<div style="flex:1;height:6px;background:#E2E8F0;border-radius:9999px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:#10B981"></div></div>';
+    html += '<span style="font-size:.78rem;font-weight:700;color:#1E293B">' + done + '/' + steps.length + ' (' + pct + '%)</span>';
+    html += '</div>';
+
+    // Steps list
+    html += '<div id="cm-pillar-steps-list">';
+    if (steps.length === 0) {
+      html += '<div style="padding:30px;text-align:center;color:#94A3B8;background:#FAFBFC;border-radius:8px;border:1px dashed #E2E8F0">Sin pasos definidos. Crea el primer paso del wizard ↓</div>';
+    } else {
+      steps.forEach(function(s) {
+        html += _renderPillarStepRowHTML(s);
+      });
+    }
+    html += '</div>';
+
+    // Add new step form
+    html += '<div style="margin-top:14px;padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px">';
+    html += '<div style="font-size:.7rem;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">+ Nuevo paso</div>';
+    html += '<div style="display:flex;gap:6px">';
+    html += '<input type="text" id="cm-pillar-step-new" class="cm-input" placeholder="Ej: Publicar caso de éxito mensual" style="flex:1">';
+    html += '<button class="cm-btn cm-btn-primary cm-btn-sm" id="cm-pillar-step-add" data-pid="' + escHtml(pillarId) + '">Agregar</button>';
+    html += '</div></div>';
+
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+
+    var bd = document.getElementById('cm-pillar-wizard-bd');
+    bd.addEventListener('click', function(e){ if (e.target === bd) bd.remove(); });
+    document.getElementById('cm-pillar-wizard-close').addEventListener('click', function(){ bd.remove(); });
+
+    document.getElementById('cm-pillar-step-add').addEventListener('click', function() {
+      var ipt = document.getElementById('cm-pillar-step-new');
+      var title = (ipt.value || '').trim();
+      if (!title) { toast('Título requerido', 'error'); return; }
+      fetch('/api/comercial/trust-pillars/' + encodeURIComponent(pillarId) + '/steps', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pillar_id: pillarId, title: title, status: 'pending', order: steps.length })
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(saved) {
+          state.trust_pillar_steps = (state.trust_pillar_steps || []).concat([saved]);
+          ipt.value = '';
+          _showPillarStepsDrawer(pillarId); // re-render
+          var main = document.querySelector('#cm-main');
+          if (main && activeTab === 'proceso') renderProceso(main);
+        }).catch(function(){ toast('Error al crear paso', 'error'); });
+    });
+    document.getElementById('cm-pillar-step-new').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') document.getElementById('cm-pillar-step-add').click();
+    });
+
+    _bindPillarStepRowEvents(pillarId);
+  }
+
+  function _renderPillarStepRowHTML(s) {
+    var statusCfg = {
+      pending: { color: '#94A3B8', label: 'Pendiente' },
+      in_progress: { color: '#F59E0B', label: 'En curso' },
+      completed: { color: '#10B981', label: 'Hecho' },
+    };
+    var cfg = statusCfg[s.status] || statusCfg.pending;
+    var html = '<div class="cm-pillar-step-row" data-step-id="' + s.id + '" style="display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid #E2E8F0;border-left:3px solid ' + cfg.color + ';border-radius:8px;margin-bottom:6px;background:#fff">';
+    html += '<input type="checkbox" class="cm-step-done" data-step-id="' + s.id + '"' + (s.status === 'completed' ? ' checked' : '') + ' style="margin-top:4px">';
+    html += '<div style="flex:1">';
+    html += '<input type="text" class="cm-step-title" data-step-id="' + s.id + '" value="' + escHtml(s.title) + '" style="width:100%;font-size:.82rem;font-weight:600;border:1px solid transparent;background:transparent;padding:3px 6px;border-radius:4px;font-family:inherit">';
+    if (s.evidence) html += '<div style="font-size:.7rem;color:#64748B;padding:2px 6px"><b>Evidencia:</b> ' + escHtml(s.evidence) + '</div>';
+    html += '<div style="display:flex;gap:8px;font-size:.66rem;color:#94A3B8;padding:2px 6px;margin-top:2px">';
+    html += '<span style="color:' + cfg.color + ';font-weight:700">' + cfg.label + '</span>';
+    if (s.responsable_id) {
+      var p = state.people.find(function(pp){ return pp.id === s.responsable_id; });
+      if (p) html += '<span>· ' + escHtml(p.name) + '</span>';
+    }
+    if (s.due_date) html += '<span>· ' + escHtml(s.due_date) + '</span>';
+    html += '</div>';
+    html += '</div>';
+    html += '<button class="cm-icon-btn danger cm-step-del" data-step-id="' + s.id + '" title="Eliminar paso">×</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function _bindPillarStepRowEvents(pillarId) {
+    function patchStep(stepId, data, after) {
+      fetch('/api/comercial/trust-pillar-steps/' + stepId, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(updated) {
+          state.trust_pillar_steps = state.trust_pillar_steps.map(function(s){ return s.id === updated.id ? updated : s; });
+          if (after) after(updated);
+        }).catch(function(){ toast('Error al guardar paso','error'); });
+    }
+    document.querySelectorAll('.cm-step-done').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var sid = parseInt(this.getAttribute('data-step-id'), 10);
+        patchStep(sid, { status: this.checked ? 'completed' : 'pending' }, function() {
+          _showPillarStepsDrawer(pillarId);
+          var main = document.querySelector('#cm-main');
+          if (main && activeTab === 'proceso') renderProceso(main);
+        });
+      });
+    });
+    document.querySelectorAll('.cm-step-title').forEach(function(ipt) {
+      var orig = ipt.value;
+      ipt.addEventListener('focus', function(){ orig = this.value; });
+      ipt.addEventListener('blur', function() {
+        var v = (this.value || '').trim();
+        if (!v || v === orig) { this.value = orig; return; }
+        var sid = parseInt(this.getAttribute('data-step-id'), 10);
+        patchStep(sid, { title: v });
+      });
+      ipt.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        if (e.key === 'Escape') { this.value = orig; this.blur(); }
+      });
+    });
+    document.querySelectorAll('.cm-step-del').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (!confirm('¿Eliminar este paso?')) return;
+        var sid = parseInt(this.getAttribute('data-step-id'), 10);
+        fetch('/api/comercial/trust-pillar-steps/' + sid, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function() {
+            state.trust_pillar_steps = (state.trust_pillar_steps || []).filter(function(s){ return s.id !== sid; });
+            _showPillarStepsDrawer(pillarId);
+            var main = document.querySelector('#cm-main');
+            if (main && activeTab === 'proceso') renderProceso(main);
+          }).catch(function(){ toast('Error al eliminar','error'); });
+      });
+    });
+  }
+
+  function _completenessBadgeHTML(tp) {
+    // Two-tier badge: usable (3 mín) vs completo (8/8) vs incompleto.
+    // Lee tp.completeness (lo provee /bootstrap con completeness_ctx).
+    var c = tp.completeness;
+    if (!c) return '';
+    if (c.is_complete) return '<span class="cm-comp-badge cm-comp-badge--complete" title="Touchpoint completo: 8/8 atributos">✓ Completo 8/8</span>';
+    if (c.is_usable) return '<span class="cm-comp-badge cm-comp-badge--usable" title="Touchpoint usable (3 campos mínimos), pero faltan ' + (8 - c.score) + ' atributos">⚠ Usable ' + c.score + '/8</span>';
+    return '<span class="cm-comp-badge cm-comp-badge--incomplete" title="Touchpoint incompleto: faltan campos básicos">✗ Incompleto ' + c.score + '/8</span>';
+  }
+
+  function _completenessPanelHTML(tp) {
+    var c = tp.completeness;
+    if (!c) return '';
+    var checks = c.checks || {};
+    var labels = {
+      has_name: 'Nombre',
+      has_phase: 'Fase',
+      has_channel: 'Canal',
+      has_responsable: 'Responsable activo',
+      has_sequence: 'Secuencia (flecha entrante o saliente)',
+      has_kpi: 'KPI vinculado',
+      has_checklist: 'Checklist interno (≥3 ítems)',
+      has_diagnosis: 'Clasificación diagnóstico',
+    };
+    var html = '<div style="margin:0 0 14px 0;padding:10px 12px;background:#FAFBFC;border:1px solid #E2E8F0;border-radius:8px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Completeness ' + c.score + '/8</div>';
+    html += '<div class="cm-comp-checks">';
+    Object.keys(labels).forEach(function(k) {
+      var ok = !!checks[k];
+      var icon = ok ? '✓' : '○';
+      var cls = ok ? 'cm-comp-check done' : 'cm-comp-check';
+      html += '<div class="' + cls + '"><span class="cm-comp-check-icon">' + icon + '</span>' + labels[k] + '</div>';
+    });
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  // Tier B: Internal checklist editor (#75 + atributo v13)
+  function _renderDrawerChecklistHTML(tp) {
+    var items = Array.isArray(tp.internal_checklist) ? tp.internal_checklist : [];
+    var html = '<div class="cm-canvas-drawer-section">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+    html += '<div class="cm-canvas-drawer-section-title" style="margin-bottom:0">Checklist interno (' + items.length + ')</div>';
+    html += '<button class="cm-drawer-inline-btn" data-act="tp-checklist-add" data-tp-id="' + tp.id + '">+ Paso</button>';
+    html += '</div>';
+    html += '<div style="font-size:.7rem;color:#94A3B8;margin-bottom:6px">≥ 3 ítems → cuenta para completeness</div>';
+    if (items.length === 0) {
+      html += '<div class="cm-canvas-drawer-empty">Sin pasos definidos</div>';
+    } else {
+      items.forEach(function(it, idx) {
+        var text = (it && it.text) || '';
+        var done = !!(it && it.done);
+        html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px" data-cl-idx="' + idx + '">';
+        html += '<input type="checkbox" class="cm-tp-cl-done" data-tp-id="' + tp.id + '" data-cl-idx="' + idx + '"' + (done ? ' checked' : '') + '>';
+        html += '<input type="text" class="cm-input cm-tp-cl-text" data-tp-id="' + tp.id + '" data-cl-idx="' + idx + '" value="' + escHtml(text) + '" placeholder="Paso interno..." style="flex:1;font-size:.78rem">';
+        html += '<button class="cm-icon-btn danger cm-tp-cl-del" data-tp-id="' + tp.id + '" data-cl-idx="' + idx + '" title="Eliminar paso">×</button>';
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // Tier B: Duración del touchpoint
+  function _renderDrawerDurationHTML(tp) {
+    var html = '<div class="cm-canvas-drawer-section">';
+    html += '<div class="cm-canvas-drawer-section-title">Duración estimada</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    html += '<div class="cm-drawer-edit-cell"><label>Minutos</label>';
+    html += '<input type="number" min="0" class="cm-drawer-edit-input" data-field="duration_minutes" value="' + (tp.duration_minutes != null ? tp.duration_minutes : '') + '" placeholder="0"></div>';
+    html += '<div class="cm-drawer-edit-cell"><label>Etiqueta</label>';
+    html += '<input type="text" class="cm-drawer-edit-input" data-field="duration_label" value="' + escHtml(tp.duration_label || '') + '" placeholder="ej: 15 min, Inmediato"></div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  // Tier C: Diagnóstico (classification + leverage point)
+  function _renderDrawerDiagnosisHTML(tp) {
+    var classifications = [
+      { id: 'normal',       label: '— Sin diagnóstico —' },
+      { id: 'critical',     label: '🔴 Crítico — momento decisivo' },
+      { id: 'invisible',    label: '👻 Invisible — el cliente no lo nota' },
+      { id: 'redundant',    label: '🔁 Redundante — repite info' },
+      { id: 'unnecessary',  label: '🚫 Innecesario — eliminar' },
+    ];
+    var leverages = [
+      { id: 'none',        label: '— Sin palanca —' },
+      { id: 'speed',       label: '⚡ Velocidad — acelerar para ganar' },
+      { id: 'diagnosis',   label: '🔍 Diagnóstico — calificar mejor' },
+      { id: 'persistence', label: '🪨 Persistencia — perseguir más tiempo' },
+    ];
+    var html = '<div class="cm-canvas-drawer-section">';
+    html += '<div class="cm-canvas-drawer-section-title">Diagnóstico (Manifiesto §18)</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    html += '<div class="cm-drawer-edit-cell"><label>Clasificación</label>';
+    html += '<select class="cm-drawer-edit-input" data-field="classification">';
+    classifications.forEach(function(c) {
+      html += '<option value="' + c.id + '"' + ((tp.classification || 'normal') === c.id ? ' selected' : '') + '>' + escHtml(c.label) + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="cm-drawer-edit-cell"><label>Punto de palanca</label>';
+    html += '<select class="cm-drawer-edit-input" data-field="leverage_point">';
+    leverages.forEach(function(c) {
+      html += '<option value="' + c.id + '"' + ((tp.leverage_point || 'none') === c.id ? ' selected' : '') + '>' + escHtml(c.label) + '</option>';
+    });
+    html += '</select></div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  function _drawerWorkbookHintsHTML(tp) {
+    // Gate: solo en demo_mode (alineado con Quick Start). En prod queda sin tocar.
+    if (!(state.config && state.config.demo_mode)) return '';
+    var wb = state.workbook;
+    if (!wb || !wb.phases) return '';
+    var ph = wb.phases[tp.phase_id];
+    if (!ph) return '';
+    var hints = ph.field_hints || {};
+    var coachQs = ph.coach_questions || (ph.discovery_questions || []).slice(0, 5);
+    var html = '<details class="cm-qs-wb" style="margin-top:10px">';
+    html += '<summary>📋 Checks del workbook para ' + escHtml(ph.title) + ' (Cris Urzúa)</summary>';
+    html += '<div class="cm-qs-wb-body">';
+    if (hints.name) html += '<div class="cm-qs-wb-q"><strong>Sobre el nombre:</strong> ' + escHtml(hints.name) + '</div>';
+    if (hints.canal) html += '<div class="cm-qs-wb-q"><strong>Sobre el canal:</strong> ' + escHtml(hints.canal) + '</div>';
+    if (hints.responsable) html += '<div class="cm-qs-wb-q"><strong>Sobre el responsable:</strong> ' + escHtml(hints.responsable) + '</div>';
+    if (hints.kpi) html += '<div class="cm-qs-wb-q"><strong>Sobre el KPI:</strong> ' + escHtml(hints.kpi) + '</div>';
+    if (coachQs.length) {
+      html += '<div style="margin-top:8px;font-size:.74rem;font-weight:600;color:#57534E">Verifica que tu TP responde a:</div>';
+      coachQs.forEach(function(q) {
+        html += '<div class="cm-qs-wb-q">' + escHtml(q) + '</div>';
+      });
+    }
+    if (ph.sanity_check) {
+      html += '<div class="cm-qs-wb-sanity"><strong>Sanity check de la fase:</strong>' + escHtml(ph.sanity_check) + '</div>';
+    }
+    html += '</div></details>';
+    return html;
+  }
+
   function _showCanvasDrawerTouchpoint(tpId) {
     _ensureCanvasDrawerDOM();
     var tp = state.touchpoints.find(function(x){ return String(x.id) === String(tpId); });
@@ -4362,12 +6028,18 @@ window.ComercialModule = (function() {
 
     var html = '';
     html += '<div class="cm-canvas-drawer-header">';
-    html += '<div style="display:flex;align-items:center;gap:10px"><span class="cm-mv-dot" style="background:' + cfg.dot + ';width:12px;height:12px"></span><span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Touchpoint #' + tp.id + '</span><span class="cm-mv-tag" style="background:' + cfg.bg + ';color:' + cfg.dot + ';border-color:' + cfg.border + '">' + cfg.label + '</span></div>';
-    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close">×</button>';
+    html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="cm-mv-dot" style="background:' + cfg.dot + ';width:12px;height:12px"></span><span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Touchpoint #' + tp.id + '</span><span class="cm-mv-tag" style="background:' + cfg.bg + ';color:' + cfg.dot + ';border-color:' + cfg.border + '">' + cfg.label + '</span>' + _completenessBadgeHTML(tp) + '</div>';
+    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close" aria-label="Cerrar ficha">×</button>';
     html += '</div>';
+
+    // Tier toggle — Progressive disclosure (#75)
+    html += _renderTierToggleHTML();
 
     // Nombre editable inline
     html += '<input type="text" class="cm-drawer-edit-title" data-field="name" value="' + escHtml(tp.name) + '" placeholder="Nombre del touchpoint">';
+
+    // Two-tier completeness panel (Tier B+: visible solo en Avanzado/Experto)
+    html += '<div class="cm-tier-section--b">' + _completenessPanelHTML(tp) + '</div>';
 
     // Fila de campos editables: fase, canal, responsable
     html += '<div class="cm-drawer-edit-grid">';
@@ -4377,8 +6049,8 @@ window.ComercialModule = (function() {
       html += '<option value="' + escHtml(p.id) + '"' + (String(p.id) === String(tp.phase_id) ? ' selected' : '') + '>' + escHtml(p.name) + '</option>';
     });
     html += '</select></div>';
-    html += '<div class="cm-drawer-edit-cell"><label>Canal</label>';
-    html += '<input type="text" class="cm-drawer-edit-input" data-field="canal" value="' + escHtml(tp.canal || '') + '" placeholder="Llamada, email...">';
+    html += '<div class="cm-drawer-edit-cell" style="grid-column:span 2"><label>Canales</label>';
+    html += _renderDrawerChannelPickerHTML(tp);
     html += '</div>';
     html += '<div class="cm-drawer-edit-cell"><label>Responsable</label>';
     html += '<select class="cm-drawer-edit-input" data-field="responsable_id">';
@@ -4389,8 +6061,23 @@ window.ComercialModule = (function() {
     html += '</select></div>';
     html += '</div>';
 
-    // ── Secuencia (predecesores, sucesores, paralelos)
+    // Descripción (Tier A — siempre visible)
+    html += '<div class="cm-drawer-edit-cell" style="margin-top:8px"><label>Descripción <span style="font-weight:400;color:var(--text-muted);font-size:.62rem;text-transform:none;letter-spacing:0">— qué pasa en este touchpoint</span></label>';
+    html += '<textarea class="cm-drawer-edit-input cm-drawer-edit-textarea" data-field="description" rows="3" placeholder="Describe brevemente qué hace el cliente y qué hace tu equipo en este momento. Máx 2-3 oraciones.">' + escHtml(tp.description || '') + '</textarea>';
+    html += '</div>';
+
+    // Workbook hints — contextuales por fase (Cris Urzua)
+    html += _drawerWorkbookHintsHTML(tp);
+
+    // Tier B: Secuencia + Checklist interno + Duración
+    html += '<div class="cm-tier-section--b">';
     html += _renderDrawerSequenceHTML(tp);
+    html += _renderDrawerChecklistHTML(tp);
+    html += _renderDrawerDurationHTML(tp);
+    html += '</div>';
+
+    // Tier C: Clasificación + Leverage point
+    html += '<div class="cm-tier-section--c">' + _renderDrawerDiagnosisHTML(tp) + '</div>';
 
     // ── KPIs (estado: meta vs actual + tendencia + registrar)
     var tpKpiCount = state.kpi_touchpoints.filter(function(lk){ return lk.touchpoint_id === tp.id; }).length;
@@ -4400,19 +6087,27 @@ window.ComercialModule = (function() {
     html += '<button class="cm-drawer-inline-btn" data-act="link-kpi" data-tp-id="' + tp.id + '">+ Vincular KPI</button>';
     html += '</div>';
     html += _renderDrawerKPIsHTML(tp);
+    var phaseSummary = _phaseKpisSummaryHTML(tp.phase_id);
+    if (phaseSummary) {
+      html += '<div style="margin-top:10px;padding:8px 10px;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;font-size:.68rem">';
+      html += '<span style="color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px">Resumen fase: </span>';
+      html += phaseSummary;
+      html += '</div>';
+    }
     html += '</div>';
 
     // ── Fricciones (causa)
     html += '<div class="cm-canvas-drawer-section">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap">';
     html += '<div class="cm-canvas-drawer-section-title" style="margin-bottom:0">Fricciones (' + fricts.length + ')</div>';
-    html += '<div style="display:flex;gap:6px">';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
     html += '<button class="cm-drawer-inline-btn" data-act="link-friction" data-tp-id="' + tp.id + '">+ Vincular</button>';
     html += '<button class="cm-drawer-inline-btn" data-act="add-friction" data-tp-id="' + tp.id + '">+ Crear</button>';
+    html += '<button class="cm-drawer-inline-btn cm-drawer-ai-btn" data-act="ai-suggest-frictions" data-tp-id="' + tp.id + '" title="AI sugiere fricciones probables para este touchpoint">✨ Sugerir con AI</button>';
     html += '</div>';
     html += '</div>';
     if (fricts.length === 0) {
-      html += '<div class="cm-canvas-drawer-empty">Sin fricciones reportadas</div>';
+      html += '<div class="cm-canvas-drawer-empty">Sin fricciones reportadas — usa <b>Crear</b> manual o <b>✨ Sugerir con AI</b></div>';
     } else {
       fricts.forEach(function(f) {
         var icfg = _impactCfg[f.impact||'medium'] || _impactCfg.medium;
@@ -4542,6 +6237,7 @@ window.ComercialModule = (function() {
     if (drawer && content) {
       content.innerHTML = html;
       drawer.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
       var btnClose = document.querySelector('#cm-canvas-drawer-close');
       if (btnClose) btnClose.addEventListener('click', _closeCanvasDrawer);
       var btnCanvas = document.querySelector('#cm-canvas-goto-canvas');
@@ -4552,10 +6248,199 @@ window.ComercialModule = (function() {
       var btn2 = document.querySelector('#cm-canvas-goto-fricciones');
       if (btn2) btn2.addEventListener('click', function() { activeTab = 'fricciones'; render(); });
       _bindDrawerEditFields(tp);
+      _bindDrawerChannelPicker(tp);
       _bindDrawerSequenceActions(tp);
       _bindDrawerKpiRecord(tp.id);
       _bindDrawerInlineActions(tp);
       _bindDrawerCommentSubmit(tp);
+    }
+  }
+
+  /* ── Drawer: chip-picker de canales ── */
+  function _renderDrawerChannelPickerHTML(tp) {
+    var current = getChannelsForTouchpoint(tp.id);
+    var currentIds = current.map(function(c){ return c.id; });
+    var available = (state.channels || []).filter(function(c){ return currentIds.indexOf(c.id) < 0; });
+    var legacyHint = '';
+    if (current.length === 0 && tp.canal && tp.canal.trim()) {
+      legacyHint = '<div style="font-size:.66rem;color:var(--text-muted);margin-top:4px;font-style:italic">Texto legacy: "' + escHtml(tp.canal) + '" (sin canal canónico asignado)</div>';
+    }
+    var html = '<div class="cm-channel-picker" data-tp-id="' + tp.id + '">';
+    html += '<div class="cm-channel-picker-chips">';
+    if (current.length === 0) {
+      html += '<span style="color:var(--text-muted);font-size:.72rem;font-style:italic">Sin canales asignados</span>';
+    } else {
+      current.forEach(function(c) {
+        html += '<span class="cm-channel-chip cm-channel-chip-removable" data-channel-id="' + escHtml(c.id) + '" ' +
+                'style="display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:600;padding:3px 6px 3px 9px;' +
+                'border-radius:9999px;background:' + (c.color||'#94A3B8') + '20;color:' + (c.color||'#475569') +
+                ';border:1px solid ' + (c.color||'#94A3B8') + '40;margin:0 4px 4px 0">' +
+                (c.icon ? '<span>' + c.icon + '</span>' : '') +
+                escHtml(c.name) +
+                '<button type="button" class="cm-channel-chip-remove" data-channel-id="' + escHtml(c.id) + '" ' +
+                'title="Quitar canal" style="background:none;border:none;cursor:pointer;color:inherit;font-weight:700;font-size:.85rem;line-height:1;padding:0 2px">×</button>' +
+                '</span>';
+      });
+    }
+    html += '</div>';
+    // Dropdown: lista canales disponibles + opción "Crear canal nuevo".
+    // Inline-create form aparece al elegir __create__.
+    html += '<div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap" class="cm-channel-add-row">';
+    html += '<select class="cm-channel-add-select" data-tp-id="' + tp.id + '" ' +
+            'style="font-size:.72rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff">';
+    html += '<option value="">+ Agregar canal...</option>';
+    available.forEach(function(c) {
+      html += '<option value="' + escHtml(c.id) + '">' + (c.icon || '') + ' ' + escHtml(c.name) + '</option>';
+    });
+    html += '<option value="__create__">✨ Crear canal nuevo…</option>';
+    html += '</select>';
+    html += '<form class="cm-channel-create-form" data-tp-id="' + tp.id + '" style="display:none;gap:4px;align-items:center;flex:1;min-width:160px">';
+    html += '<input type="text" class="cm-channel-create-input" placeholder="Nombre del canal" ' +
+            'style="flex:1;font-size:.72rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;min-width:120px" maxlength="80">';
+    html += '<button type="submit" class="cm-btn cm-btn-sm cm-btn-primary" style="padding:3px 8px;font-size:.7rem">Crear</button>';
+    html += '<button type="button" class="cm-channel-create-cancel cm-btn cm-btn-sm cm-btn-ghost" style="padding:3px 8px;font-size:.7rem">Cancelar</button>';
+    html += '</form>';
+    html += '</div>';
+    html += legacyHint;
+    html += '</div>';
+    return html;
+  }
+
+  // Slug helper para id de canal: "WhatsApp Negocios" → "whatsapp_negocios"
+  function _slugifyChannelId(name) {
+    var s = (name || '').toString().trim().toLowerCase();
+    // remove accents (Unicode combining diacritical marks U+0300..U+036F)
+    s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    s = s.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!s) s = 'canal';
+    // dedupe contra existentes
+    var existing = (state.channels || []).map(function(c){ return c.id; });
+    var base = s, n = 2;
+    while (existing.indexOf(s) >= 0) { s = base + '_' + n; n++; }
+    return s;
+  }
+
+  function _setTouchpointChannels(tpId, channelIds) {
+    return fetch('/api/comercial/touchpoints/' + tpId + '/channels', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(channelIds)
+    }).then(function(r) {
+      if (!r.ok) return _parseApiError(r);
+      return r.json();
+    });
+  }
+
+  function _bindDrawerChannelPicker(tp) {
+    var content = document.querySelector('#cm-canvas-drawer-content');
+    if (!content) return;
+    var picker = content.querySelector('.cm-channel-picker[data-tp-id="' + tp.id + '"]');
+    if (!picker) return;
+
+    function reflectAndPersist(newIds) {
+      // Update state optimistically
+      state.touchpoint_channels = (state.touchpoint_channels || [])
+        .filter(function(r){ return String(r.touchpoint_id) !== String(tp.id); })
+        .concat(newIds.map(function(cid){ return { touchpoint_id: tp.id, channel_id: cid }; }));
+      // Re-render picker only
+      var fresh = _renderDrawerChannelPickerHTML(tp);
+      var holder = picker.parentNode;
+      var tmp = document.createElement('div');
+      tmp.innerHTML = fresh;
+      holder.replaceChild(tmp.firstChild, picker);
+      _bindDrawerChannelPicker(tp);
+      // Re-render canvas/table to update chips
+      _setTouchpointChannels(tp.id, newIds).then(function() {
+        toast('Canales actualizados', 'success');
+        // Light refresh of visible tables/canvas
+        if (typeof render === 'function') {
+          // Avoid clobbering the drawer: only refresh non-drawer parts
+          var drawer = document.querySelector('#cm-canvas-drawer.open');
+          if (!drawer) render();
+        }
+      }).catch(function() { toast('Error al guardar canales', 'error'); });
+    }
+
+    picker.querySelectorAll('.cm-channel-chip-remove').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cid = this.dataset.channelId;
+        var current = getChannelsForTouchpoint(tp.id).map(function(c){ return c.id; });
+        var next = current.filter(function(x){ return x !== cid; });
+        reflectAndPersist(next);
+      });
+    });
+
+    var sel = picker.querySelector('.cm-channel-add-select');
+    var form = picker.querySelector('.cm-channel-create-form');
+    if (sel) {
+      sel.addEventListener('change', function() {
+        var cid = this.value;
+        if (!cid) return;
+        if (cid === '__create__') {
+          // Mostrar form inline, ocultar select temporalmente.
+          if (form) {
+            form.style.display = 'flex';
+            sel.style.display = 'none';
+            var inp = form.querySelector('.cm-channel-create-input');
+            if (inp) setTimeout(function(){ inp.focus(); }, 30);
+          }
+          this.value = ''; // reset para que la próxima vez no quede en __create__
+          return;
+        }
+        var current = getChannelsForTouchpoint(tp.id).map(function(c){ return c.id; });
+        if (current.indexOf(cid) >= 0) return;
+        reflectAndPersist(current.concat([cid]));
+      });
+    }
+    if (form) {
+      var cancelBtn = form.querySelector('.cm-channel-create-cancel');
+      var resetForm = function() {
+        form.style.display = 'none';
+        if (sel) sel.style.display = '';
+        var inp2 = form.querySelector('.cm-channel-create-input');
+        if (inp2) inp2.value = '';
+      };
+      if (cancelBtn) cancelBtn.addEventListener('click', resetForm);
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var inp3 = form.querySelector('.cm-channel-create-input');
+        var name = (inp3.value || '').trim();
+        if (name.length < 2) { toast('Nombre muy corto', 'error'); return; }
+        // Si ya existe un canal con el mismo nombre (case-insensitive), reusarlo en vez de crear duplicado.
+        var existing = (state.channels || []).find(function(c){
+          return (c.name || '').trim().toLowerCase() === name.toLowerCase();
+        });
+        var btnSubmit = form.querySelector('button[type=submit]');
+        if (existing) {
+          var current = getChannelsForTouchpoint(tp.id).map(function(c){ return c.id; });
+          if (current.indexOf(existing.id) < 0) {
+            reflectAndPersist(current.concat([existing.id]));
+            toast('Canal "' + existing.name + '" ya existía — vinculado', 'success');
+          } else {
+            toast('Ese canal ya está vinculado a este TP', 'info');
+          }
+          resetForm();
+          return;
+        }
+        var id = _slugifyChannelId(name);
+        if (btnSubmit) { btnSubmit.disabled = true; btnSubmit.textContent = 'Creando…'; }
+        fetch('/api/comercial/channels/', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id, name: name, color: '#94A3B8', icon: '', description: '', order: (state.channels || []).length + 1 }),
+        }).then(function(r){
+          if (!r.ok) return r.json().then(function(b){ throw new Error(b && b.detail || ('Error ' + r.status)); }, function(){ throw new Error('Error ' + r.status); });
+          return r.json();
+        }).then(function(newChan){
+          state.channels = (state.channels || []).concat([newChan]);
+          var current = getChannelsForTouchpoint(tp.id).map(function(c){ return c.id; });
+          reflectAndPersist(current.concat([newChan.id]));
+          toast('Canal "' + newChan.name + '" creado', 'success');
+          resetForm();
+        }).catch(function(err){
+          if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = 'Crear'; }
+          toast('Error al crear canal: ' + (err && err.message || err), 'error');
+        });
+      });
     }
   }
 
@@ -4576,16 +6461,72 @@ window.ComercialModule = (function() {
         if (e.key === 'Escape') { this.value = tp.name; this.blur(); }
       });
     }
-    // Selects e inputs
+    // Selects, inputs y textareas
     content.querySelectorAll('.cm-drawer-edit-input').forEach(function(el) {
       var field = el.dataset.field;
       var origVal = el.tagName === 'SELECT' ? el.value : (el.value || '');
       el.addEventListener('change', function() { _commitDrawerField(tp, this, field); });
-      if (el.tagName === 'INPUT') {
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
         el.addEventListener('blur', function() {
           if (this.value !== origVal) _commitDrawerField(tp, this, field);
         });
       }
+    });
+
+    // Tier toggle (#75)
+    content.querySelectorAll('.cm-tier-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var tier = this.getAttribute('data-tier');
+        _setDrawerTier(tier);
+        content.querySelectorAll('.cm-tier-btn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-tier') === tier); });
+      });
+    });
+
+    // Checklist edits (#75 + atributo v13)
+    _bindDrawerChecklistEvents(content, tp);
+  }
+
+  function _bindDrawerChecklistEvents(content, tp) {
+    function persistChecklist(items) {
+      var clone = state.touchpoints.find(function(t){ return String(t.id) === String(tp.id); });
+      if (clone) clone.internal_checklist = items;
+      _patchTouchpointField(tp.id, 'internal_checklist', items);
+    }
+    content.querySelectorAll('.cm-tp-cl-text').forEach(function(input) {
+      input.addEventListener('blur', function() {
+        var items = (state.touchpoints.find(function(t){ return String(t.id) === String(tp.id); }) || {}).internal_checklist || [];
+        var idx = parseInt(this.getAttribute('data-cl-idx'), 10);
+        if (!items[idx]) items[idx] = { text: '', done: false };
+        items[idx].text = this.value || '';
+        persistChecklist(items.slice());
+      });
+    });
+    content.querySelectorAll('.cm-tp-cl-done').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var items = (state.touchpoints.find(function(t){ return String(t.id) === String(tp.id); }) || {}).internal_checklist || [];
+        var idx = parseInt(this.getAttribute('data-cl-idx'), 10);
+        if (!items[idx]) items[idx] = { text: '', done: false };
+        items[idx].done = this.checked;
+        persistChecklist(items.slice());
+      });
+    });
+    content.querySelectorAll('.cm-tp-cl-del').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var items = (state.touchpoints.find(function(t){ return String(t.id) === String(tp.id); }) || {}).internal_checklist || [];
+        var idx = parseInt(this.getAttribute('data-cl-idx'), 10);
+        items.splice(idx, 1);
+        persistChecklist(items.slice());
+        // re-render del drawer para refrescar índices
+        setTimeout(function(){ _showCanvasDrawerTouchpoint(tp.id); }, 100);
+      });
+    });
+    content.querySelectorAll('[data-act="tp-checklist-add"]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var items = (state.touchpoints.find(function(t){ return String(t.id) === String(tp.id); }) || {}).internal_checklist || [];
+        items.push({ text: '', done: false });
+        persistChecklist(items.slice());
+        setTimeout(function(){ _showCanvasDrawerTouchpoint(tp.id); }, 100);
+      });
     });
   }
 
@@ -4595,6 +6536,11 @@ window.ComercialModule = (function() {
       v = v ? parseInt(v) : null;
     } else if (field === 'canal') {
       v = v.trim() || null;
+    } else if (field === 'duration_minutes') {
+      v = v === '' ? null : parseInt(v, 10);
+      if (isNaN(v)) v = null;
+    } else if (field === 'duration_label' || field === 'classification' || field === 'leverage_point') {
+      v = (v || '').toString();
     }
     _patchTouchpointField(tp.id, field, v);
   }
@@ -4880,6 +6826,12 @@ window.ComercialModule = (function() {
         _showLinkFrictionInline(tp, this);
       });
     });
+    content.querySelectorAll('[data-act="ai-suggest-frictions"]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _showAISuggestFrictionsModal(tp);
+      });
+    });
   }
 
   function _showLinkKpiInline(tp, anchorBtn) {
@@ -4981,9 +6933,9 @@ window.ComercialModule = (function() {
     var html = '';
     html += '<div class="cm-canvas-drawer-header">';
     html += '<div style="display:flex;align-items:center;gap:10px"><span class="cm-mv-fr-impact" style="background:' + icfg.bg + ';color:' + icfg.color + '">' + icfg.label + '</span><span style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Fricción ' + escHtml(f.id) + '</span></div>';
-    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close">×</button>';
+    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close" aria-label="Cerrar ficha">×</button>';
     html += '</div>';
-    html += '<div class="cm-canvas-drawer-title">' + escHtml(f.name) + '</div>';
+    html += '<div class="cm-canvas-drawer-title" id="cm-canvas-drawer-title">' + escHtml(f.name) + '</div>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
     html += '<span class="cm-mv-tag">' + statusBadge(f.status||'pending') + '</span>';
     html += '</div>';
@@ -5021,6 +6973,7 @@ window.ComercialModule = (function() {
     if (drawer && content) {
       content.innerHTML = html;
       drawer.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
       var btnClose = document.querySelector('#cm-canvas-drawer-close');
       if (btnClose) btnClose.addEventListener('click', _closeCanvasDrawer);
       var btn1 = document.querySelector('#cm-canvas-goto-fr');
@@ -5040,7 +6993,7 @@ window.ComercialModule = (function() {
     var html = '';
     html += '<div class="cm-canvas-drawer-header">';
     html += '<div style="font-size:.66rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700">Nota libre</div>';
-    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close">×</button>';
+    html += '<button class="cm-canvas-drawer-close" id="cm-canvas-drawer-close" aria-label="Cerrar ficha">×</button>';
     html += '</div>';
     html += '<div class="cm-canvas-drawer-section"><div class="cm-canvas-drawer-section-title">Texto</div>';
     html += '<textarea id="cm-canvas-note-text" rows="6" class="cm-textarea">' + escHtml(n.text||'') + '</textarea>';
@@ -5060,6 +7013,7 @@ window.ComercialModule = (function() {
     if (drawer && content) {
       content.innerHTML = html;
       drawer.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
       document.querySelector('#cm-canvas-drawer-close').addEventListener('click', _closeCanvasDrawer);
       document.querySelector('#cm-canvas-note-save').addEventListener('click', function() {
         var text = document.querySelector('#cm-canvas-note-text').value;
@@ -5129,7 +7083,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) {
       if (e.target === this) closeModal();
@@ -5404,7 +7358,7 @@ window.ComercialModule = (function() {
 
       var div = document.createElement('div');
       div.innerHTML = html;
-      document.body.appendChild(div.firstChild);
+      (document.fullscreenElement || document.body).appendChild(div.firstChild);
       document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) {
         if (e.target === this) closeModal();
       });
@@ -5673,7 +7627,12 @@ window.ComercialModule = (function() {
 
     var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
     html += '<div class="cm-modal" style="max-width:780px">';
-    html += '<div class="cm-modal-title">' + (isEdit ? 'Editar' : 'Nueva') + ' iniciativa</div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px">';
+    html += '<div class="cm-modal-title" style="margin:0">' + (isEdit ? 'Editar' : 'Nueva') + ' iniciativa</div>';
+    if (!isEdit) {
+      html += '<button class="cm-btn cm-drawer-ai-btn" id="cm-ini-ai-suggest" type="button" style="font-size:.8rem;padding:7px 12px;border-radius:8px">✨ Generar 2-3 alternativas con AI</button>';
+    }
+    html += '</div>';
 
     // Identidad
     html += '<div class="cm-modal-field"><label>Título <span class="required">*</span></label>';
@@ -5756,13 +7715,39 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
     document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
     document.querySelector('#cm-ini-cancel').addEventListener('click', closeModal);
     _bindMultiCheckSearch();
     var progSlider = document.querySelector('#cm-ini-progress');
     var progLabel = progSlider.parentElement.querySelector('label');
     progSlider.addEventListener('input', function() { progLabel.textContent = 'Progreso (' + this.value + '%)'; });
+
+    // Botón AI: pide objetivo + fricciones críticas, devuelve 3 drafts
+    var aiBtn = document.querySelector('#cm-ini-ai-suggest');
+    if (aiBtn) {
+      aiBtn.addEventListener('click', function() {
+        // Pre-cargar fricciones del defaults si vienen
+        var preselectedFr = (defaults.friction_ids || []).map(String);
+        _showAISuggestInitiativesModal(preselectedFr, function(picked) {
+          // Aplicar el draft elegido al form
+          document.querySelector('#cm-ini-title').value = picked.title || '';
+          document.querySelector('#cm-ini-description').value = picked.description || '';
+          document.querySelector('#cm-ini-target').value = picked.target || '';
+          var prio = document.querySelector('#cm-ini-priority');
+          if (prio && picked.priority) prio.value = picked.priority;
+          var tipoSel = document.querySelector('#cm-ini-tipo');
+          if (tipoSel && picked.tipo) tipoSel.value = picked.tipo;
+          // Notes con first_steps + rationale
+          var notesArea = document.querySelector('#cm-ini-description');
+          if (picked.first_steps && picked.first_steps.length) {
+            var stepsTxt = '\n\nPrimeros pasos:\n' + picked.first_steps.map(function(s){ return '• ' + s; }).join('\n');
+            if (!notesArea.value.includes('Primeros pasos')) notesArea.value = (notesArea.value || '') + stepsTxt;
+          }
+          toast('Draft aplicado · edita lo que quieras antes de Crear', 'success');
+        });
+      });
+    }
 
     document.querySelector('#cm-ini-save').addEventListener('click', function() {
       var title = document.querySelector('#cm-ini-title').value.trim();
@@ -5846,7 +7831,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     var backdrop = document.querySelector('#cm-modal-backdrop');
     backdrop.addEventListener('click', function(e) {
@@ -6029,6 +8014,7 @@ window.ComercialModule = (function() {
     html += '<span class="cm-friction-id">' + escHtml(f.id) + '</span>';
     html += impactBadge(f.impact);
     html += statusBadge(f.status);
+    if (f.friction_type) html += _frictionTypeChipHTML(f.friction_type);
     if (phase.name) {
       html += '<span class="cm-friction-phase-tag">&#128205; ' + escHtml(phase.name) + '</span>';
     }
@@ -6041,13 +8027,16 @@ window.ComercialModule = (function() {
       html += '<option value="' + s + '"' + (f.status === s ? ' selected' : '') + '>' + ic + ' ' + statusLabel(s) + '</option>';
     });
     html += '</select>';
+    // Critical toggle (⭐) — el AI prioriza solo críticas al sugerir iniciativas
+    var critOn = !!f.is_critical;
+    html += '<button class="cm-icon-btn cm-friction-critical-toggle' + (critOn ? ' is-on' : '') + '" data-fid="' + escHtml(f.id) + '" title="' + (critOn ? 'Quitar de críticas' : 'Marcar como crítica (AI usa solo críticas para sugerir iniciativas)') + '">' + (critOn ? '⭐' : '☆') + '</button>';
     // Edit icon
     html += '<button class="cm-icon-btn cm-friction-edit-toggle" data-fid="' + escHtml(f.id) + '" title="Editar">&#9998;</button>';
     html += '</div>';
     html += '</div>';
 
     // Title
-    html += '<div class="cm-friction-title">' + escHtml(f.name) + '</div>';
+    html += '<div class="cm-friction-title">' + (critOn ? '<span class="cm-friction-crit-pill">CRÍTICA</span> ' : '') + escHtml(f.name) + '</div>';
 
     if (f.touchpoint_id) {
       html += '<div class="cm-friction-tp-line">&#128205; Touchpoint: ' + escHtml(touchpointName(f.touchpoint_id)) + '</div>';
@@ -6121,6 +8110,19 @@ window.ComercialModule = (function() {
   function renderFrictionDetail(f) {
     var html = '';
 
+    html += '<div class="cm-friction-field"><label>Nombre <span class="required">*</span></label>';
+    html += '<input type="text" class="cm-input cm-detail-field" data-fid="' + escHtml(f.id) + '" data-field="name" value="' + escHtml(f.name || '') + '"></div>';
+
+    html += '<div class="cm-friction-field"><label>Descripción</label>';
+    html += '<textarea class="cm-textarea cm-detail-field" data-fid="' + escHtml(f.id) + '" data-field="description" rows="3" placeholder="Qué pasa exactamente, dónde, a quién le afecta. Más detalle que el nombre.">' + escHtml(f.description || '') + '</textarea></div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    html += '<div class="cm-friction-field"><label>Solución</label>';
+    html += '<textarea class="cm-textarea cm-detail-field" data-fid="' + escHtml(f.id) + '" data-field="solution" rows="2">' + escHtml(f.solution || '') + '</textarea></div>';
+    html += '<div class="cm-friction-field"><label>Resultado Esperado</label>';
+    html += '<textarea class="cm-textarea cm-detail-field" data-fid="' + escHtml(f.id) + '" data-field="expected_outcome" rows="2">' + escHtml(f.expected_outcome || '') + '</textarea></div>';
+    html += '</div>';
+
     html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">';
 
     html += '<div class="cm-friction-field"><label>Fecha Limite</label>';
@@ -6138,6 +8140,10 @@ window.ComercialModule = (function() {
     html += '</div>';
 
     html += '</div>';
+
+    html += '<div class="cm-friction-field"><label>Tipo de fricción</label>';
+    html += '<select class="cm-select cm-detail-field" data-fid="' + escHtml(f.id) + '" data-field="friction_type" style="width:100%">' + _frictionTypeOptionsHTML(f.friction_type || null) + '</select>';
+    html += '<div style="font-size:.7rem;color:var(--text-muted);margin-top:4px">6 categorías canónicas. Permite agregar fricciones por tipo en el dashboard.</div></div>';
 
     html += '<div class="cm-friction-field"><label>Touchpoint (opcional)</label>';
     html += touchpointSelect(f.phase_id, f.touchpoint_id, 'cm-ef-tp-' + f.id);
@@ -6201,7 +8207,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
     document.querySelector('#cm-link-cancel').addEventListener('click', closeModal);
@@ -6399,6 +8405,27 @@ window.ComercialModule = (function() {
       });
     });
 
+    // Critical toggle (star icon) — patch is_critical y re-render
+    el.querySelectorAll('.cm-friction-critical-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var fid = this.dataset.fid;
+        var fr = state.frictions.find(function(x){ return String(x.id) === String(fid); });
+        if (!fr) return;
+        var newVal = !fr.is_critical;
+        // Optimistic update
+        fr.is_critical = newVal;
+        renderFricciones(el);
+        apiPatch('frictions', fid, { is_critical: newVal })
+          .then(function(){ toast(newVal ? 'Marcada como crítica' : 'Crítica removida', 'success'); })
+          .catch(function(){
+            fr.is_critical = !newVal;
+            renderFricciones(el);
+            toast('Error al actualizar', 'error');
+          });
+      });
+    });
+
     // Status select
     el.querySelectorAll('.cm-f-status-select').forEach(function(sel) {
       sel.addEventListener('click', function(e) { e.stopPropagation(); });
@@ -6564,6 +8591,10 @@ window.ComercialModule = (function() {
     html += '<option value="low">Bajo</option>';
     html += '</select></div>';
 
+    html += '<div class="cm-modal-field"><label>Tipo de fricción</label>';
+    html += '<select class="cm-select" id="cm-nf-type" style="width:100%">' + _frictionTypeOptionsHTML(null) + '</select>';
+    html += '</div>';
+
     html += '<div class="cm-modal-field"><label>Responsable</label>';
     html += personSelect(null, 'cm-nf-resp');
     html += '</div>';
@@ -6576,6 +8607,9 @@ window.ComercialModule = (function() {
     html += '<div class="cm-modal-field"><label>Touchpoint (opcional)</label>';
     html += '<select class="cm-select" id="cm-nf-tp" style="width:100%"></select>';
     html += '<div style="font-size:.72rem;color:var(--text-muted);margin-top:4px">Vincula al punto del mapa si la fricción aplica a un touchpoint concreto.</div></div>';
+
+    html += '<div class="cm-modal-field"><label>Descripción</label>';
+    html += '<textarea class="cm-textarea" id="cm-nf-description" rows="3" placeholder="Qué pasa exactamente, dónde y a quién le afecta. Más detalle que el nombre."></textarea></div>';
 
     html += '<div class="cm-modal-field"><label>Solucion</label>';
     html += '<textarea class="cm-textarea" id="cm-nf-solution" rows="2" placeholder="Solucion propuesta..."></textarea></div>';
@@ -6592,7 +8626,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     var backdrop = document.querySelector('#cm-modal-backdrop');
     backdrop.addEventListener('click', function(e) {
@@ -6631,8 +8665,10 @@ window.ComercialModule = (function() {
         phase_id: document.querySelector('#cm-nf-phase').value,
         name: name,
         impact: document.querySelector('#cm-nf-impact').value,
+        friction_type: document.querySelector('#cm-nf-type').value || null,
         responsable_id: parseInt(document.querySelector('#cm-nf-resp').value) || null,
         deadline: document.querySelector('#cm-nf-deadline').value || null,
+        description: (document.querySelector('#cm-nf-description') && document.querySelector('#cm-nf-description').value.trim()) || '',
         solution: document.querySelector('#cm-nf-solution').value.trim(),
         expected_outcome: document.querySelector('#cm-nf-outcome').value.trim(),
         status: 'pending',
@@ -6691,7 +8727,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     var backdrop = document.querySelector('#cm-modal-backdrop');
     backdrop.addEventListener('click', function(e) {
@@ -6999,6 +9035,35 @@ window.ComercialModule = (function() {
       html += '<div class="cm-empty"><div class="cm-empty-icon">&#128101;</div>No hay personas registradas</div>';
     }
 
+    // ── Catálogo de canales ────────────────────────────────────
+    html += '<div style="height:1px;background:var(--border,#E2E8F0);margin:36px 0 24px"></div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div class="cm-section-title">Catálogo de canales</div>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-new-channel">+ Nuevo canal</button>';
+    html += '</div>';
+    html += '<div style="font-size:.82rem;color:var(--text-muted);margin-bottom:14px">Define los canales por los que ocurren tus touchpoints (WhatsApp, Email, Llamada, Instagram, etc). Se usan en el drawer del touchpoint y en el Mapa Visual.</div>';
+    html += '<div class="cm-channels-grid">';
+    var sortedChannels = (state.channels || []).slice().sort(function(a,b){ return (a.order||0)-(b.order||0); });
+    sortedChannels.forEach(function(c) {
+      var tpsUsing = (state.touchpoint_channels || []).filter(function(tc){ return tc.channel_id === c.id; }).length;
+      html += '<div class="cm-channel-card" data-channel-id="' + escHtml(c.id) + '" style="border-left:4px solid ' + escHtml(c.color || '#94A3B8') + '">';
+      html += '<div class="cm-channel-card-head">';
+      html += '<span class="cm-channel-card-icon" style="background:' + escHtml(c.color || '#94A3B8') + '20">' + escHtml(c.icon || '📡') + '</span>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div class="cm-channel-card-name">' + escHtml(c.name) + '</div>';
+      html += '<div class="cm-channel-card-id">' + escHtml(c.id) + '</div>';
+      html += '</div>';
+      html += '<button class="cm-icon-btn cm-edit-channel" data-channel-id="' + escHtml(c.id) + '" title="Editar">&#9998;</button>';
+      html += '</div>';
+      if (c.description) html += '<div class="cm-channel-card-desc">' + escHtml(c.description) + '</div>';
+      html += '<div class="cm-channel-card-meta">' + tpsUsing + ' touchpoint' + (tpsUsing === 1 ? '' : 's') + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    if ((state.channels || []).length === 0) {
+      html += '<div class="cm-empty" style="margin-top:8px"><div class="cm-empty-icon">📡</div>Sin canales registrados. Agrega WhatsApp, Email, Llamada, etc.</div>';
+    }
+
     el.innerHTML = html;
 
     el.querySelectorAll('.cm-person-card').forEach(function(card) {
@@ -7019,6 +9084,414 @@ window.ComercialModule = (function() {
     if (newBtn) {
       newBtn.addEventListener('click', function() {
         showCreatePersonModal(el);
+      });
+    }
+
+    // Channel admin events
+    el.querySelectorAll('.cm-edit-channel').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showChannelModal(this.dataset.channelId, el);
+      });
+    });
+    el.querySelectorAll('.cm-channel-card').forEach(function(card) {
+      card.addEventListener('click', function(e) {
+        if (e.target.closest('.cm-edit-channel')) return;
+        showChannelModal(this.dataset.channelId, el);
+      });
+    });
+    var newChBtn = el.querySelector('#cm-new-channel');
+    if (newChBtn) {
+      newChBtn.addEventListener('click', function() {
+        showChannelModal(null, el);
+      });
+    }
+  }
+
+  /* ── AI Suggest Fricciones para un TP ────────────────────── */
+  function _showAISuggestFrictionsModal(tp) {
+    var html = '<div class="cm-modal-backdrop" id="cm-ai-fr-bd">';
+    html += '<div class="cm-modal" style="max-width:680px;max-height:88vh;display:flex;flex-direction:column;padding:0">';
+    html += '<div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#F5F3FF,#EEF2FF)">';
+    html += '<div style="font-size:1.4rem">✨</div>';
+    html += '<div style="flex:1"><div style="font-size:1rem;font-weight:700;color:#1E293B">Sugerir fricciones con AI</div>';
+    html += '<div style="font-size:.78rem;color:#64748B;margin-top:2px">Touchpoint: <b>' + escHtml(tp.name) + '</b></div></div>';
+    html += '<button class="cm-icon-btn" id="cm-ai-fr-close" style="font-size:1.4rem">×</button>';
+    html += '</div>';
+    html += '<div id="cm-ai-fr-body" style="flex:1;overflow-y:auto;padding:18px 22px">';
+    html += '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 0;gap:10px">';
+    html += '<div class="cm-ai-spinner"></div>';
+    html += '<div style="font-size:.84rem;color:#64748B">Analizando el touchpoint contra el contexto de la empresa…</div>';
+    html += '</div></div>';
+    html += '<div id="cm-ai-fr-footer" style="padding:14px 22px;border-top:1px solid #E2E8F0;display:flex;gap:8px;justify-content:flex-end;background:#F8FAFC;display:none"></div>';
+    html += '</div></div>';
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+    var bd = document.querySelector('#cm-ai-fr-bd');
+    function close(){ if (bd) bd.remove(); }
+    document.querySelector('#cm-ai-fr-close').addEventListener('click', close);
+    bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+
+    fetch('/api/comercial/ai/suggest-frictions-for-tp', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ touchpoint_id: tp.id })
+    }).then(function(r){
+      if (!r.ok) return r.json().then(function(b){ throw new Error(b.detail || 'Error '+r.status); });
+      return r.json();
+    }).then(function(result) {
+      _renderAIFrictionDrafts(tp, result, close);
+    }).catch(function(err) {
+      var body = document.querySelector('#cm-ai-fr-body');
+      if (body) body.innerHTML = '<div style="padding:30px 0;text-align:center;color:#DC2626"><div style="font-size:2rem;margin-bottom:8px">⚠️</div><div style="font-size:.88rem;font-weight:600">No se pudo generar</div><div style="font-size:.76rem;margin-top:6px">' + escHtml(String(err.message || err)) + '</div></div>';
+    });
+  }
+
+  function _renderAIFrictionDrafts(tp, result, closeFn) {
+    var body = document.querySelector('#cm-ai-fr-body');
+    var footer = document.querySelector('#cm-ai-fr-footer');
+    if (!body || !footer) return;
+    var fs = (result && result.frictions) || [];
+    var html = '';
+    if (result.summary) html += '<div style="font-size:.8rem;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;padding:10px 12px;border-radius:8px;margin-bottom:14px">💡 ' + escHtml(result.summary) + '</div>';
+    html += '<div style="font-size:.74rem;color:#64748B;margin-bottom:8px">Marca las que quieras aplicar. Edita el texto si lo necesitas.</div>';
+    fs.forEach(function(f, idx) {
+      html += '<div class="cm-ai-fr-draft" data-idx="' + idx + '">';
+      html += '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">';
+      html += '<input type="checkbox" class="cm-ai-fr-pick" data-idx="' + idx + '" checked style="margin-top:3px">';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<input type="text" class="cm-ai-fr-name cm-input" data-idx="' + idx + '" value="' + escHtml(f.name || '') + '" style="font-weight:600;font-size:.86rem;border:none;background:transparent;padding:2px 0;width:100%">';
+      html += '<div style="display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap">';
+      html += '<select class="cm-ai-fr-sev cm-select" data-idx="' + idx + '" style="font-size:.7rem;padding:2px 6px;height:auto">';
+      ['low','medium','high'].forEach(function(s){
+        html += '<option value="' + s + '"' + (f.severity===s?' selected':'') + '>' + ({low:'Bajo',medium:'Medio',high:'Alto'}[s]) + '</option>';
+      });
+      html += '</select>';
+      html += '<select class="cm-ai-fr-type cm-select" data-idx="' + idx + '" style="font-size:.7rem;padding:2px 6px;height:auto">';
+      ['time','repetition','channel_switch','incomplete_info','unmet_expectations','cognitive_effort'].forEach(function(t){
+        var labels = {time:'⏱ Tiempo',repetition:'🔁 Repetición',channel_switch:'🔀 Cambio canal',incomplete_info:'❓ Info incompleta',unmet_expectations:'😕 Expectativas',cognitive_effort:'🧠 Esfuerzo cognitivo'};
+        html += '<option value="' + t + '"' + (f.friction_type===t?' selected':'') + '>' + labels[t] + '</option>';
+      });
+      html += '</select>';
+      html += '<label style="font-size:.7rem;color:#92400E;display:flex;align-items:center;gap:4px;cursor:pointer">';
+      html += '<input type="checkbox" class="cm-ai-fr-crit" data-idx="' + idx + '"' + (f.is_critical?' checked':'') + '> ⭐ Crítica';
+      html += '</label>';
+      html += '</div>';
+      html += '<textarea class="cm-ai-fr-desc cm-textarea" data-idx="' + idx + '" rows="2" style="font-size:.78rem;width:100%">' + escHtml(f.description || '') + '</textarea>';
+      if (f.rationale) html += '<div style="font-size:.7rem;color:#64748B;margin-top:4px;font-style:italic">↳ ' + escHtml(f.rationale) + '</div>';
+      html += '</div></label></div>';
+    });
+    if (fs.length === 0) html += '<div style="text-align:center;color:#64748B;padding:30px 0">El AI no encontró fricciones nuevas que sugerir.</div>';
+    body.innerHTML = html;
+
+    footer.style.display = 'flex';
+    footer.innerHTML = '<button class="cm-btn cm-btn-ghost" id="cm-ai-fr-cancel">Cancelar</button>' +
+      '<div style="flex:1"></div>' +
+      '<button class="cm-btn cm-btn-primary" id="cm-ai-fr-apply" style="background:linear-gradient(135deg,#7C3AED,#4F46E5)">Aplicar selección</button>';
+    document.querySelector('#cm-ai-fr-cancel').addEventListener('click', closeFn);
+    document.querySelector('#cm-ai-fr-apply').addEventListener('click', function() {
+      var btn = this;
+      btn.disabled = true; btn.textContent = 'Creando…';
+      var picks = [];
+      fs.forEach(function(f, idx) {
+        var pick = body.querySelector('.cm-ai-fr-pick[data-idx="' + idx + '"]');
+        if (!pick || !pick.checked) return;
+        picks.push({
+          name: body.querySelector('.cm-ai-fr-name[data-idx="' + idx + '"]').value.trim() || f.name,
+          description: body.querySelector('.cm-ai-fr-desc[data-idx="' + idx + '"]').value.trim() || '',
+          friction_type: body.querySelector('.cm-ai-fr-type[data-idx="' + idx + '"]').value,
+          severity: body.querySelector('.cm-ai-fr-sev[data-idx="' + idx + '"]').value,
+          is_critical: body.querySelector('.cm-ai-fr-crit[data-idx="' + idx + '"]').checked,
+        });
+      });
+      if (picks.length === 0) { toast('Marca al menos una fricción', 'error'); btn.disabled=false; btn.textContent='Aplicar selección'; return; }
+      // Calcular siguiente F-id
+      var lastN = 0;
+      (state.frictions || []).forEach(function(f){ var m=/^F(\d+)$/.exec(f.id||''); if(m) lastN=Math.max(lastN, parseInt(m[1],10)); });
+      var sevToImpact = { low: 'low', medium: 'medium', high: 'high' };
+      var promises = picks.map(function(p, i) {
+        var fid = 'F' + (lastN + i + 1);
+        return fetch('/api/comercial/frictions/', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            id: fid,
+            phase_id: tp.phase_id,
+            name: p.name,
+            description: p.description,
+            impact: sevToImpact[p.severity] || 'medium',
+            friction_type: p.friction_type,
+            is_critical: p.is_critical,
+            touchpoint_id: tp.id,
+            status: 'pending',
+            notes: '',
+            priority: 0,
+            resolution_checklist: [],
+          }),
+        }).then(function(r){ if (!r.ok) throw new Error('frt'); return r.json(); });
+      });
+      Promise.all(promises).then(function() {
+        toast(picks.length + ' fricción' + (picks.length===1?'':'es') + ' creada' + (picks.length===1?'':'s'), 'success');
+        closeFn();
+        return refreshAll().then(function() {
+          // Re-render del drawer si está abierto
+          if (typeof _openCanvasDrawerForKey === 'function' && canvasState.selectedKey === 'tp:' + tp.id) {
+            _openCanvasDrawerForKey('tp:' + tp.id);
+          }
+          var main = document.querySelector('#cm-main');
+          if (main && activeTab === 'fricciones') renderFricciones(main);
+        });
+      }).catch(function() {
+        toast('Error al crear las fricciones', 'error');
+        btn.disabled = false; btn.textContent = 'Aplicar selección';
+      });
+    });
+  }
+
+  /* ── AI Suggest Iniciativas (3 alternativas) ─────────────── */
+  function _showAISuggestInitiativesModal(preselectedFrIds, onPick) {
+    // Step 1: form de objetivo + fricciones críticas
+    // Default: si hay objetivos del CEO en company_context, los pre-llena
+    var ctx = state.company_context || {};
+    var defaultObjective = ctx.main_objectives || '';
+    var critFrs = (state.frictions || []).filter(function(f){ return f.is_critical; });
+    var preselect = {};
+    (preselectedFrIds || []).forEach(function(id){ preselect[String(id)] = true; });
+    // Si hay críticas y nada preseleccionado, marcamos todas las críticas
+    if (Object.keys(preselect).length === 0) {
+      critFrs.forEach(function(f){ preselect[String(f.id)] = true; });
+    }
+    var allFrsForPick = state.frictions || [];
+
+    var html = '<div class="cm-modal-backdrop" id="cm-ai-ini-bd">';
+    html += '<div class="cm-modal" style="max-width:780px;max-height:90vh;display:flex;flex-direction:column;padding:0">';
+    html += '<div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#F5F3FF,#EEF2FF)">';
+    html += '<div style="font-size:1.4rem">✨</div>';
+    html += '<div style="flex:1"><div style="font-size:1rem;font-weight:700;color:#1E293B">Generar iniciativas con AI</div>';
+    html += '<div style="font-size:.78rem;color:#64748B;margin-top:2px">Te propondré 3 alternativas distintas. Eliges una y la editas.</div></div>';
+    html += '<button class="cm-icon-btn" id="cm-ai-ini-close" style="font-size:1.4rem">×</button>';
+    html += '</div>';
+    html += '<div id="cm-ai-ini-body" style="flex:1;overflow-y:auto;padding:18px 22px">';
+
+    // Form
+    html += '<div style="margin-bottom:14px">';
+    html += '<label style="font-size:.74rem;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Objetivo a impulsar</label>';
+    html += '<textarea id="cm-ai-ini-objective" class="cm-textarea" rows="2" placeholder="Ej. Subir conversión 20% este Q · Reducir CAC 15%" style="width:100%;margin-top:4px">' + escHtml(defaultObjective) + '</textarea>';
+    html += '<div style="font-size:.7rem;color:#64748B;margin-top:4px">Tomado de Quick Start → Objetivos principales del CEO. Edítalo si quieres enfocar este draft en algo distinto.</div>';
+    html += '</div>';
+
+    html += '<div style="margin-bottom:14px">';
+    html += '<label style="font-size:.74rem;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Fricciones a resolver <span style="color:#F59E0B">⭐ críticas marcadas</span></label>';
+    html += '<div id="cm-ai-ini-fr-list" style="margin-top:6px;max-height:180px;overflow-y:auto;border:1px solid #E2E8F0;border-radius:8px;padding:8px;background:#F8FAFC">';
+    if (allFrsForPick.length === 0) {
+      html += '<div style="color:#94A3B8;font-style:italic;font-size:.78rem;padding:6px">Sin fricciones registradas. La AI sugerirá iniciativas usando solo el objetivo.</div>';
+    } else {
+      // Críticas primero
+      var sortedFrs = allFrsForPick.slice().sort(function(a,b){
+        if (a.is_critical !== b.is_critical) return a.is_critical ? -1 : 1;
+        return 0;
+      });
+      sortedFrs.forEach(function(f){
+        var checked = preselect[String(f.id)] ? ' checked' : '';
+        html += '<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:.78rem;cursor:pointer;border-radius:4px">';
+        html += '<input type="checkbox" class="cm-ai-ini-fr" data-id="' + escHtml(f.id) + '"' + checked + '>';
+        html += '<span style="flex:1">' + (f.is_critical ? '⭐ ' : '') + '<b>' + escHtml(f.id) + '</b> · ' + escHtml(f.name) + '</span>';
+        html += '</label>';
+      });
+    }
+    html += '</div></div>';
+
+    html += '<div id="cm-ai-ini-results"></div>';
+    html += '</div>';
+    html += '<div id="cm-ai-ini-footer" style="padding:14px 22px;border-top:1px solid #E2E8F0;display:flex;gap:8px;justify-content:flex-end;background:#F8FAFC">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-ai-ini-cancel">Cancelar</button>';
+    html += '<div style="flex:1"></div>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-ai-ini-go" style="background:linear-gradient(135deg,#7C3AED,#4F46E5)">✨ Generar 3 alternativas</button>';
+    html += '</div></div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+    var bd = document.querySelector('#cm-ai-ini-bd');
+    function close(){ if (bd) bd.remove(); }
+    document.querySelector('#cm-ai-ini-close').addEventListener('click', close);
+    document.querySelector('#cm-ai-ini-cancel').addEventListener('click', close);
+    bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+
+    document.querySelector('#cm-ai-ini-go').addEventListener('click', function() {
+      var goBtn = this;
+      var objective = document.querySelector('#cm-ai-ini-objective').value.trim();
+      var fids = Array.from(document.querySelectorAll('.cm-ai-ini-fr:checked')).map(function(cb){ return cb.dataset.id; });
+      goBtn.disabled = true; goBtn.textContent = 'Generando…';
+      var resultsDiv = document.querySelector('#cm-ai-ini-results');
+      resultsDiv.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;padding:30px 0;gap:10px"><div class="cm-ai-spinner"></div><div style="font-size:.84rem;color:#64748B">Diseñando 3 enfoques distintos…</div></div>';
+
+      fetch('/api/comercial/ai/suggest-initiatives', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ objective: objective, friction_ids: fids, touchpoint_ids: [] })
+      }).then(function(r){
+        if (!r.ok) return r.json().then(function(b){ throw new Error(b.detail || 'Error '+r.status); });
+        return r.json();
+      }).then(function(result) {
+        _renderAIInitiativeDrafts(result, onPick, close);
+      }).catch(function(err) {
+        resultsDiv.innerHTML = '<div style="padding:24px 0;text-align:center;color:#DC2626"><div style="font-size:2rem;margin-bottom:8px">⚠️</div><div style="font-size:.86rem;font-weight:600">No se pudo generar</div><div style="font-size:.74rem;margin-top:4px">' + escHtml(String(err.message || err)) + '</div></div>';
+        goBtn.disabled = false; goBtn.textContent = '✨ Reintentar';
+      });
+    });
+  }
+
+  function _renderAIInitiativeDrafts(result, onPick, closeFn) {
+    var resultsDiv = document.querySelector('#cm-ai-ini-results');
+    var footer = document.querySelector('#cm-ai-ini-footer');
+    var inis = (result && result.initiatives) || [];
+    var html = '';
+    if (result.summary) html += '<div style="font-size:.8rem;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;padding:10px 12px;border-radius:8px;margin-bottom:12px">💡 ' + escHtml(result.summary) + '</div>';
+    html += '<div style="font-size:.74rem;color:#64748B;margin-bottom:8px">Click para elegir una alternativa. Después podrás editarla en el form principal.</div>';
+    html += '<div class="cm-ai-ini-grid">';
+    inis.forEach(function(ini, idx) {
+      var motorLabels = { trust:'🧱 Trust', atraccion:'🧲 Atracción', captura:'🎯 Captura', conversion:'🤝 Conversión', onboarding:'🎁 Onboarding', recompra:'🔁 Recompra' };
+      var prioLabels = { high:'🔴 Alta', medium:'🟡 Media', low:'🟢 Baja' };
+      var tipoLabels = { operativa:'Operativa', estrategica:'Estratégica', hito:'Hito' };
+      html += '<div class="cm-ai-ini-card" data-idx="' + idx + '">';
+      html += '<div class="ai-ini-title">' + escHtml(ini.title) + '</div>';
+      html += '<div class="ai-ini-desc">' + escHtml(ini.description || '') + '</div>';
+      if (ini.target) html += '<div class="ai-ini-target">🎯 ' + escHtml(ini.target) + '</div>';
+      html += '<div class="ai-ini-meta">';
+      if (ini.motor) html += '<span>' + (motorLabels[ini.motor] || ini.motor) + '</span>';
+      if (ini.priority) html += '<span>' + (prioLabels[ini.priority] || ini.priority) + '</span>';
+      if (ini.tipo) html += '<span>' + (tipoLabels[ini.tipo] || ini.tipo) + '</span>';
+      if (ini.estimated_weeks) html += '<span>~' + ini.estimated_weeks + ' sem</span>';
+      html += '</div>';
+      if (ini.first_steps && ini.first_steps.length) {
+        html += '<div class="ai-ini-steps"><b style="color:#475569">Primeros pasos:</b><ul style="margin:4px 0 0;padding:0;list-style:disc">';
+        ini.first_steps.forEach(function(s){ html += '<li>' + escHtml(s) + '</li>'; });
+        html += '</ul></div>';
+      }
+      if (ini.rationale) html += '<div class="ai-ini-rationale">↳ ' + escHtml(ini.rationale) + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    if (inis.length === 0) html += '<div style="text-align:center;color:#64748B;padding:30px 0">El AI no generó alternativas. Revisa el objetivo o las fricciones.</div>';
+    resultsDiv.innerHTML = html;
+
+    resultsDiv.querySelectorAll('.cm-ai-ini-card').forEach(function(card) {
+      card.addEventListener('click', function() {
+        var idx = parseInt(this.getAttribute('data-idx'), 10);
+        var picked = inis[idx];
+        if (!picked) return;
+        if (typeof onPick === 'function') onPick(picked);
+        closeFn();
+      });
+    });
+
+    if (footer) {
+      footer.innerHTML = '<button class="cm-btn cm-btn-ghost" id="cm-ai-ini-back">← Re-generar con otros params</button>' +
+        '<div style="flex:1"></div>' +
+        '<button class="cm-btn cm-btn-ghost" id="cm-ai-ini-cancel2">Cancelar</button>';
+      document.querySelector('#cm-ai-ini-cancel2').addEventListener('click', closeFn);
+      document.querySelector('#cm-ai-ini-back').addEventListener('click', function() {
+        // Restaura el botón Generar
+        resultsDiv.innerHTML = '';
+        footer.innerHTML = '<button class="cm-btn cm-btn-ghost" id="cm-ai-ini-cancel">Cancelar</button>' +
+          '<div style="flex:1"></div>' +
+          '<button class="cm-btn cm-btn-primary" id="cm-ai-ini-go" style="background:linear-gradient(135deg,#7C3AED,#4F46E5)">✨ Generar 3 alternativas</button>';
+        document.querySelector('#cm-ai-ini-cancel').addEventListener('click', closeFn);
+        document.querySelector('#cm-ai-ini-go').click();
+      });
+    }
+  }
+
+  /* ── Channel modal (create/edit) ───────────────────────────── */
+  function showChannelModal(channelId, parentEl) {
+    var existing = channelId ? (state.channels || []).find(function(c){ return c.id === channelId; }) : null;
+    var isEdit = !!existing;
+
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop">';
+    html += '<div class="cm-modal" style="max-width:480px">';
+    html += '<div class="cm-modal-title">' + (isEdit ? 'Editar' : 'Nuevo') + ' canal</div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>ID <span class="required">*</span></label>';
+    html += '<input type="text" class="cm-input" id="cm-ch-id" value="' + escHtml(existing ? existing.id : '') + '" placeholder="whatsapp"' + (isEdit ? ' disabled' : '') + '></div>';
+    html += '<div class="cm-modal-field"><label>Orden</label>';
+    html += '<input type="number" class="cm-input" id="cm-ch-order" value="' + (existing ? (existing.order || 0) : 0) + '"></div>';
+    html += '</div>';
+
+    html += '<div class="cm-modal-field"><label>Nombre <span class="required">*</span></label>';
+    html += '<input type="text" class="cm-input" id="cm-ch-name" value="' + escHtml(existing ? existing.name : '') + '" placeholder="WhatsApp"></div>';
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    html += '<div class="cm-modal-field"><label>Icono (emoji)</label>';
+    html += '<input type="text" class="cm-input" id="cm-ch-icon" value="' + escHtml(existing ? (existing.icon || '') : '') + '" placeholder="💬" maxlength="4"></div>';
+    html += '<div class="cm-modal-field"><label>Color</label>';
+    html += '<input type="color" class="cm-input" id="cm-ch-color" value="' + escHtml(existing ? (existing.color || '#94A3B8') : '#4F46E5') + '" style="height:38px;padding:3px"></div>';
+    html += '</div>';
+
+    html += '<div class="cm-modal-field"><label>Descripción</label>';
+    html += '<textarea class="cm-textarea" id="cm-ch-description" rows="2" placeholder="¿Cuándo y para qué usamos este canal?">' + escHtml(existing ? (existing.description || '') : '') + '</textarea></div>';
+
+    html += '<div class="cm-modal-actions">';
+    if (isEdit) html += '<button class="cm-btn cm-btn-danger" id="cm-ch-delete">Eliminar</button>';
+    html += '<div style="flex:1"></div>';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-ch-cancel">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-ch-save">' + (isEdit ? 'Guardar' : 'Crear canal') + '</button>';
+    html += '</div>';
+    html += '</div></div>';
+
+    var modalDiv = document.createElement('div');
+    modalDiv.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
+
+    var backdrop = document.querySelector('#cm-modal-backdrop');
+    backdrop.addEventListener('click', function(e) { if (e.target === backdrop) closeModal(); });
+    document.querySelector('#cm-ch-cancel').addEventListener('click', closeModal);
+
+    // Focus al primer campo editable
+    var firstFocus = document.querySelector(isEdit ? '#cm-ch-name' : '#cm-ch-id');
+    if (firstFocus) setTimeout(function(){ firstFocus.focus(); firstFocus.select(); }, 30);
+
+    document.querySelector('#cm-ch-save').addEventListener('click', function() {
+      var id = (document.querySelector('#cm-ch-id').value || '').trim().toLowerCase().replace(/\s+/g, '_');
+      var name = document.querySelector('#cm-ch-name').value.trim();
+      if (!id || !name) { toast('ID y nombre son requeridos', 'error'); return; }
+      var data = {
+        name: name,
+        icon: document.querySelector('#cm-ch-icon').value.trim(),
+        color: document.querySelector('#cm-ch-color').value || '#94A3B8',
+        description: document.querySelector('#cm-ch-description').value.trim(),
+        order: parseInt(document.querySelector('#cm-ch-order').value) || 0,
+      };
+      var p;
+      if (isEdit) {
+        p = fetch('/api/comercial/channels/' + encodeURIComponent(id), {
+          method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+        });
+      } else {
+        data.id = id;
+        p = fetch('/api/comercial/channels/', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+        });
+      }
+      p.then(function(r){ if (!r.ok) return r.json().then(function(b){ throw new Error(b.detail || 'Error '+r.status); }); return r.json(); })
+       .then(function() {
+          closeModal();
+          toast('Canal ' + (isEdit ? 'actualizado' : 'creado'), 'success');
+          return refreshAll().then(function(){ renderEquipo(parentEl); });
+       })
+       .catch(function(err){ toast(String(err.message || 'Error al guardar'), 'error'); });
+    });
+
+    if (isEdit) {
+      document.querySelector('#cm-ch-delete').addEventListener('click', function() {
+        if (!confirm('¿Eliminar el canal "' + existing.name + '"? Se desvinculará de todos los touchpoints.')) return;
+        fetch('/api/comercial/channels/' + encodeURIComponent(existing.id), { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function() {
+            closeModal();
+            toast('Canal eliminado', 'success');
+            return refreshAll().then(function(){ renderEquipo(parentEl); });
+          })
+          .catch(function(){ toast('Error al eliminar canal', 'error'); });
       });
     }
   }
@@ -7117,7 +9590,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) {
       if (e.target === this) closeModal();
@@ -7174,7 +9647,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
     document.querySelector('#cm-ep-cancel').addEventListener('click', closeModal);
@@ -7398,6 +9871,197 @@ window.ComercialModule = (function() {
 
     html += '</div>';
     return html;
+  }
+
+  // ── F4 Gobernanza tab (#66) ───────────────────────────────────────────
+  function renderGobernanza(el) {
+    var ch = state.governance_charter || {};
+    var gaps = state.governance_gaps || [];
+    var tests = state.governance_tests || [];
+
+    var html = '';
+    html += '<div style="margin-bottom:8px"><h2 style="margin:0;font-size:1.2rem">Gobernanza del modelo comercial</h2>';
+    html += '<div style="font-size:.78rem;color:#64748B;margin-top:4px">3 herramientas para que el modelo se sostenga: Carta · Registro de Huecos · Pruebas de validación</div></div>';
+
+    // CARTA DE GOBERNANZA
+    html += '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:16px">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:1.2rem">📜</span><b>Carta de Gobernanza</b></div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">';
+    html += '<div class="cm-drawer-edit-cell"><label>Dueño del modelo</label>';
+    html += '<select class="cm-drawer-edit-input" id="cm-gov-owner">';
+    html += '<option value="">Sin asignar</option>';
+    state.people.forEach(function(p) {
+      html += '<option value="' + p.id + '"' + (String(p.id) === String(ch.owner_id) ? ' selected' : '') + '>' + escHtml(p.name) + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div class="cm-drawer-edit-cell"><label>Cadencia de revisión</label>';
+    html += '<select class="cm-drawer-edit-input" id="cm-gov-cadence">';
+    [['weekly','Semanal'],['biweekly','Quincenal'],['monthly','Mensual'],['quarterly','Trimestral']].forEach(function(c) {
+      html += '<option value="' + c[0] + '"' + ((ch.cadence||'monthly') === c[0] ? ' selected' : '') + '>' + c[1] + '</option>';
+    });
+    html += '</select></div>';
+    html += '</div>';
+    html += '<div class="cm-drawer-edit-cell" style="margin-bottom:10px"><label>Criterios de cambio del modelo</label>';
+    html += '<textarea id="cm-gov-criteria" class="cm-drawer-edit-input" rows="3" placeholder="¿Cuándo se permite cambiar fases, pilares, KPIs maestros?">' + escHtml(ch.change_criteria || '') + '</textarea></div>';
+    html += '<div class="cm-drawer-edit-cell" style="margin-bottom:10px"><label>Principios rectores</label>';
+    html += '<textarea id="cm-gov-principles" class="cm-drawer-edit-input" rows="3" placeholder="Reglas innegociables que rigen la operación comercial">' + escHtml(ch.principles || '') + '</textarea></div>';
+    html += '<button class="cm-btn cm-btn-primary cm-btn-sm" id="cm-gov-save">Guardar carta</button>';
+    html += '</div>';
+
+    // REGISTRO DE HUECOS
+    var openGaps = gaps.filter(function(g){ return g.status !== 'closed'; });
+    html += '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:16px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+    html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:1.2rem">🕳️</span><b>Registro de Huecos</b><span style="font-size:.7rem;color:#94A3B8">(' + openGaps.length + ' abiertos / ' + gaps.length + ' total)</span></div>';
+    html += '<button class="cm-btn cm-btn-primary cm-btn-sm" id="cm-gap-add">+ Nuevo hueco</button>';
+    html += '</div>';
+    if (gaps.length === 0) {
+      html += '<div style="padding:20px;text-align:center;color:#94A3B8">Sin huecos registrados.</div>';
+    } else {
+      html += '<table class="cm-table" style="width:100%;font-size:.78rem">';
+      html += '<thead><tr><th>Tipo</th><th>Descripción</th><th>Prioridad</th><th>Status</th><th></th></tr></thead><tbody>';
+      gaps.forEach(function(g) {
+        var prCol = g.priority === 'high' ? '#DC2626' : g.priority === 'medium' ? '#F59E0B' : '#94A3B8';
+        var stCol = g.status === 'closed' ? '#10B981' : '#F59E0B';
+        html += '<tr data-gap-id="' + g.id + '" style="' + (g.status === 'closed' ? 'opacity:.55' : '') + '">';
+        html += '<td><span class="cm-mv-tag">' + escHtml(g.gap_type) + '</span></td>';
+        html += '<td>' + escHtml(g.description) + '</td>';
+        html += '<td><span style="color:' + prCol + ';font-weight:700">' + escHtml(g.priority) + '</span></td>';
+        html += '<td><select class="cm-gap-status" data-gap-id="' + g.id + '">';
+        ['open','closed'].forEach(function(st) {
+          html += '<option value="' + st + '"' + (g.status === st ? ' selected' : '') + '>' + (st === 'open' ? 'Abierto' : 'Cerrado') + '</option>';
+        });
+        html += '</select></td>';
+        html += '<td><button class="cm-icon-btn danger cm-gap-del" data-gap-id="' + g.id + '" title="Eliminar">×</button></td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+    }
+    html += '</div>';
+
+    // PRUEBAS DE VALIDACIÓN
+    var byType = { contract: [], market: [], process: [] };
+    tests.forEach(function(t){ if (byType[t.test_type]) byType[t.test_type].push(t); });
+    html += '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:16px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+    html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:1.2rem">🧪</span><b>Pruebas de validación</b></div>';
+    html += '<button class="cm-btn cm-btn-primary cm-btn-sm" id="cm-test-add">+ Nueva prueba</button>';
+    html += '</div>';
+    var typeLabels = { contract: '📄 Contractual — ¿se cumple lo acordado?', market: '🌍 De mercado — ¿el cliente lo nota?', process: '⚙️ De proceso — ¿se sostiene en el tiempo?' };
+    Object.keys(typeLabels).forEach(function(tt) {
+      var arr = byType[tt] || [];
+      html += '<div style="margin-bottom:14px">';
+      html += '<div style="font-size:.74rem;font-weight:700;color:#475569;margin-bottom:6px">' + typeLabels[tt] + ' (' + arr.length + ')</div>';
+      if (arr.length === 0) {
+        html += '<div style="font-size:.7rem;color:#94A3B8;font-style:italic;padding:6px 10px;background:#F8FAFC;border:1px dashed #E2E8F0;border-radius:6px">Sin pruebas registradas.</div>';
+      } else {
+        arr.forEach(function(t) {
+          var stCfg = { planned: ['#94A3B8','Planeada'], running: ['#F59E0B','En curso'], passed: ['#10B981','Pasada'], failed: ['#DC2626','Falló'] };
+          var st = stCfg[t.status] || stCfg.planned;
+          html += '<div style="padding:10px 12px;border:1px solid #E2E8F0;border-left:3px solid ' + st[0] + ';border-radius:8px;margin-bottom:6px;background:#fff">';
+          html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">';
+          html += '<div style="flex:1"><div style="font-size:.82rem;font-weight:600">' + escHtml(t.subject) + '</div>';
+          if (t.hypothesis) html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px"><b>Hipótesis:</b> ' + escHtml(t.hypothesis) + '</div>';
+          if (t.evidence) html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px"><b>Evidencia:</b> ' + escHtml(t.evidence) + '</div>';
+          html += '</div>';
+          html += '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">';
+          html += '<select class="cm-test-status" data-test-id="' + t.id + '" style="font-size:.7rem">';
+          Object.keys(stCfg).forEach(function(s){ html += '<option value="' + s + '"' + (t.status === s ? ' selected' : '') + '>' + stCfg[s][1] + '</option>'; });
+          html += '</select>';
+          html += '<button class="cm-icon-btn danger cm-test-del" data-test-id="' + t.id + '" title="Eliminar">×</button>';
+          html += '</div></div></div>';
+        });
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+
+    el.innerHTML = html;
+
+    // Bindings
+    document.getElementById('cm-gov-save').addEventListener('click', function() {
+      fetch('/api/comercial/governance/charter', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          owner_id: parseInt(document.getElementById('cm-gov-owner').value, 10) || null,
+          cadence: document.getElementById('cm-gov-cadence').value,
+          change_criteria: document.getElementById('cm-gov-criteria').value,
+          principles: document.getElementById('cm-gov-principles').value,
+        }),
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(updated) { state.governance_charter = updated; toast('Carta guardada', 'success'); })
+        .catch(function(){ toast('Error al guardar carta', 'error'); });
+    });
+
+    document.getElementById('cm-gap-add').addEventListener('click', function() {
+      var desc = prompt('Describe el hueco (qué falta llenar):');
+      if (!desc) return;
+      var typ = prompt('Tipo (tp / friction / kpi / pillar / other):', 'other') || 'other';
+      var pr = prompt('Prioridad (high / medium / low):', 'medium') || 'medium';
+      fetch('/api/comercial/governance/gaps', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gap_type: typ, description: desc, priority: pr, status: 'open' }),
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(saved) { state.governance_gaps = (state.governance_gaps || []).concat([saved]); renderGobernanza(el); render(); })
+        .catch(function(){ toast('Error al crear hueco', 'error'); });
+    });
+    el.querySelectorAll('.cm-gap-status').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        var gid = parseInt(this.getAttribute('data-gap-id'), 10);
+        fetch('/api/comercial/governance/gaps/' + gid, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: this.value }),
+        }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(updated) {
+            state.governance_gaps = state.governance_gaps.map(function(g){ return g.id === updated.id ? updated : g; });
+            renderGobernanza(el); render();
+          }).catch(function(){ toast('Error al actualizar','error'); });
+      });
+    });
+    el.querySelectorAll('.cm-gap-del').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (!confirm('¿Eliminar este hueco?')) return;
+        var gid = parseInt(this.getAttribute('data-gap-id'), 10);
+        fetch('/api/comercial/governance/gaps/' + gid, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(){ state.governance_gaps = state.governance_gaps.filter(function(g){ return g.id !== gid; }); renderGobernanza(el); render(); })
+          .catch(function(){ toast('Error al eliminar','error'); });
+      });
+    });
+
+    document.getElementById('cm-test-add').addEventListener('click', function() {
+      var typ = prompt('Tipo de prueba (contract / market / process):', 'market') || 'market';
+      var subj = prompt('¿Qué se prueba?');
+      if (!subj) return;
+      var hyp = prompt('Hipótesis (qué esperas que pase):') || '';
+      fetch('/api/comercial/governance/tests', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_type: typ, subject: subj, hypothesis: hyp, status: 'planned' }),
+      }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+        .then(function(saved) { state.governance_tests = (state.governance_tests || []).concat([saved]); renderGobernanza(el); })
+        .catch(function(){ toast('Error al crear prueba', 'error'); });
+    });
+    el.querySelectorAll('.cm-test-status').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        var tid = parseInt(this.getAttribute('data-test-id'), 10);
+        fetch('/api/comercial/governance/tests/' + tid, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: this.value }),
+        }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(updated) { state.governance_tests = state.governance_tests.map(function(g){ return g.id === updated.id ? updated : g; }); renderGobernanza(el); })
+          .catch(function(){ toast('Error al actualizar','error'); });
+      });
+    });
+    el.querySelectorAll('.cm-test-del').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (!confirm('¿Eliminar esta prueba?')) return;
+        var tid = parseInt(this.getAttribute('data-test-id'), 10);
+        fetch('/api/comercial/governance/tests/' + tid, { method: 'DELETE' })
+          .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+          .then(function(){ state.governance_tests = state.governance_tests.filter(function(g){ return g.id !== tid; }); renderGobernanza(el); })
+          .catch(function(){ toast('Error al eliminar','error'); });
+      });
+    });
   }
 
   function renderKpisSeguimiento(el) {
@@ -7683,7 +10347,7 @@ window.ComercialModule = (function() {
 
     var modalDiv = document.createElement('div');
     modalDiv.innerHTML = html;
-    document.body.appendChild(modalDiv.firstChild);
+    (document.fullscreenElement || document.body).appendChild(modalDiv.firstChild);
 
     document.querySelector('#cm-modal-backdrop').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
     document.querySelector('#cm-nk-cancel').addEventListener('click', closeModal);
@@ -7838,11 +10502,844 @@ window.ComercialModule = (function() {
     }).catch(function() { toast('Error al registrar', 'error'); });
   }
 
+  /* ──────────────────────────────────────────────────────────
+     AI Generator — narrativa → touchpoints/fricciones/KPIs (#65)
+     Endpoint: POST /api/comercial/ai/generate-from-narrative
+     Endpoint: POST /api/comercial/ai/apply-draft
+     ────────────────────────────────────────────────────────── */
+  var _aiDraftCache = null;     // último draft generado
+  var _aiSelected = { tps: {}, fr: {}, kpis: {} };  // checkboxes de revisión
+
+  /* ──────────────────────────────────────────────────────────
+     Phase Coach modal — workbook-driven onboarding por fase
+     ────────────────────────────────────────────────────────── */
+  function _showPhaseCoachModal(phaseKey) {
+    closeModal();
+    var wb = state.workbook;
+    if (!wb || !wb.phases || !wb.phases[phaseKey]) {
+      // Sin workbook cargado — fallback: navegar al tab proceso o abrir AI
+      if (phaseKey === 'confianza') { activeTab = 'dashboard'; }
+      else { activeTab = 'proceso'; selectedPhase = phaseKey; }
+      render();
+      return;
+    }
+    var ph = wb.phases[phaseKey];
+    var coachQs = ph.coach_questions || ph.discovery_questions.slice(0, 5);
+    var allQs = ph.discovery_questions || [];
+    var phaseName = ph.title;
+    var phaseSummary = ph.summary || '';
+    var sanity = ph.sanity_check || '';
+    var redFlags = ph.red_flags || [];
+
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop"><div class="cm-modal" style="max-width:760px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0">';
+    html += '<div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:10px">';
+    html += '<span style="font-size:1.5rem">📋</span>';
+    html += '<div style="flex:1"><div style="font-weight:700;font-size:1.05rem">Mapeando: ' + escHtml(phaseName) + '</div>';
+    html += '<div style="font-size:.74rem;color:#64748B">' + escHtml(phaseSummary) + '</div></div>';
+    html += '<button class="cm-icon-btn" id="cm-pc-close" aria-label="Cerrar" style="font-size:1.2rem;background:none;border:none;cursor:pointer;color:#64748B">×</button>';
+    html += '</div>';
+    html += '<div style="flex:1;overflow-y:auto;padding:18px 22px">';
+    html += '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.78rem;color:#78350F;line-height:1.5">';
+    html += '<strong style="display:block;margin-bottom:3px">💡 Tip de Cris</strong>';
+    html += 'Documenta lo que <strong>realmente pasa</strong>, no lo que debería pasar. Si la realidad incomoda, mejor — ahí está la oportunidad.';
+    html += '</div>';
+    html += '<div style="font-size:.86rem;font-weight:600;color:#1E293B;margin-bottom:6px">Responde las preguntas clave del workbook:</div>';
+    html += '<div style="font-size:.74rem;color:#64748B;margin-bottom:14px">Tus respuestas alimentan al consultor AI para que drafee touchpoints concretos en lugar de plantillas genéricas.</div>';
+    html += '<form id="cm-pc-form">';
+    coachQs.forEach(function(q, idx) {
+      html += '<div style="margin-bottom:14px">';
+      html += '<label style="font-size:.78rem;color:#1E293B;font-weight:600;display:block;margin-bottom:4px;line-height:1.4">' + (idx + 1) + '. ' + escHtml(q) + '</label>';
+      html += '<textarea class="cm-input cm-pc-answer" data-q="' + escHtml(q) + '" rows="2" style="resize:vertical;width:100%;padding:8px 10px;font-size:.85rem;font-family:inherit" placeholder="Tu respuesta honesta — incluye nombres reales, tiempos concretos, canales específicos."></textarea>';
+      html += '</div>';
+    });
+    html += '</form>';
+    if (sanity) {
+      html += '<div style="margin-top:8px;background:#F1F5F9;border-left:3px solid #4F46E5;padding:10px 14px;border-radius:0 6px 6px 0;font-size:.78rem;color:#475569;line-height:1.5">';
+      html += '<strong style="color:#1E293B">Sanity check:</strong> ' + escHtml(sanity);
+      html += '</div>';
+    }
+    if (allQs.length > coachQs.length) {
+      html += '<details style="margin-top:14px;background:#FAFAF9;border:1px solid #E7E5E4;border-radius:8px">';
+      html += '<summary style="cursor:pointer;list-style:none;padding:8px 14px;font-size:.74rem;font-weight:600;color:#57534E">▸ Ver las ' + allQs.length + ' preguntas completas del workbook</summary>';
+      html += '<div style="padding:6px 16px 12px;border-top:1px solid #E7E5E4">';
+      allQs.forEach(function(q) {
+        html += '<div style="font-size:.78rem;color:#44403C;line-height:1.5;padding:4px 0;border-left:2px solid #D6D3D1;padding-left:10px;margin:6px 0">' + escHtml(q) + '</div>';
+      });
+      html += '</div></details>';
+    }
+    if (redFlags.length) {
+      html += '<details style="margin-top:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px">';
+      html += '<summary style="cursor:pointer;list-style:none;padding:8px 14px;font-size:.74rem;font-weight:600;color:#991B1B">▸ Red flags comunes en esta fase</summary>';
+      html += '<div style="padding:6px 16px 12px;border-top:1px solid #FECACA">';
+      redFlags.forEach(function(f) {
+        html += '<div style="font-size:.76rem;color:#7F1D1D;line-height:1.4;padding:3px 0">⚠ ' + escHtml(f) + '</div>';
+      });
+      html += '</div></details>';
+    }
+    html += '</div>';
+    html += '<div style="padding:14px 22px;border-top:1px solid #E2E8F0;display:flex;gap:8px;justify-content:space-between;background:#F8FAFC">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-pc-manual">Crear manualmente</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-pc-ai" style="background:linear-gradient(135deg,#7C3AED,#4F46E5)">Generar TPs con AI ✨</button>';
+    html += '</div>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+
+    document.querySelector('#cm-pc-close').addEventListener('click', closeModal);
+    document.querySelector('#cm-pc-manual').addEventListener('click', function() {
+      closeModal();
+      if (phaseKey === 'confianza') { activeTab = 'dashboard'; }
+      else { activeTab = 'proceso'; selectedPhase = phaseKey; }
+      render();
+    });
+    document.querySelector('#cm-pc-ai').addEventListener('click', function() {
+      var answers = [];
+      document.querySelectorAll('.cm-pc-answer').forEach(function(ta) {
+        var q = ta.dataset.q || '';
+        var a = (ta.value || '').trim();
+        if (a) answers.push({ q: q, a: a });
+      });
+      if (answers.length === 0) {
+        toast('Responde al menos 1 pregunta para que la AI tenga material', 'error');
+        return;
+      }
+      // Construye narrativa estructurada Pregunta/Respuesta — el endpoint AI ya soporta narrative libre.
+      var narrative = 'Mapeo de fase ' + phaseName + ' (workbook Cris Urzua).\n\n';
+      answers.forEach(function(item) {
+        narrative += 'Pregunta: ' + item.q + '\nRespuesta: ' + item.a + '\n\n';
+      });
+      // Cierra el modal coach y abre el AI generator con narrativa pre-cargada y fase fija.
+      closeModal();
+      _runAIGenerateFromCoach(narrative, phaseKey === 'confianza' ? null : phaseKey);
+    });
+    setTimeout(function() {
+      var first = document.querySelector('.cm-pc-answer');
+      if (first) first.focus();
+    }, 30);
+  }
+
+  function _runAIGenerateFromCoach(narrative, phaseId) {
+    // Equivalente a abrir showAIGeneratorModal y disparar Generate, pero sin pedir narrativa
+    // (ya viene del Phase Coach). Reusa el mismo modal/UI de revision.
+    closeModal();
+    _aiDraftCache = null;
+    _aiSelected = { tps: {}, fr: {}, kpis: {} };
+
+    // Crea el shell del modal AI directamente en estado de loading.
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop"><div class="cm-modal cm-ai-modal" style="max-width:760px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0">';
+    html += '<div class="cm-modal-header" style="display:flex;align-items:center;gap:10px;padding:18px 22px;border-bottom:1px solid #E2E8F0">';
+    html += '<span style="font-size:1.4rem">✨</span>';
+    html += '<div style="flex:1"><div style="font-weight:700;font-size:1.05rem">Generando desde tu mapeo</div>';
+    html += '<div style="font-size:.74rem;color:#64748B">Convirtiendo tus respuestas del workbook en touchpoints concretos.</div></div>';
+    html += '<button class="cm-icon-btn" id="cm-ai-close" aria-label="Cerrar" style="font-size:1.2rem;background:none;border:none;cursor:pointer;color:#64748B">×</button>';
+    html += '</div>';
+    html += '<div class="cm-ai-body" id="cm-ai-body" style="flex:1;overflow-y:auto;padding:18px 22px"></div>';
+    html += '<div class="cm-ai-footer" id="cm-ai-footer" style="padding:14px 22px;border-top:1px solid #E2E8F0;display:flex;gap:8px;justify-content:flex-end;background:#F8FAFC;display:none"></div>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+    document.querySelector('#cm-ai-close').addEventListener('click', closeModal);
+
+    _aiCallGenerate(narrative, '', phaseId || '');
+  }
+
+  function showAIGeneratorModal(targetPhaseId) {
+    closeModal();
+    _aiDraftCache = null;
+    _aiSelected = { tps: {}, fr: {}, kpis: {} };
+
+    var phaseOpts = '<option value="">Cualquier fase (auto-asignar)</option>';
+    (state.phases || []).slice().sort(function(a,b){ return (a.order||0)-(b.order||0); }).forEach(function(p) {
+      var sel = (targetPhaseId && p.id === targetPhaseId) ? ' selected' : '';
+      phaseOpts += '<option value="' + escHtml(p.id) + '"' + sel + '>' + escHtml(p.name) + '</option>';
+    });
+
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop"><div class="cm-modal cm-ai-modal" style="max-width:760px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0">';
+    html += '<div class="cm-modal-header" style="display:flex;align-items:center;gap:10px;padding:18px 22px;border-bottom:1px solid #E2E8F0">';
+    html += '<span style="font-size:1.4rem">✨</span>';
+    html += '<div style="flex:1"><div style="font-weight:700;font-size:1.05rem">Generar arquitectura desde narrativa</div>';
+    html += '<div style="font-size:.74rem;color:#64748B">Describe tu proceso comercial en lenguaje natural — la AI extrae touchpoints, fricciones y KPIs como un consultor experto.</div></div>';
+    html += '<button class="cm-icon-btn" id="cm-ai-close" aria-label="Cerrar" style="font-size:1.2rem;background:none;border:none;cursor:pointer;color:#64748B">×</button>';
+    html += '</div>';
+    // BODY (input phase)
+    html += '<div class="cm-ai-body" id="cm-ai-body" style="flex:1;overflow-y:auto;padding:18px 22px">';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">';
+    html += '<div><label style="font-size:.7rem;color:#64748B;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Fase objetivo (opcional)</label>';
+    html += '<select class="cm-input" id="cm-ai-phase">' + phaseOpts + '</select></div>';
+    html += '<div><label style="font-size:.7rem;color:#64748B;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Contexto de empresa (opcional)</label>';
+    html += '<input class="cm-input" id="cm-ai-context" placeholder="Ej: B2B promocionales, ticket $50k, equipo 8 asesores"/></div>';
+    html += '</div>';
+    html += '<label style="font-size:.7rem;color:#64748B;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Narrativa del proceso</label>';
+    html += '<textarea class="cm-input" id="cm-ai-narrative" rows="9" placeholder="Describe cómo es tu proceso comercial hoy, sin pulir. Ejemplo: ' + "&quot;" + 'El cliente nos encuentra por Google, llega a la web, pide cotización por WhatsApp. Un asesor le responde en menos de 4h, le hace 3 preguntas...' + "&quot;" + '" style="resize:vertical;min-height:160px;font-family:inherit;font-size:.88rem;line-height:1.5;width:100%;padding:10px 12px"></textarea>';
+    html += '<div style="font-size:.7rem;color:#94A3B8;margin-top:4px">Mientras más específica la narrativa (canales reales, tiempos concretos, fricciones que ya viste), mejor el draft. Cuesta ~$0.001 USD por generación.</div>';
+    html += '</div>';
+    // FOOTER
+    html += '<div class="cm-ai-footer" id="cm-ai-footer" style="padding:14px 22px;border-top:1px solid #E2E8F0;display:flex;gap:8px;justify-content:flex-end;background:#F8FAFC">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-ai-cancel">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-ai-go" style="background:linear-gradient(135deg,#7C3AED,#4F46E5)">Generar draft ✨</button>';
+    html += '</div>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+
+    var close = function() { closeModal(); };
+    document.querySelector('#cm-ai-close').addEventListener('click', close);
+    document.querySelector('#cm-ai-cancel').addEventListener('click', close);
+
+    document.querySelector('#cm-ai-go').addEventListener('click', function() {
+      var narr = document.querySelector('#cm-ai-narrative').value.trim();
+      var ctx = document.querySelector('#cm-ai-context').value.trim();
+      var phase = document.querySelector('#cm-ai-phase').value;
+      if (!narr || narr.length < 30) {
+        toast('Escribe al menos 30 caracteres de narrativa', 'error');
+        return;
+      }
+      _aiCallGenerate(narr, ctx, phase);
+    });
+  }
+
+  function _aiCallGenerate(narrative, context, phaseId) {
+    var body = document.querySelector('#cm-ai-body');
+    var footer = document.querySelector('#cm-ai-footer');
+    if (body) body.innerHTML = '<div style="text-align:center;padding:60px 20px"><div style="font-size:2rem;margin-bottom:10px">✨</div><div style="font-size:.9rem;font-weight:600;color:#1E293B">Generando draft...</div><div style="font-size:.78rem;color:#64748B;margin-top:6px">El consultor experto está estructurando tu narrativa. Tarda 5-15 segundos.</div></div>';
+    if (footer) footer.style.display = 'none';
+
+    fetch('/api/comercial/ai/generate-from-narrative', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ narrative: narrative, company_context: context || null, target_phase_id: phaseId || null })
+    }).then(function(r) {
+      if (!r.ok) {
+        return r.json().then(function(b) { throw new Error(b && b.detail || ('Error ' + r.status)); }, function() { throw new Error('Error ' + r.status); });
+      }
+      return r.json();
+    }).then(function(draft) {
+      _aiDraftCache = draft;
+      // Pre-seleccionar todo
+      (draft.touchpoints || []).forEach(function(_, i){ _aiSelected.tps[i] = true; });
+      (draft.frictions || []).forEach(function(_, i){ _aiSelected.fr[i] = true; });
+      (draft.kpis || []).forEach(function(_, i){ _aiSelected.kpis[i] = true; });
+      _aiRenderReview();
+    }).catch(function(err) {
+      if (body) body.innerHTML = '<div style="padding:40px;text-align:center;color:#DC2626"><div style="font-size:1.6rem;margin-bottom:8px">⚠</div><div style="font-weight:600">Error al generar</div><div style="font-size:.78rem;margin-top:8px;color:#64748B">' + escHtml(String(err && err.message || err)) + '</div></div>';
+      if (footer) {
+        footer.style.display = 'flex';
+        footer.innerHTML = '<button class="cm-btn cm-btn-ghost" id="cm-ai-cancel-2">Cerrar</button>';
+        document.querySelector('#cm-ai-cancel-2').addEventListener('click', closeModal);
+      }
+    });
+  }
+
+  function _aiRenderReview() {
+    var d = _aiDraftCache;
+    var body = document.querySelector('#cm-ai-body');
+    var footer = document.querySelector('#cm-ai-footer');
+    if (!d || !body || !footer) return;
+
+    var html = '';
+    html += '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;padding:10px 12px;margin-bottom:14px">';
+    html += '<div style="font-size:.78rem;font-weight:600;color:#065F46;margin-bottom:2px">✓ Draft generado</div>';
+    html += '<div style="font-size:.74rem;color:#047857">' + escHtml(d.summary || '') + '</div>';
+    if (d._meta && d._meta.usage) {
+      html += '<div style="font-size:.66rem;color:#94A3B8;margin-top:4px">Modelo: ' + escHtml(d._meta.model || '') + ' · ' + d._meta.usage.total_tokens + ' tokens</div>';
+    }
+    html += '</div>';
+
+    if ((d.warnings || []).length > 0) {
+      html += '<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-bottom:14px">';
+      html += '<div style="font-size:.74rem;font-weight:700;color:#92400E;margin-bottom:4px">⚠ El experto notó:</div>';
+      d.warnings.forEach(function(w) {
+        html += '<div style="font-size:.74rem;color:#92400E;margin-top:2px">• ' + escHtml(w) + '</div>';
+      });
+      html += '</div>';
+    }
+
+    // TPs
+    html += '<div style="margin-bottom:18px">';
+    html += '<div style="font-size:.78rem;font-weight:700;color:#1E293B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Touchpoints (' + (d.touchpoints || []).length + ')</div>';
+    (d.touchpoints || []).forEach(function(tp, i) {
+      var checked = _aiSelected.tps[i] ? 'checked' : '';
+      var phase = (state.phases.find(function(p){ return p.id === tp.phase_id; }) || {}).name || tp.phase_id;
+      html += '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
+      html += '<div style="display:flex;align-items:flex-start;gap:8px">';
+      html += '<input type="checkbox" class="cm-ai-tp-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
+      html += '<div style="flex:1">';
+      html += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(tp.name) + '</div>';
+      html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px"><span style="background:#EEF2FF;color:#4338CA;padding:1px 6px;border-radius:9999px;font-weight:600">' + escHtml(phase) + '</span> · Canal: <b>' + escHtml(tp.channel || '—') + '</b> · Resp: <b>' + escHtml(tp.responsible_role || '—') + '</b></div>';
+      if (tp.objective) html += '<div style="font-size:.74rem;color:#475569;margin-top:4px"><b>Objetivo:</b> ' + escHtml(tp.objective) + '</div>';
+      if (tp.success_signal) html += '<div style="font-size:.72rem;color:#475569;margin-top:2px"><b>Señal de éxito:</b> ' + escHtml(tp.success_signal) + '</div>';
+      if ((tp.inferred_fields || []).length > 0) {
+        html += '<div style="font-size:.66rem;color:#94A3B8;margin-top:3px">⚠ Inferidos: ' + tp.inferred_fields.map(escHtml).join(', ') + '</div>';
+      }
+      html += '</div></div></div>';
+    });
+    html += '</div>';
+
+    // Fricciones
+    if ((d.frictions || []).length > 0) {
+      html += '<div style="margin-bottom:18px">';
+      html += '<div style="font-size:.78rem;font-weight:700;color:#1E293B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Fricciones (' + d.frictions.length + ')</div>';
+      d.frictions.forEach(function(fr, i) {
+        var checked = _aiSelected.fr[i] ? 'checked' : '';
+        html += '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
+        html += '<div style="display:flex;align-items:flex-start;gap:8px">';
+        html += '<input type="checkbox" class="cm-ai-fr-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
+        html += '<div style="flex:1">';
+        html += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(fr.name) + '</div>';
+        var sevColor = fr.severity === 'high' ? '#DC2626' : fr.severity === 'medium' ? '#F59E0B' : '#94A3B8';
+        html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">En: <b>' + escHtml(fr.touchpoint_name) + '</b> · Tipo: <span style="background:#EEF2FF;color:#3730A3;padding:1px 6px;border-radius:9999px;font-weight:600">' + escHtml(fr.friction_type || '—') + '</span> · Severidad: <b style="color:' + sevColor + '">' + escHtml(fr.severity || '—') + '</b></div>';
+        if (fr.description) html += '<div style="font-size:.74rem;color:#475569;margin-top:4px">' + escHtml(fr.description) + '</div>';
+        html += '</div></div></div>';
+      });
+      html += '</div>';
+    }
+
+    // KPIs
+    if ((d.kpis || []).length > 0) {
+      html += '<div style="margin-bottom:18px">';
+      html += '<div style="font-size:.78rem;font-weight:700;color:#1E293B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">KPIs (' + d.kpis.length + ')</div>';
+      d.kpis.forEach(function(k, i) {
+        var checked = _aiSelected.kpis[i] ? 'checked' : '';
+        html += '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
+        html += '<div style="display:flex;align-items:flex-start;gap:8px">';
+        html += '<input type="checkbox" class="cm-ai-kpi-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
+        html += '<div style="flex:1">';
+        html += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(k.name) + (k.is_master ? ' <span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:9999px;font-size:.62rem;font-weight:700">★ MAESTRO ' + escHtml(String(k.master_metric || '').toUpperCase()) + '</span>' : '') + '</div>';
+        html += '<div style="font-size:.74rem;color:#475569;margin-top:2px">' + escHtml(k.question || '') + '</div>';
+        html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">Unidad: <b>' + escHtml(k.unit || '—') + '</b>' + (k.linked_phase_id ? ' · Fase: <b>' + escHtml(k.linked_phase_id) + '</b>' : '') + '</div>';
+        html += '</div></div></div>';
+      });
+      html += '</div>';
+    }
+
+    body.innerHTML = html;
+
+    body.querySelectorAll('.cm-ai-tp-check').forEach(function(cb) {
+      cb.addEventListener('change', function(){ _aiSelected.tps[parseInt(this.dataset.idx,10)] = this.checked; });
+    });
+    body.querySelectorAll('.cm-ai-fr-check').forEach(function(cb) {
+      cb.addEventListener('change', function(){ _aiSelected.fr[parseInt(this.dataset.idx,10)] = this.checked; });
+    });
+    body.querySelectorAll('.cm-ai-kpi-check').forEach(function(cb) {
+      cb.addEventListener('change', function(){ _aiSelected.kpis[parseInt(this.dataset.idx,10)] = this.checked; });
+    });
+
+    footer.style.display = 'flex';
+    footer.innerHTML = '<button class="cm-btn cm-btn-ghost" id="cm-ai-back">← Empezar de nuevo</button><div style="flex:1"></div><button class="cm-btn cm-btn-ghost" id="cm-ai-cancel-2">Cancelar</button><button class="cm-btn cm-btn-primary" id="cm-ai-apply" style="background:linear-gradient(135deg,#7C3AED,#4F46E5)">Aplicar selección</button>';
+
+    document.querySelector('#cm-ai-back').addEventListener('click', function() {
+      closeModal();
+      showAIGeneratorModal(null);
+    });
+    document.querySelector('#cm-ai-cancel-2').addEventListener('click', closeModal);
+    document.querySelector('#cm-ai-apply').addEventListener('click', _aiCallApply);
+  }
+
+  function _aiCallApply() {
+    var d = _aiDraftCache;
+    if (!d) return;
+    var payload = {
+      touchpoints: (d.touchpoints || []).filter(function(_, i){ return _aiSelected.tps[i]; }),
+      frictions: (d.frictions || []).filter(function(_, i){ return _aiSelected.fr[i]; }),
+      kpis: (d.kpis || []).filter(function(_, i){ return _aiSelected.kpis[i]; }),
+    };
+    if (payload.touchpoints.length === 0 && payload.frictions.length === 0 && payload.kpis.length === 0) {
+      toast('Selecciona al menos 1 item', 'error');
+      return;
+    }
+    var btn = document.querySelector('#cm-ai-apply');
+    if (btn) { btn.disabled = true; btn.textContent = 'Aplicando...'; }
+    fetch('/api/comercial/ai/apply-draft', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    }).then(function(r) {
+      if (!r.ok) {
+        return r.json().then(function(b) { throw new Error(b && b.detail || ('Error ' + r.status)); }, function() { throw new Error('Error ' + r.status); });
+      }
+      return r.json();
+    }).then(function(res) {
+      toast('✓ Aplicados: ' + res.touchpoints_created + ' TPs, ' + res.frictions_created + ' fricciones, ' + res.kpis_created + ' KPIs', 'success');
+      closeModal();
+      loadBootstrap().then(function(){ render(); });
+    }).catch(function(err) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Aplicar selección'; }
+      toast('Error al aplicar: ' + (err && err.message || err), 'error');
+    });
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Quick Start (Launching Pad) — task #92
+     Solo activo si state.config.demo_mode === true
+     ────────────────────────────────────────────────────────── */
+  function _qsCheck(condition) {
+    return condition ?
+      '<span class="cm-qs-check cm-qs-check--done" aria-label="completo">✓</span>' :
+      '<span class="cm-qs-check cm-qs-check--pending" aria-label="pendiente"></span>';
+  }
+
+  function _qsItemHTML(opts) {
+    // opts: { done, title, description, buttons, extra (HTML), step (number), visual ('done'|'active'|'future'|null) }
+    var clsList = ['cm-qs-item'];
+    if (opts.done) clsList.push('cm-qs-item--done');
+    if (opts.visual === 'active') clsList.push('cm-qs-item--active');
+    if (opts.visual === 'future') clsList.push('cm-qs-item--future');
+    var html = '<div class="' + clsList.join(' ') + '">';
+    if (opts.step) {
+      html += '<span class="cm-qs-step-num">' + opts.step + '</span>';
+    }
+    html += _qsCheck(opts.done);
+    html += '<div class="cm-qs-item-body">';
+    html += '<div class="cm-qs-item-title' + (opts.done ? ' cm-qs-item-title--done' : '') + '">' + escHtml(opts.title);
+    if (opts.visual === 'active' && !opts.done) html += '<span class="cm-qs-step-pill cm-qs-step-pill--active">→ siguiente</span>';
+    else if (opts.visual === 'future') html += '<span class="cm-qs-step-pill cm-qs-step-pill--future">después</span>';
+    else if (opts.done) html += '<span class="cm-qs-step-pill cm-qs-step-pill--done">listo</span>';
+    html += '</div>';
+    if (opts.description) html += '<div class="cm-qs-item-desc">' + escHtml(opts.description) + '</div>';
+    html += '</div>';
+    html += '<div class="cm-qs-item-actions">';
+    (opts.buttons || []).forEach(function(b) {
+      html += '<button class="cm-btn cm-btn-sm ' + (b.cls || 'cm-btn-ghost') + '" data-qs-action="' + escHtml(b.action) + '"' + (b.phaseId ? ' data-qs-phase="' + escHtml(b.phaseId) + '"' : '') + '>' + escHtml(b.label) + '</button>';
+    });
+    html += '</div>';
+    if (opts.extra) html += opts.extra;
+    html += '</div>';
+    return html;
+  }
+
+  function _qsWorkbookExpandable(phaseKey) {
+    // Devuelve un <details> con las preguntas verbatim del workbook + sanity + red flags.
+    // Si el workbook no esta cargado, devuelve string vacio.
+    var wb = state.workbook;
+    if (!wb || !wb.phases || !wb.phases[phaseKey]) return '';
+    var ph = wb.phases[phaseKey];
+    var questions = ph.discovery_questions || [];
+    var redFlags = ph.red_flags || [];
+    var html = '<details class="cm-qs-wb">';
+    html += '<summary>📋 Ver checks del workbook (' + questions.length + ' preguntas)</summary>';
+    html += '<div class="cm-qs-wb-body">';
+    questions.forEach(function(q) {
+      html += '<div class="cm-qs-wb-q">' + escHtml(q) + '</div>';
+    });
+    if (ph.sanity_check) {
+      html += '<div class="cm-qs-wb-sanity"><strong>Sanity check:</strong>' + escHtml(ph.sanity_check) + '</div>';
+    }
+    if (redFlags.length) {
+      html += '<div class="cm-qs-wb-flags">';
+      redFlags.forEach(function(f) { html += '<div class="cm-qs-wb-flag">' + escHtml(f) + '</div>'; });
+      html += '</div>';
+    }
+    html += '</div></details>';
+    return html;
+  }
+
+  function _qsValidationSectionHTML(c) {
+    var wb = state.workbook;
+    var ctx = state.company_context || {};
+    var orphanFr = _qsOrphanFrictions();
+    var html = '<div class="cm-qs-section">';
+    html += '<div class="cm-qs-section-header"><span class="cm-qs-section-icon">🔬</span><span class="cm-qs-section-title">Valida tu mapa</span><span class="cm-qs-section-meta">Workbook Parte 5 · 3 pruebas + check de fricciones</span></div>';
+
+    // 1) Fricciones huérfanas — alineado con el workbook: las fricciones se descubren EN los TPs
+    var orphanDone = orphanFr.length === 0 && (state.frictions || []).length > 0;
+    var orphanExtra = '';
+    if (orphanFr.length > 0) {
+      orphanExtra = '<div style="width:100%;margin-top:10px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px">';
+      orphanExtra += '<div style="font-size:.78rem;color:#78350F;font-weight:600;margin-bottom:8px">⚠ ' + orphanFr.length + ' fricción' + (orphanFr.length === 1 ? '' : 'es') + ' sin TP asociado</div>';
+      orphanFr.forEach(function(f) {
+        orphanExtra += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #FDE68A;flex-wrap:wrap">';
+        orphanExtra += '<div style="flex:1;min-width:180px;font-size:.78rem;color:#1E293B"><strong>' + escHtml(f.id) + '</strong> · ' + escHtml(f.name) + '</div>';
+        orphanExtra += '<select class="cm-input cm-qs-orphan-tp" data-fr-id="' + escHtml(f.id) + '" style="font-size:.74rem;padding:4px 6px;max-width:240px">';
+        orphanExtra += '<option value="">— elige TP —</option>';
+        (state.touchpoints || []).forEach(function(t) {
+          orphanExtra += '<option value="' + t.id + '">' + escHtml(t.name) + '</option>';
+        });
+        orphanExtra += '</select>';
+        orphanExtra += '<button class="cm-btn cm-btn-sm cm-btn-primary" data-qs-action="orphan-link" data-qs-fr="' + escHtml(f.id) + '">Asociar</button>';
+        orphanExtra += '<button class="cm-btn cm-btn-sm cm-btn-ghost" data-qs-action="orphan-delete" data-qs-fr="' + escHtml(f.id) + '">Eliminar</button>';
+        orphanExtra += '</div>';
+      });
+      orphanExtra += '</div>';
+    } else if ((state.frictions || []).length === 0) {
+      orphanExtra = '<div style="width:100%;margin-top:8px;font-size:.74rem;color:#94A3B8;font-style:italic">Aún no hay fricciones registradas. Cris dice: las fricciones se descubren auditando cada TP.</div>';
+    }
+    html += _qsItemHTML({
+      done: orphanDone,
+      title: 'Fricciones ancladas a touchpoints',
+      description: 'Cada fricción debe vivir DENTRO de un touchpoint específico. Si flota sola, no es accionable.',
+      buttons: [],
+      extra: orphanExtra,
+    });
+
+    // 2) Tres pruebas de validación del workbook
+    var tests = (wb && wb.validation_tests) ? wb.validation_tests : [];
+    if (tests.length > 0) {
+      tests.forEach(function(t) {
+        var checked = !!ctx['validated_' + t.key];
+        var notes = ctx['validated_' + t.key + '_notes'] || '';
+        var extra = '<div style="width:100%;margin-top:8px">';
+        extra += '<div style="font-size:.74rem;color:#475569;line-height:1.5;margin-bottom:6px">' + escHtml(t.desc) + '</div>';
+        extra += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.78rem;color:#1E293B">';
+        extra += '<input type="checkbox" class="cm-qs-val-check" data-qs-test="' + escHtml(t.key) + '"' + (checked ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer">';
+        extra += '<span><strong>' + escHtml(t.question) + '</strong></span>';
+        extra += '</label>';
+        extra += '<textarea class="cm-input cm-qs-val-notes" data-qs-test="' + escHtml(t.key) + '" rows="2" placeholder="¿Qué descubriste? (opcional)" style="margin-top:6px;width:100%;font-size:.78rem;padding:6px 10px;resize:vertical">' + escHtml(notes) + '</textarea>';
+        extra += '</div>';
+        html += _qsItemHTML({
+          done: checked,
+          title: t.label,
+          description: '',
+          buttons: [],
+          extra: extra,
+        });
+      });
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function _qsCompletedness() {
+    // Devuelve un objeto con flags por item
+    var ctx = state.company_context || {};
+    var tps = state.touchpoints || [];
+    var fr = state.frictions || [];
+    var people = state.people || [];
+    var pillars = state.trust_pillars || [];
+    var mm = (state.dashboard && state.dashboard.master_metrics) || {};
+    var phaseTps = function(pid) { return tps.filter(function(t){ return t.phase_id === pid; }).length; };
+    var orphanFr = _qsOrphanFrictions();
+    return {
+      context: !!(ctx && ctx.industry && ctx.industry.trim().length > 0),
+      team: people.length >= 1,
+      atraccion: phaseTps('atraccion') >= 3,
+      captura: phaseTps('captura') >= 3,
+      conversion: phaseTps('conversion') >= 3,
+      onboarding: phaseTps('onboarding') >= 3,
+      recompra: phaseTps('recompra') >= 3,
+      confianza: pillars.filter(function(p){ return p.current_state && p.current_state.length > 0; }).length >= 5,
+      kpis_master: ['utility','ltv','cac','conversion'].every(function(k){
+        return mm[k] && (mm[k].drivers_with_data || 0) > 0;
+      }),
+      fricciones: fr.length >= 1,
+      // v19: validación cuenta solo si las 3 atestaciones están en true Y no hay fricciones huérfanas
+      validation: !!(ctx && ctx.validated_terreno && ctx.validated_fantasma && ctx.validated_datos) && orphanFr.length === 0,
+    };
+  }
+
+  function _qsOrphanFrictions() {
+    // Una fricción es huérfana si no tiene touchpoint_id o el TP referenciado no existe.
+    var tps = state.touchpoints || [];
+    var tpIds = {};
+    tps.forEach(function(t){ tpIds[String(t.id)] = true; });
+    return (state.frictions || []).filter(function(f) {
+      if (!f.touchpoint_id) return true;
+      return !tpIds[String(f.touchpoint_id)];
+    });
+  }
+
+  function renderQuickStart(el) {
+    var c = _qsCompletedness();
+    var totalDone = Object.values(c).filter(Boolean).length;
+    var totalItems = Object.keys(c).length;
+    var pct = Math.round((totalDone / totalItems) * 100);
+
+    var html = '';
+    // Header con progreso
+    html += '<div class="cm-qs-header">';
+    html += '<div class="cm-qs-title-row">';
+    html += '<div><div class="cm-qs-title">🚀 Quick Start</div>';
+    html += '<div class="cm-qs-subtitle">Construye tu arquitectura comercial paso a paso. Cada item se marca solo cuando hay data real en la BD.</div></div>';
+    html += '<div class="cm-qs-progress-circle"><div class="cm-qs-pct">' + pct + '%</div><div class="cm-qs-pct-meta">' + totalDone + '/' + totalItems + ' completos</div></div>';
+    html += '</div>';
+    html += '<div class="cm-qs-progress-bar"><div class="cm-qs-progress-fill" style="width:' + pct + '%"></div></div>';
+    html += '</div>';
+
+    // Sección 1: Define el contexto
+    html += '<div class="cm-qs-section">';
+    html += '<div class="cm-qs-section-header"><span class="cm-qs-section-icon">🎯</span><span class="cm-qs-section-title">Define el contexto</span><span class="cm-qs-section-meta">Información base que la AI necesita</span></div>';
+    html += _qsItemHTML({
+      done: c.context,
+      title: 'Contexto de empresa',
+      description: 'Industria, segmento, ticket promedio, dolores actuales, propuesta de valor. La AI usa esto para calibrar todas sus sugerencias.',
+      buttons: [{ label: c.context ? 'Editar' : 'Llenar formulario', cls: 'cm-btn-primary', action: 'context' }],
+    });
+    html += _qsItemHTML({
+      done: c.team,
+      title: 'Equipo',
+      description: 'Las personas y roles que ejecutan tu proceso comercial. Vas a poder asignarlos como responsables a touchpoints, fricciones y KPIs.',
+      buttons: [{ label: c.team ? 'Ver equipo' : '+ Agregar persona', cls: 'cm-btn-primary', action: 'goto-equipo' }],
+    });
+    html += '</div>';
+
+    // Sección 2: Mapea tu proceso (orden mandatorio del workbook)
+    html += '<div class="cm-qs-section">';
+    html += '<div class="cm-qs-section-header"><span class="cm-qs-section-icon">🗺️</span><span class="cm-qs-section-title">Mapea tu proceso comercial</span><span class="cm-qs-section-meta">Atracción → Captura → Conversión → Onboarding → Recompra</span></div>';
+    var phaseDefs = [
+      { id: 'atraccion', title: 'Touchpoints de Atracción', desc: 'Cómo te encuentran los prospectos: redes, SEO, recomendaciones, anuncios.', done: c.atraccion },
+      { id: 'captura', title: 'Touchpoints de Captura', desc: 'Cómo capturas datos del prospecto: forms, WhatsApp, agenda, llamada.', done: c.captura },
+      { id: 'conversion', title: 'Touchpoints de Conversión', desc: 'Cómo cierras la venta: demos, propuestas, negociación, pago.', done: c.conversion },
+      { id: 'onboarding', title: 'Touchpoints de Onboarding', desc: 'Cómo entregas y das la bienvenida: kickoff, setup, capacitación.', done: c.onboarding },
+      { id: 'recompra', title: 'Touchpoints de Recompra', desc: 'Cómo logras que vuelvan a comprar: account mgmt, upsell, programa.', done: c.recompra },
+    ];
+    // Visual: la primera no completada queda 'active'; las posteriores 'future'.
+    var firstPendingIdx = phaseDefs.findIndex(function(p) { return !p.done; });
+    phaseDefs.forEach(function(p, idx) {
+      var visual = p.done ? 'done' : (idx === firstPendingIdx ? 'active' : 'future');
+      html += _qsItemHTML({
+        done: p.done,
+        step: idx + 1,
+        visual: visual,
+        title: p.title,
+        description: p.desc,
+        buttons: [
+          { label: 'Hacer manual', cls: 'cm-btn-ghost', action: 'manual-phase', phaseId: p.id },
+          { label: 'Con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-phase', phaseId: p.id },
+        ],
+        extra: _qsWorkbookExpandable(p.id),
+      });
+    });
+    // Motor de Confianza corre en paralelo a las 5 fases.
+    html += _qsItemHTML({
+      done: c.confianza,
+      title: 'Motor de Confianza',
+      description: 'Corre en paralelo a las 5 fases. Contenido, testimonios, marca, autoridad, comunidad.',
+      buttons: [
+        { label: 'Hacer manual', cls: 'cm-btn-ghost', action: 'manual-phase', phaseId: 'confianza' },
+        { label: 'Con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-phase', phaseId: 'confianza' },
+      ],
+      extra: _qsWorkbookExpandable('confianza'),
+    });
+    html += '</div>';
+
+    // Sección 3: Mide y mejora
+    html += '<div class="cm-qs-section">';
+    html += '<div class="cm-qs-section-header"><span class="cm-qs-section-icon">📊</span><span class="cm-qs-section-title">Mide y mejora</span><span class="cm-qs-section-meta">Las 4 maestras + fricciones críticas</span></div>';
+    html += _qsItemHTML({
+      done: c.kpis_master,
+      title: 'KPIs maestros (4)',
+      description: 'Utilidad, LTV, CAC y Conversión — los 4 que el CEO mira para decidir. Cada uno necesita al menos 1 KPI driver con dato.',
+      buttons: [
+        { label: 'Ver KPIs', cls: 'cm-btn-ghost', action: 'goto-kpis' },
+        { label: 'Sugerir con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-kpis' },
+      ],
+    });
+    html += _qsItemHTML({
+      done: c.fricciones,
+      title: 'Fricciones críticas',
+      description: 'Donde el proceso se traba: tiempo de espera, repetición, info incompleta, switch de canal, expectativas rotas, esfuerzo cognitivo.',
+      buttons: [
+        { label: 'Ver fricciones', cls: 'cm-btn-ghost', action: 'goto-fricciones' },
+        { label: 'Detectar con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-fricciones' },
+      ],
+    });
+    html += '</div>';
+
+    // Sección 4: Valida tu mapa (workbook Parte 5 — Cris Urzúa)
+    html += _qsValidationSectionHTML(c);
+
+    el.innerHTML = html;
+
+    // Bind actions
+    el.querySelectorAll('[data-qs-action]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var action = this.dataset.qsAction;
+        var phaseId = this.dataset.qsPhase || null;
+        if (action === 'context') _showCompanyContextModal();
+        else if (action === 'goto-equipo') { activeTab = 'equipo'; render(); }
+        else if (action === 'goto-kpis') { activeTab = 'kpis'; render(); }
+        else if (action === 'goto-fricciones') { activeTab = 'fricciones'; render(); }
+        else if (action === 'manual-phase') {
+          // Si el workbook esta cargado, abre Phase Coach (permite "Crear manualmente" o "Generar con AI").
+          // Si no, fallback al comportamiento previo.
+          if (state.workbook && state.workbook.phases && state.workbook.phases[phaseId]) {
+            _showPhaseCoachModal(phaseId);
+          } else {
+            if (phaseId === 'confianza') {
+              toast('Motor de Confianza vive en el Dashboard', 'info');
+              activeTab = 'dashboard';
+            } else {
+              activeTab = 'proceso';
+              selectedPhase = phaseId;
+            }
+            render();
+          }
+        }
+        else if (action === 'ai-phase') showAIGeneratorModal(phaseId === 'confianza' ? null : phaseId);
+        else if (action === 'ai-kpis' || action === 'ai-fricciones') showAIGeneratorModal(null);
+        else if (action === 'orphan-link') {
+          var frId = this.dataset.qsFr;
+          var sel = el.querySelector('.cm-qs-orphan-tp[data-fr-id="' + CSS.escape(frId) + '"]');
+          var newTpId = sel ? parseInt(sel.value, 10) : null;
+          if (!newTpId) { toast('Elige un TP del dropdown', 'error'); return; }
+          var newTp = (state.touchpoints || []).find(function(t){ return t.id === newTpId; });
+          if (!newTp) { toast('TP no encontrado', 'error'); return; }
+          // Backend valida que phase_id == TP.phase_id, así que mandamos los dos juntos.
+          fetch('/api/comercial/frictions/' + encodeURIComponent(frId), {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ touchpoint_id: newTpId, phase_id: newTp.phase_id }),
+          }).then(function(r){ if (!r.ok) return r.text().then(function(t){ throw new Error(t || ('Error ' + r.status)); }); return r.json(); })
+            .then(function(){ toast('Fricción asociada', 'success'); loadBootstrap().then(function(){ renderTab(); }); })
+            .catch(function(err){ toast('Error al asociar: ' + (err && err.message || err), 'error'); });
+        }
+        else if (action === 'orphan-delete') {
+          var frId2 = this.dataset.qsFr;
+          if (!confirm('¿Eliminar fricción ' + frId2 + '?')) return;
+          fetch('/api/comercial/frictions/' + encodeURIComponent(frId2), { method: 'DELETE' })
+            .then(function(r){ if (!r.ok) throw new Error(); })
+            .then(function(){ toast('Fricción eliminada', 'success'); loadBootstrap().then(function(){ renderTab(); }); })
+            .catch(function(){ toast('Error al eliminar', 'error'); });
+        }
+      });
+    });
+    // Bind validation atestation toggles + notes (debounced)
+    el.querySelectorAll('.cm-qs-val-check').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        _qsSaveValidation(this.dataset.qsTest, { checked: this.checked });
+      });
+    });
+    var _valSaveTimer = null;
+    el.querySelectorAll('.cm-qs-val-notes').forEach(function(ta) {
+      ta.addEventListener('input', function() {
+        var key = this.dataset.qsTest;
+        var val = this.value;
+        clearTimeout(_valSaveTimer);
+        _valSaveTimer = setTimeout(function(){ _qsSaveValidation(key, { notes: val }); }, 600);
+      });
+    });
+  }
+
+  function _qsSaveValidation(testKey, opts) {
+    // testKey = 'terreno' | 'fantasma' | 'datos'
+    // opts = { checked?: bool, notes?: string }
+    var payload = {};
+    if (typeof opts.checked === 'boolean') payload['validated_' + testKey] = opts.checked;
+    if (typeof opts.notes === 'string') payload['validated_' + testKey + '_notes'] = opts.notes;
+    if (Object.keys(payload).length === 0) return;
+    fetch('/api/comercial/company-context', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+      .then(function(updated){
+        state.company_context = updated;
+        if (typeof opts.checked === 'boolean') {
+          // Re-render para que el progreso global y el ✓ se actualicen
+          if (activeTab === 'quickstart') renderTab();
+          toast(opts.checked ? '✓ Test marcado' : 'Test desmarcado', 'success');
+        }
+      }).catch(function(){ toast('Error al guardar atestación', 'error'); });
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Company Context modal — task #92
+     ────────────────────────────────────────────────────────── */
+  function _showCompanyContextModal() {
+    closeModal();
+    var ctx = state.company_context || {};
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop"><div class="cm-modal" style="max-width:680px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0">';
+    html += '<div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:10px">';
+    html += '<span style="font-size:1.4rem">🏢</span>';
+    html += '<div style="flex:1"><div style="font-weight:700;font-size:1.05rem">Contexto de empresa</div>';
+    html += '<div style="font-size:.74rem;color:#64748B">Mientras más completo, mejores serán las sugerencias del consultor AI.</div></div>';
+    html += '<button class="cm-icon-btn" id="cm-cc-close" aria-label="Cerrar" style="font-size:1.2rem;background:none;border:none;cursor:pointer;color:#64748B">×</button>';
+    html += '</div>';
+    html += '<div style="flex:1;overflow-y:auto;padding:18px 22px">';
+    html += '<form id="cm-cc-form">';
+    var field = function(label, name, type, value, hint, ph) {
+      var v = value == null ? '' : String(value);
+      var s = '<div style="margin-bottom:12px"><label style="font-size:.7rem;color:#64748B;text-transform:uppercase;letter-spacing:.4px;font-weight:700;display:block;margin-bottom:3px">' + escHtml(label) + '</label>';
+      if (type === 'textarea') s += '<textarea class="cm-input" name="' + name + '" rows="3" style="resize:vertical;width:100%;padding:8px 10px;font-family:inherit" placeholder="' + escHtml(ph || '') + '">' + escHtml(v) + '</textarea>';
+      else if (type === 'select') {
+        var opts = ['directo','formal','casual','técnico'];
+        s += '<select class="cm-input" name="' + name + '" style="width:100%;padding:8px 10px">';
+        opts.forEach(function(o){ s += '<option value="' + o + '"' + (v === o ? ' selected' : '') + '>' + o + '</option>'; });
+        s += '</select>';
+      }
+      else s += '<input class="cm-input" name="' + name + '" type="' + type + '" value="' + escHtml(v) + '" placeholder="' + escHtml(ph || '') + '" style="width:100%;padding:8px 10px"/>';
+      if (hint) s += '<div style="font-size:.66rem;color:#94A3B8;margin-top:2px">' + escHtml(hint) + '</div>';
+      s += '</div>';
+      return s;
+    };
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    html += field('Nombre de la empresa', 'company_name', 'text', ctx.company_name, '', 'Promoselect');
+    html += field('Industria', 'industry', 'text', ctx.industry, '', 'Promocionales B2B');
+    html += '</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    html += field('Modelo de negocio', 'business_model', 'text', ctx.business_model, 'B2B / B2C / B2B2C / Marketplace', 'B2B');
+    html += field('Estilo de comunicación', 'language_style', 'select', ctx.language_style || 'directo', 'Tono que la AI debe usar', '');
+    html += '</div>';
+    html += field('Segmento objetivo', 'target_segment', 'textarea', ctx.target_segment, 'A quién le vendes', 'Empresas medianas 100-500 empleados, RH y Marketing como buyers');
+    html += field('Geografía', 'geographies', 'text', ctx.geographies, '', 'México: CDMX, Monterrey, Guadalajara');
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    html += field('Equipo total', 'team_size', 'number', ctx.team_size, '', '25');
+    html += field('Equipo comercial (asesores)', 'sales_team_size', 'number', ctx.sales_team_size, '', '8');
+    html += '</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    html += field('Ticket promedio (MXN)', 'avg_ticket_mxn', 'number', ctx.avg_ticket_mxn, '', '50000');
+    html += field('Ciclo de venta (días)', 'sales_cycle_days', 'number', ctx.sales_cycle_days, '', '14');
+    html += '</div>';
+    html += field('Propuesta de valor', 'main_value_prop', 'textarea', ctx.main_value_prop, '1-2 oraciones', 'Curaduría de productos promocionales con entrega en 7-10 días y diseño on-brand sin costo extra');
+    html += field('Competidores principales', 'top_competitors', 'textarea', ctx.top_competitors, 'Nombres + diferenciador percibido', '');
+    html += field('Dolores actuales del proceso', 'main_pains_today', 'textarea', ctx.main_pains_today, 'Lo que más te frustra hoy del proceso comercial', 'Seguimiento post-cotización inconsistente; muchos prospectos se enfrían');
+    html += field('Objetivos principales del CEO', 'main_objectives', 'textarea', ctx.main_objectives, 'Qué quieres lograr este trimestre/año — AI usa esto para alinear sus sugerencias', 'Subir conversión global 15% · cerrar 3 cuentas key · bajar CAC 20%');
+    html += field('Notas adicionales', 'notes', 'textarea', ctx.notes, 'Cualquier otra info útil para la AI', '');
+    html += '</form></div>';
+    html += '<div style="padding:14px 22px;border-top:1px solid #E2E8F0;display:flex;gap:8px;justify-content:flex-end;background:#F8FAFC">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-cc-cancel">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-cc-save">Guardar</button>';
+    html += '</div></div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+
+    document.querySelector('#cm-cc-close').addEventListener('click', closeModal);
+    document.querySelector('#cm-cc-cancel').addEventListener('click', closeModal);
+    document.querySelector('#cm-cc-save').addEventListener('click', function() {
+      var form = document.querySelector('#cm-cc-form');
+      var fd = new FormData(form);
+      var payload = {};
+      fd.forEach(function(v, k) {
+        var s = String(v).trim();
+        if (k === 'team_size' || k === 'sales_team_size' || k === 'sales_cycle_days') {
+          payload[k] = s ? parseInt(s, 10) : null;
+        } else if (k === 'avg_ticket_mxn') {
+          payload[k] = s ? parseFloat(s) : null;
+        } else {
+          payload[k] = s;
+        }
+      });
+      var btn = document.querySelector('#cm-cc-save');
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      fetch('/api/comercial/company-context', {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload),
+      }).then(function(r) {
+        if (!r.ok) throw new Error('Error ' + r.status);
+        return r.json();
+      }).then(function(updated) {
+        state.company_context = updated;
+        toast('Contexto guardado', 'success');
+        closeModal();
+        if (activeTab === 'quickstart') renderTab();
+      }).catch(function(err) {
+        btn.disabled = false; btn.textContent = 'Guardar';
+        toast('Error al guardar: ' + err.message, 'error');
+      });
+    });
+  }
+
   /* ── Public API ── */
   return {
     init: function(el) {
       container = el;
-      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], canvas_layout: [], canvas_notes: [], touchpoint_flows: [], iniciativas: [], dashboard: null };
+      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], canvas_layout: [], canvas_notes: [], touchpoint_flows: [], channels: [], touchpoint_channels: [], iniciativas: [], dashboard: null, workbook: null };
       activeTab = 'dashboard';
       frictionFilterImpact = 'all';
       frictionFilterStatus = 'all';
@@ -7856,14 +11353,16 @@ window.ComercialModule = (function() {
       kpiBoardView = 'monthly';
       kpiBoardShowAll = false;
       kpiSegFilter = { phase: 'all', responsable: 'all', status: 'all', search: '' };
+      loadCurrentPersona();
       renderShell();
+      _setupDrawerDismissHandlers();
       loadAll();
     },
     destroy: function() {
       closeModal();
       removeStyles();
       container = null;
-      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], canvas_layout: [], canvas_notes: [], touchpoint_flows: [], iniciativas: [], dashboard: null };
+      state = { phases: [], touchpoints: [], frictions: [], trust_pillars: [], kpis: [], activity_log: [], comments: [], people: [], kpi_frictions: [], kpi_touchpoints: [], tp_kpi_history: [], kpi_history: [], canvas_layout: [], canvas_notes: [], touchpoint_flows: [], channels: [], touchpoint_channels: [], iniciativas: [], dashboard: null, workbook: null };
       selectedPhase = 'atraccion';
       collapsedBands = {};
       expandedKpis = {};

@@ -1,0 +1,399 @@
+{
+  "version": "1.0",
+  "source": "Workbook 'Descubrimiento, Auditoría y Optimización de Touchpoints' — Cris Urzúa (Growth Institute / Arquitectura Comercial)",
+  "rules": [
+    "Menos es más: 8 touchpoints cumplidos > 47 perfectos sin ejecutar.",
+    "Documenta lo que REALMENTE pasa, no lo que debería pasar.",
+    "Enumerar, no agrupar: si 'enviar cotización' tiene 4 sub-pasos, son 4 touchpoints.",
+    "Buscar lo invisible: esperas, transiciones entre áreas, validaciones informales.",
+    "Marcar lo redundante: si dos touchpoints hacen lo mismo, uno sobra.",
+    "Recorrer el camino del cliente, no el organigrama.",
+    "Una decisión a la vez: salir con 5-10 compromisos concretos, no 50 intenciones."
+  ],
+  "phase_order": ["atraccion", "captura", "conversion", "onboarding", "recompra", "confianza"],
+  "phases": {
+    "atraccion": {
+      "title": "Atracción",
+      "summary": "Cómo te encuentran los prospectos. Extraños se vuelven prospectos.",
+      "min_touchpoints": 3,
+      "discovery_questions": [
+        "¿Por qué medio descubre un cliente que existimos? (lista cada medio real)",
+        "Cuando ve un anuncio nuestro, ¿qué ve exactamente? ¿imagen, video, texto, oferta?",
+        "¿Qué hace cuando lo ve? ¿da clic, manda mensaje, busca el sitio, llama?",
+        "Si llega por referido, ¿cómo llega exactamente? ¿le pasan un teléfono, un link, un nombre?",
+        "¿Hay contenido orgánico (posts, videos, blog) por el que la gente nos descubre?",
+        "¿Aparecemos en marketplaces, listados, asociaciones, ferias?",
+        "¿Hay prospección outbound? ¿quién la hace, cómo, por qué canal?",
+        "¿Existen alianzas con otros negocios que nos refieren clientes?",
+        "¿Cuál es el primer mensaje exacto que ve un prospecto cuando llega a nosotros?",
+        "¿Cuánto tarda en pasar de 'vio el anuncio/contenido' a 'interactuó con nosotros'?",
+        "¿Qué porcentaje de los que ven el anuncio realmente da clic?",
+        "¿Hay momentos de descubrimiento que NO controlamos y que están dejando dinero sobre la mesa?"
+      ],
+      "coach_questions": [
+        "¿Por qué medio descubre un cliente que existimos? (lista cada medio real)",
+        "¿Cuál es el primer mensaje exacto que ve un prospecto cuando llega a nosotros?",
+        "Si llega por referido, ¿cómo llega exactamente? ¿le pasan un teléfono, un link, un nombre?",
+        "¿Aparecemos en marketplaces, listados, asociaciones, ferias?",
+        "¿Hay momentos de descubrimiento que NO controlamos hoy?"
+      ],
+      "sanity_check": "¿podemos decir cuál canal aporta más leads y cuál más caros? Si la respuesta es 'no sabemos', es un problema a anotar.",
+      "red_flags": [
+        "No sabemos qué canal aporta más leads ni cuál es el más caro.",
+        "Llegan referidos sin proceso ni incentivo (oportunidad perdida).",
+        "Aparecemos en lugares que no controlamos y nadie está midiéndolo."
+      ],
+      "field_hints": {
+        "name": "Describe la actividad del cliente, no la nuestra. Ej: 'Cliente ve anuncio en Facebook'.",
+        "canal": "¿Por qué medio descubre el cliente que existimos?",
+        "responsable": "Persona o sistema. Nunca 'el cliente'.",
+        "kpi": "Tipico: alcance, CPM, CTR, costo por lead, posición orgánica."
+      },
+      "checklist_pass": [
+        "¿Listamos al menos 3-5 touchpoints de atracción?",
+        "¿Cada uno está nombrado por actividad, no por actor?",
+        "¿Cada uno tiene un canal claro?",
+        "¿Cada uno tiene un responsable interno asignado?"
+      ]
+    },
+    "captura": {
+      "title": "Captura",
+      "summary": "Cómo capturas datos del prospecto.",
+      "min_touchpoints": 2,
+      "discovery_questions": [
+        "¿En qué momento exacto del proceso le pedimos sus datos al prospecto?",
+        "¿Qué le ofrecemos a cambio? (lead magnet, demo, cotización, descuento, contenido)",
+        "¿Por qué medio entrega los datos? (formulario, WhatsApp, llamada, presencial)",
+        "¿Cuántos campos le pedimos llenar? ¿son los mínimos necesarios o estamos pidiendo de más?",
+        "¿Qué pasa INMEDIATAMENTE después de que entrega los datos?",
+        "¿Recibe confirmación automática? ¿qué dice exactamente?",
+        "¿Le mandamos contenido de nutrición posterior a la captura? ¿con qué frecuencia?",
+        "¿Dónde quedan registrados los datos? ¿es accesible para todo el equipo de ventas?",
+        "¿Está etiquetado por origen (Facebook, referido, web, evento)?",
+        "¿Cumplimos con los avisos de privacidad? ¿el cliente sabe qué hacemos con sus datos?"
+      ],
+      "coach_questions": [
+        "¿En qué momento exacto le pedimos los datos al prospecto?",
+        "¿Qué ofrecemos a cambio? (lead magnet, demo, cotización, descuento)",
+        "¿Por qué medio entrega los datos? (formulario, WhatsApp, llamada, presencial)",
+        "¿Qué pasa INMEDIATAMENTE después de que entrega los datos?",
+        "¿Dónde quedan los datos y cómo se etiquetan por origen?"
+      ],
+      "sanity_check": "¿podríamos enviarle un mensaje hoy a todos los prospectos del último año que NO compraron? Si no, hay un problema.",
+      "red_flags": [
+        "Pedimos más campos de los necesarios y abandonan el formulario.",
+        "El lead se enfría sin nutrición posterior.",
+        "Los datos quedan en un Excel/WhatsApp que nadie consulta."
+      ],
+      "field_hints": {
+        "name": "Describe la acción: 'Cliente llena formulario en landing', 'Pre-sells captura por WhatsApp'.",
+        "canal": "¿Por qué medio entrega los datos? Formulario, WhatsApp, llamada, presencial.",
+        "responsable": "¿Quién recibe el dato? Sistema (CRM/Wati) o persona (pre-sells).",
+        "kpi": "Tipico: tasa de captura, % completado del form, tiempo a primera respuesta."
+      },
+      "checklist_pass": [
+        "¿Hay un proceso claro de captura, repetible?",
+        "¿Hay nutrición posterior o el lead se enfría sólo?",
+        "¿Los datos están en un lugar accesible y segmentado?"
+      ]
+    },
+    "conversion": {
+      "title": "Conversión",
+      "summary": "Cómo cierras la venta. El módulo más crítico.",
+      "min_touchpoints": 5,
+      "discovery_questions": [
+        "¿Cuánto tiempo pasa entre que llega el lead y le respondemos por primera vez?",
+        "¿Quién responde? ¿el primero disponible, un asignado, una IA, un bot?",
+        "¿Qué dice exactamente el primer mensaje? (anótalo textual)",
+        "¿Hay una etapa de descubrimiento / diagnóstico antes de cotizar?",
+        "Si la hay, ¿qué preguntas hacemos? (anótalas las 5-10 principales)",
+        "¿Las preguntas son las mismas para todos los vendedores o cada uno tiene las suyas?",
+        "¿Cómo y cuándo enviamos la propuesta o cotización?",
+        "¿Cuánto tarda la propuesta en salir desde que el cliente la pide?",
+        "¿La propuesta es plantilla genérica o se personaliza por cliente?",
+        "¿Qué seguimiento hacemos después de mandar la propuesta? (días 1, 3, 7, 14)",
+        "¿Cuáles son las 5 objeciones más frecuentes y cómo las manejamos?",
+        "¿Cómo se cierra la venta? ¿firma de contrato, transferencia, link de pago, presencial?",
+        "¿Qué pasa si el cliente dice 'no' o 'lo voy a pensar'? ¿hay protocolo de seguimiento?",
+        "¿Tenemos tasa de conversión por etapa? (de lead a propuesta, de propuesta a cierre)",
+        "¿Qué porcentaje de las ventas las cierra nuestro mejor vendedor vs. el promedio?"
+      ],
+      "coach_questions": [
+        "¿Cuánto tiempo pasa entre que llega el lead y le respondemos?",
+        "¿Hay etapa de descubrimiento/diagnóstico antes de cotizar? ¿qué preguntas hacemos?",
+        "¿Cómo y cuándo enviamos la propuesta? ¿es plantilla o personalizada?",
+        "¿Qué seguimiento hacemos día 1, 3, 7, 14 después de la propuesta?",
+        "¿Qué porcentaje cierra el mejor vendedor vs. el promedio del equipo?"
+      ],
+      "sanity_check": "¿es el mismo proceso para todos los vendedores o cada uno tiene 'su forma'? Si cada uno improvisa, el conocimiento se va con la persona.",
+      "red_flags": [
+        "Respuesta inicial > 1 hora — el lead se enfría.",
+        "Cada vendedor tiene 'su forma' — el proceso no es repetible.",
+        "Propuesta plantilla genérica sin personalizar — baja tasa de cierre.",
+        "Mejor vendedor cierra al 80% y promedio al 30% — el conocimiento está en una sola cabeza.",
+        "No hay protocolo para 'lo voy a pensar' — se pierden ventas evitables."
+      ],
+      "field_hints": {
+        "name": "Describe la actividad: 'Vendedor llama al lead nuevo', 'Vendedor envía propuesta tras descubrimiento'.",
+        "canal": "WhatsApp, llamada, email, presencial, videollamada.",
+        "responsable": "¿Qué rol? (Asesor comercial, Pre-sells, Director comercial). No 'el cliente'.",
+        "kpi": "Tipico: tiempo a primer contacto (min), tasa de respuesta, % que pasa a propuesta, % de cierre."
+      },
+      "checklist_pass": [
+        "¿Tenemos un proceso de cierre repetible o cada vendedor improvisa?",
+        "¿Las objeciones más frecuentes están documentadas y resueltas?",
+        "¿Sabemos en qué etapa perdemos más prospectos?",
+        "¿La velocidad de respuesta inicial es menor a 1 hora?"
+      ]
+    },
+    "onboarding": {
+      "title": "Onboarding",
+      "summary": "Cómo entregas y das la bienvenida al cliente.",
+      "min_touchpoints": 3,
+      "discovery_questions": [
+        "Una vez que el cliente paga, ¿qué pasa en las primeras 24 horas?",
+        "¿Quién es el 'dueño' del cliente en el onboarding? (¿sigue siendo ventas, o pasa a otra área?)",
+        "¿Cómo se hace la transición de ventas → operaciones? ¿hay un kickoff formal?",
+        "¿Qué información del cliente se pierde en esa transición?",
+        "¿Cuál es el 'primer momento ajá' en nuestro producto/servicio? (la primera vez que el cliente siente valor real)",
+        "¿Cuánto tarda en llegar a ese momento? ¿qué porcentaje de clientes llega?",
+        "¿Qué hacemos para acelerar la llegada al momento ajá?",
+        "¿Capacitamos al cliente o al equipo del cliente sobre cómo usar lo que compró?",
+        "¿Hacemos check-in al día 7, día 30? ¿qué decimos en cada uno?",
+        "Si surge un problema en el onboarding, ¿a quién contacta el cliente y qué tan rápido respondemos?"
+      ],
+      "coach_questions": [
+        "Una vez que el cliente paga, ¿qué pasa en las primeras 24 horas?",
+        "¿Cómo es la transición ventas → operaciones? ¿qué información se pierde?",
+        "¿Cuál es el 'primer momento ajá' y cuánto tarda en llegar?",
+        "¿Hacemos check-in día 7 y día 30? ¿qué decimos exactamente?",
+        "Si surge un problema, ¿a quién contacta y qué tan rápido respondemos?"
+      ],
+      "sanity_check": "¿cuál es el momento exacto en que el cliente 'siente' que la decisión de comprarnos fue correcta? ¿Cuántos días pasan hasta ese momento?",
+      "red_flags": [
+        "Zona gris entre ventas y operaciones — nadie es dueño.",
+        "Información del cliente se pierde en la transición — el equipo de ops empieza a ciegas.",
+        "El 'momento ajá' no está definido — no sabemos cuándo activamos el valor.",
+        "No hay check-ins programados — el cliente se siente abandonado tras pagar."
+      ],
+      "field_hints": {
+        "name": "Describe la actividad: 'Operaciones agenda kickoff con cliente', 'Cliente recibe primer entregable'.",
+        "canal": "Email, llamada, presencial, plataforma interna.",
+        "responsable": "¿Es ventas, operaciones, customer success? Asigna persona o rol específico.",
+        "kpi": "Tipico: tiempo a momento ajá (días), % clientes que llegan al ajá, NPS día 30."
+      },
+      "checklist_pass": [
+        "¿Hay un dueño claro del onboarding (no es zona gris)?",
+        "¿Existe una secuencia documentada de pasos y plazos?",
+        "¿Sabemos qué porcentaje de clientes llega al momento ajá y en cuánto tiempo?"
+      ]
+    },
+    "recompra": {
+      "title": "Recompra",
+      "summary": "Cómo regresan a comprar. El motor de revenue de largo plazo.",
+      "min_touchpoints": 2,
+      "discovery_questions": [
+        "¿Qué porcentaje de nuestros clientes nos recompra? (en 6 meses, 12 meses)",
+        "¿Cuánto tiempo pasa típicamente entre la primera compra y la segunda?",
+        "¿Tenemos un proceso intencional para gatillar la recompra o esperamos que el cliente regrese?",
+        "¿Qué touchpoints existen para recordarle al cliente que estamos disponibles?",
+        "¿Hacemos cross-sell o upsell? ¿en qué momento del ciclo del cliente?",
+        "¿Tenemos un programa de fidelidad, suscripción, club o algo similar?",
+        "Si un cliente lleva X meses sin comprarnos, ¿qué hacemos? (protocolo de win-back)",
+        "¿Pedimos sistemáticamente referidos a clientes contentos? ¿en qué momento?",
+        "¿Pedimos sistemáticamente testimonios? ¿en qué momento?",
+        "Si un cliente 'se va' (deja de comprar), ¿lo detectamos y por qué medio?"
+      ],
+      "coach_questions": [
+        "¿Qué porcentaje de clientes recompra a 6 y 12 meses?",
+        "¿Tenemos un proceso intencional para gatillar recompra o esperamos pasivamente?",
+        "¿Hacemos cross-sell o upsell? ¿cuándo y quién?",
+        "¿Tenemos protocolo de win-back si un cliente lleva X meses sin comprar?",
+        "¿Pedimos referidos y testimonios sistemáticamente?"
+      ],
+      "sanity_check": "¿qué porcentaje de clientes nos recompra? Si la respuesta es 'no sé', es un problema crítico.",
+      "red_flags": [
+        "No sabemos % de recompra — estamos volando a ciegas.",
+        "La recompra se deja al azar — no hay touchpoints programados.",
+        "No pedimos referidos sistemáticamente — perdemos el canal más barato.",
+        "Cuando un cliente se va, lo detectamos meses después o nunca."
+      ],
+      "field_hints": {
+        "name": "Describe la actividad: 'CSM llama al cliente día 60', 'Sistema envía recordatorio de pedido recurrente'.",
+        "canal": "Email, llamada, WhatsApp, plataforma propia.",
+        "responsable": "Customer success, ventas, marketing automation. No dejar 'sin dueño'.",
+        "kpi": "Tipico: % recompra 6m / 12m, ticket promedio segunda compra, % clientes con referido pedido."
+      },
+      "checklist_pass": [
+        "¿La recompra está siendo diseñada o se deja al azar?",
+        "¿Tenemos protocolo de win-back?",
+        "¿Pedimos testimonios y referidos sistemáticamente?"
+      ]
+    },
+    "confianza": {
+      "title": "Motor de Confianza",
+      "summary": "Contenido, testimonios, autoridad y comunidad. Corre en paralelo a las 5 fases, siempre activo.",
+      "min_touchpoints": 3,
+      "discovery_questions": [
+        "¿En qué redes sociales publicamos contenido y con qué frecuencia?",
+        "¿Quién es el responsable de mantener prendido el contenido?",
+        "¿Tenemos un calendario editorial o publicamos por inspiración?",
+        "¿Recopilamos sistemáticamente testimonios después de cada cliente?",
+        "¿Dónde exhibimos esos testimonios? (web, redes, propuestas, presentaciones)",
+        "¿Tenemos casos de éxito documentados? ¿cuántos? ¿están actualizados?",
+        "¿Aparecemos en medios, podcasts, eventos, premios? ¿lo usamos como autoridad?",
+        "¿Tenemos números agregados que comunican autoridad? ('X clientes', 'Y años', 'Z procesados')",
+        "¿Existe una comunidad alrededor de nuestra marca? (grupo, foro, eventos, club)",
+        "¿Hacemos contenido educativo o sólo promocional? ¿cuál es la proporción?",
+        "¿Tenemos newsletter o canal de comunicación recurrente con la base?",
+        "Si dejamos de invertir en publicidad mañana, ¿cuánta tracción nos seguiría llegando por motor de confianza?"
+      ],
+      "coach_questions": [
+        "¿En qué redes publicamos y con qué frecuencia? ¿quién es responsable?",
+        "¿Tenemos calendario editorial o publicamos por inspiración?",
+        "¿Recopilamos testimonios sistemáticamente y dónde los exhibimos?",
+        "¿Hacemos contenido educativo o sólo promocional? ¿proporción?",
+        "Si dejamos de invertir en publicidad mañana, ¿cuánta tracción nos seguiría llegando?"
+      ],
+      "sanity_check": "¿hay alguien dueño del motor o 'todo el mundo' lo es (= nadie)?",
+      "red_flags": [
+        "Nadie es dueño del motor — publica quien tiene tiempo.",
+        "Publicamos por ráfagas, no con cadencia sostenida.",
+        "Testimonios coleccionados pero nunca exhibidos en propuestas.",
+        "Solo hacemos contenido promocional — no construimos autoridad."
+      ],
+      "field_hints": {
+        "name": "Describe la actividad: 'Marketing publica post de caso de éxito', 'CEO graba podcast mensual'.",
+        "canal": "LinkedIn, Instagram, YouTube, Newsletter, Podcast, Comunidad.",
+        "responsable": "Marketing, contenido, CEO. Asignar nominalmente — 'todos' = nadie.",
+        "kpi": "Tipico: cadencia (posts/semana), engagement, leads orgánicos por canal, NPS de comunidad."
+      },
+      "checklist_pass": [
+        "¿Hay alguien dueño del motor o 'todo el mundo' lo es?",
+        "¿Hay cadencia mínima sostenida (no ráfagas)?",
+        "¿Estamos coleccionando testimonios sistemáticamente?"
+      ]
+    }
+  },
+  "tp_attributes": [
+    {
+      "key": "name",
+      "label": "Nombre (actividad)",
+      "rule": "Describe la actividad observable, no al actor. 'Cliente ve anuncio en Facebook' es válido. 'Atracción' no lo es."
+    },
+    {
+      "key": "phase",
+      "label": "Fase",
+      "rule": "Una de las 5 fases (Atracción / Captura / Conversión / Onboarding / Recompra) o Motor de Confianza."
+    },
+    {
+      "key": "canal",
+      "label": "Canal",
+      "rule": "El medio: Facebook, WhatsApp, email, llamada, presencial, etc. Específico, no genérico."
+    },
+    {
+      "key": "responsable",
+      "label": "Responsable",
+      "rule": "Persona o sistema interno. Nunca 'el cliente'. Si nadie está asignado, ese es el problema."
+    },
+    {
+      "key": "sequence",
+      "label": "Predecesor / Sucesor",
+      "rule": "Qué touchpoint viene antes y cuál viene después. Si no hay flujo, el mapa está incompleto."
+    },
+    {
+      "key": "kpi",
+      "label": "KPI",
+      "rule": "Máximo 1-2 métricas. Cuantificable, controlable por el responsable, conectada al éxito del touchpoint, revisable con cadencia clara."
+    },
+    {
+      "key": "checklist",
+      "label": "Checklist interno",
+      "rule": "5-10 ítems específicos y validables (sí/no, sin matices). Construido por quien ejecuta, no por quien dirige."
+    },
+    {
+      "key": "duration",
+      "label": "Duración + Fricción",
+      "rule": "Tiempo estimado del touchpoint y obstáculos detectados (espera, repetición, cambio de canal, info incompleta, expectativas no comunicadas, esfuerzo cognitivo)."
+    }
+  ],
+  "friction_types": [
+    {
+      "key": "time",
+      "label": "Tiempo",
+      "desc": "Esperas no justificadas. ¿Hay tiempo muerto que el cliente paga sin razón?"
+    },
+    {
+      "key": "repetition",
+      "label": "Repetición",
+      "desc": "Pedirle al cliente algo que ya nos dio. Síntoma de silos internos."
+    },
+    {
+      "key": "channel_switch",
+      "label": "Cambio de canal",
+      "desc": "Saltos sin razón entre medios (web → WhatsApp → email → llamada). ¿Aporta valor o es por nuestra conveniencia?"
+    },
+    {
+      "key": "incomplete_info",
+      "label": "Información incompleta",
+      "desc": "El cliente no sabe qué pasa después, cuánto cuesta exactamente, o cuánto va a tardar."
+    },
+    {
+      "key": "unmet_expectations",
+      "label": "Expectativas no comunicadas",
+      "desc": "La empresa sabe el plazo y el siguiente paso, pero al cliente nadie se lo dijo."
+    },
+    {
+      "key": "cognitive_effort",
+      "label": "Esfuerzo cognitivo",
+      "desc": "Demasiadas decisiones, demasiados campos, demasiadas opciones. El camino debería ser claro."
+    }
+  ],
+  "validation_tests": [
+    {
+      "key": "terreno",
+      "label": "Validación por terreno",
+      "desc": "Toma a un vendedor real (no del equipo directivo) y pídele que recorra el mapa describiendo lo que REALMENTE hace.",
+      "question": "¿Un vendedor de campo validó que el mapa refleja la realidad y se documentaron las divergencias?"
+    },
+    {
+      "key": "fantasma",
+      "label": "Cliente fantasma",
+      "desc": "Que alguien (interno o externo) se haga pasar por prospecto y atraviese el embudo desde un anuncio hasta el cierre. Documenta la experiencia real.",
+      "question": "¿Alguien probó la experiencia real como prospecto y registró los touchpoints donde el mapa NO coincidió?"
+    },
+    {
+      "key": "datos",
+      "label": "Auditoría con datos",
+      "desc": "Revisar CRM, plataforma de email, métricas reales de WhatsApp y llamadas. Cruzar lo que el mapa dice con lo que los datos muestran.",
+      "question": "¿Cruzaste el proceso documentado con tus métricas reales y registraste las divergencias?"
+    }
+  ],
+  "tp_classification": [
+    {
+      "key": "critical",
+      "label": "Crítico",
+      "desc": "Decide la conversión o la confianza. Optimizar profundamente."
+    },
+    {
+      "key": "invisible",
+      "label": "Invisible",
+      "desc": "Pasa pero nadie lo nombra ni mide. Traerlo a la luz, asignar dueño."
+    },
+    {
+      "key": "redundant",
+      "label": "Redundante",
+      "desc": "Otro touchpoint hace lo mismo. Eliminar o fusionar."
+    },
+    {
+      "key": "unnecessary",
+      "label": "Innecesario",
+      "desc": "No aporta valor real. Eliminar sin culpa."
+    }
+  ],
+  "optimization_order": [
+    "Primero elimina lo redundante e innecesario (gana velocidad sin invertir).",
+    "Luego ilumina los invisibles (asigna dueño y métrica).",
+    "Finalmente optimiza los críticos (donde está el mayor retorno)."
+  ]
+}

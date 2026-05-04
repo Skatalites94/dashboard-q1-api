@@ -39,7 +39,8 @@ def _create_engine_from_env():
 
 def _create_sqlite_engine():
     base_dir = Path(__file__).resolve().parent.parent
-    db_path = base_dir / "data" / "dashboard.db"
+    db_name = os.environ.get("SQLITE_DB_NAME", "dashboard.db").strip() or "dashboard.db"
+    db_path = base_dir / "data" / db_name
     db_path.parent.mkdir(parents=True, exist_ok=True)
     sqlite_url = f"sqlite:///{db_path}"
     return create_engine(sqlite_url, connect_args={"check_same_thread": False})

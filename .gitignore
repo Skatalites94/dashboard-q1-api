@@ -4,9 +4,12 @@ __pycache__/
 .venv/
 venv/
 data/*.db
+data/backups/
 *.egg-info/
 .DS_Store
 Referencias de pagina ORKs./
 contexto documentos/*.xlsx
 contexto documentos/*.pdf
 contexto documentos/*.zip
+.cursor/
+Contexto Modulo Comercial/

@@ -218,13 +218,74 @@ def comercial_phase_out(row: ComercialPhase) -> dict:
     }
 
 
-def comercial_touchpoint_out(row: ComercialTouchpoint) -> dict:
-    return {
+def comercial_touchpoint_out(row: ComercialTouchpoint, completeness_ctx: dict = None) -> dict:
+    """Serializa un Touchpoint.
+
+    `completeness_ctx` es un diccionario opcional con conteos pre-calculados:
+        { tp_id: {"channel_count": N, "flow_count": N, "kpi_count": N} }
+    Permite calcular completeness sin N+1 queries cuando se serializa una lista.
+    Si no se pasa, devuelve completeness=None (se calcula fuera).
+    """
+    out = {
         "id": row.id, "phase_id": row.phase_id, "name": row.name,
         "canal": row.canal, "responsable": row.responsable,
         "responsable_id": row.responsable_id, "kpi": row.kpi,
         "friction_text": row.friction_text, "has_friction": row.has_friction,
         "order": row.order, "notes": row.notes,
+        "description": getattr(row, "description", "") or "",
+        # v13: 8 atributos formales
+        "internal_checklist": getattr(row, "internal_checklist", None) or [],
+        "duration_minutes": getattr(row, "duration_minutes", None),
+        "duration_label": getattr(row, "duration_label", "") or "",
+        "classification": getattr(row, "classification", "normal") or "normal",
+        "leverage_point": getattr(row, "leverage_point", "none") or "none",
+        # Optimistic locking — autoplan E5
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+    if completeness_ctx is not None:
+        ctx = completeness_ctx.get(row.id, {})
+        out["completeness"] = _tp_completeness(row, ctx)
+    return out
+
+
+# ── Completeness contract — autoplan §3.2.1 (task #71) ───────────────────
+# 8 predicados booleanos exactos. Pure function. Testeable.
+
+_VALID_CLASSIFICATIONS = {"critical", "invisible", "redundant", "unnecessary", "normal"}
+
+
+def _tp_completeness(row: ComercialTouchpoint, ctx: dict = None) -> dict:
+    """Devuelve el detalle de completeness de un TP. 8 predicados booleanos.
+
+    `ctx` debe contener (si se provee):
+        - channel_count: int (rows en comercial_touchpoint_channel)
+        - flow_count: int (rows en comercial_touchpoint_flow donde row.id participa)
+        - kpi_count: int (rows en comercial_kpi_touchpoint)
+        - responsable_active: bool (responsable_id existe y person.is_active)
+    Si falta algún campo del ctx, ese predicado es False (conservador).
+    """
+    ctx = ctx or {}
+    checks = {
+        "has_name": bool(row.name and len(row.name.strip()) > 0),
+        "has_phase": bool(row.phase_id),
+        "has_channel": ctx.get("channel_count", 0) > 0,
+        "has_responsable": bool(row.responsable_id) and ctx.get("responsable_active", False),
+        "has_sequence": ctx.get("flow_count", 0) > 0,
+        "has_kpi": ctx.get("kpi_count", 0) > 0,
+        "has_checklist": isinstance(getattr(row, "internal_checklist", None), list)
+                         and len(row.internal_checklist) >= 3,
+        "has_diagnosis": getattr(row, "classification", "normal") in _VALID_CLASSIFICATIONS
+                         and getattr(row, "classification", "normal") != "normal",
+    }
+    score = sum(1 for v in checks.values() if v)
+    # Two-tier completeness — autoplan UC-3
+    usable = checks["has_name"] and checks["has_phase"] and checks["has_responsable"]
+    return {
+        "checks": checks,
+        "score": score,         # 0-8
+        "total": 8,
+        "is_usable": usable,    # 3-field minimum
+        "is_complete": score == 8,
     }
 
 
@@ -238,6 +299,7 @@ def comercial_friction_out(row: ComercialFriction) -> dict:
     return {
         "id": row.id, "phase_id": row.phase_id, "name": row.name,
         "impact": row.impact, "solution": row.solution,
+        "description": getattr(row, "description", "") or "",
         "expected_outcome": row.expected_outcome, "status": row.status,
         "deadline": row.deadline.isoformat() if row.deadline else None,
         "notes": row.notes,
@@ -251,6 +313,10 @@ def comercial_friction_out(row: ComercialFriction) -> dict:
         "touchpoint_id": row.touchpoint_id,
         "priority": row.priority or 0,
         "resolution_checklist": row.resolution_checklist if row.resolution_checklist is not None else [],
+        # v13: tipo de fricción
+        "friction_type": getattr(row, "friction_type", None),
+        # v18: marca crítica para que AI priorice al generar iniciativas
+        "is_critical": bool(getattr(row, "is_critical", False)),
     }
 
 
@@ -307,6 +373,161 @@ def comercial_kpi_out(row: ComercialKpi) -> dict:
         "desc_green": getattr(row, "desc_green", "") or "",
         "desc_yellow": getattr(row, "desc_yellow", "") or "",
         "desc_red": getattr(row, "desc_red", "") or "",
+        # v13: tag para 4 maestras
+        "is_master": getattr(row, "is_master", False),
+        "master_metric": getattr(row, "master_metric", None),
+    }
+
+
+# ── 4 maestras rollup — autoplan §6.1 (task #69) ─────────────────────────
+# Contrato:
+#   Para cada métrica maestra (utility, ltv, cac, conversion):
+#     - drivers = lista de KPIs con is_master=True y master_metric==M
+#     - score   = promedio del % logro (current/target) de los drivers
+#     - color   = green ≥90, yellow ≥70, red <70 (cuando direction=higher)
+#                 invertido cuando direction=lower (CAC: menor es mejor)
+# Pure function. Sin queries — recibe lista pre-cargada.
+_MAESTRAS = ["utility", "ltv", "cac", "conversion"]
+_MAESTRA_LABELS = {
+    "utility": "Utilidad",
+    "ltv": "LTV",
+    "cac": "CAC",
+    "conversion": "Conversión",
+}
+
+
+def _kpi_pct_achievement(kpi_dict: dict):
+    """% de logro vs target. Considera direction (higher/lower)."""
+    cv = kpi_dict.get("current_value")
+    tv = kpi_dict.get("target_value")
+    if cv is None or tv is None or tv == 0:
+        return None
+    direction = kpi_dict.get("direction", "higher") or "higher"
+    if direction == "lower":
+        # menos es mejor (CAC). Si cv ≤ tv → 100%+, sino degradación
+        return round((tv / cv) * 100, 1) if cv > 0 else None
+    return round((cv / tv) * 100, 1)
+
+
+def comercial_master_metrics_rollup(kpis_serialized) -> dict:
+    """Devuelve el rollup de las 4 maestras a partir de KPIs ya serializados."""
+    out = {}
+    for m in _MAESTRAS:
+        drivers = [k for k in kpis_serialized if k.get("is_master") and k.get("master_metric") == m]
+        pcts = [_kpi_pct_achievement(k) for k in drivers]
+        pcts = [p for p in pcts if p is not None]
+        if pcts:
+            score = round(sum(pcts) / len(pcts), 1)
+            if score >= 90:
+                color = "green"
+            elif score >= 70:
+                color = "yellow"
+            else:
+                color = "red"
+        else:
+            score = None
+            color = "gray"
+        out[m] = {
+            "metric": m,
+            "label": _MAESTRA_LABELS[m],
+            "score_pct": score,
+            "color": color,
+            "driver_count": len(drivers),
+            "drivers_with_data": len(pcts),
+            "drivers": [
+                {"id": d["id"], "name": d["name"], "current_value": d.get("current_value"),
+                 "target_value": d.get("target_value"), "unit": d.get("unit"),
+                 "pct": _kpi_pct_achievement(d)}
+                for d in drivers
+            ],
+        }
+    return out
+
+
+def comercial_gov_charter_out(row) -> dict:
+    return {
+        "id": row.id,
+        "owner_id": row.owner_id,
+        "cadence": row.cadence or "monthly",
+        "change_criteria": row.change_criteria or "",
+        "principles": row.principles or "",
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def comercial_company_context_out(row) -> dict:
+    """Singleton id=1 — task #92 Quick Start."""
+    return {
+        "id": row.id,
+        "company_name": row.company_name or "",
+        "industry": row.industry or "",
+        "business_model": row.business_model or "",
+        "target_segment": row.target_segment or "",
+        "geographies": row.geographies or "",
+        "team_size": row.team_size,
+        "sales_team_size": row.sales_team_size,
+        "avg_ticket_mxn": row.avg_ticket_mxn,
+        "sales_cycle_days": row.sales_cycle_days,
+        "main_value_prop": row.main_value_prop or "",
+        "top_competitors": row.top_competitors or "",
+        "main_pains_today": row.main_pains_today or "",
+        "main_objectives": getattr(row, "main_objectives", "") or "",
+        "language_style": row.language_style or "directo",
+        "notes": row.notes or "",
+        # v19: 3 atestaciones de validación del workbook
+        "validated_terreno": bool(getattr(row, "validated_terreno", False)),
+        "validated_terreno_notes": getattr(row, "validated_terreno_notes", "") or "",
+        "validated_fantasma": bool(getattr(row, "validated_fantasma", False)),
+        "validated_fantasma_notes": getattr(row, "validated_fantasma_notes", "") or "",
+        "validated_datos": bool(getattr(row, "validated_datos", False)),
+        "validated_datos_notes": getattr(row, "validated_datos_notes", "") or "",
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def comercial_gov_gap_out(row) -> dict:
+    return {
+        "id": row.id,
+        "gap_type": row.gap_type,
+        "reference_id": row.reference_id,
+        "description": row.description,
+        "priority": row.priority or "medium",
+        "status": row.status or "open",
+        "owner_id": row.owner_id,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "closed_at": row.closed_at.isoformat() if row.closed_at else None,
+    }
+
+
+def comercial_gov_test_out(row) -> dict:
+    return {
+        "id": row.id,
+        "test_type": row.test_type,
+        "subject": row.subject,
+        "hypothesis": row.hypothesis or "",
+        "evidence": row.evidence or "",
+        "status": row.status or "planned",
+        "performed_at": row.performed_at.isoformat() if row.performed_at else None,
+        "owner_id": row.owner_id,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def comercial_trust_pillar_step_out(row) -> dict:
+    return {
+        "id": row.id,
+        "pillar_id": row.pillar_id,
+        "title": row.title,
+        "description": row.description or "",
+        "evidence": row.evidence or "",
+        "responsable_id": row.responsable_id,
+        "due_date": row.due_date.isoformat() if row.due_date else None,
+        "status": row.status or "pending",
+        "order": row.order or 0,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 
 
@@ -344,4 +565,11 @@ def comercial_activity_log_out(row: ComercialActivityLog) -> dict:
         "old_value": row.old_value, "new_value": row.new_value,
         "detail": row.detail,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def comercial_channel_out(row) -> dict:
+    return {
+        "id": row.id, "name": row.name, "icon": row.icon,
+        "color": row.color, "description": row.description, "order": row.order,
     }

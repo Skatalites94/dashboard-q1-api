@@ -263,7 +263,15 @@ class ComercialTouchpoint(Base):
     friction_text: Mapped[str] = mapped_column(Text, nullable=True)
     has_friction: Mapped[bool] = mapped_column(Boolean, default=False)
     order: Mapped[int] = mapped_column(Integer, default=0)
+    description: Mapped[str] = mapped_column(Text, default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    # v13: 8 atributos formales — Operación
+    internal_checklist = mapped_column(JSON, default=list)
+    duration_minutes = mapped_column(Integer, nullable=True)
+    duration_label: Mapped[str] = mapped_column(String(50), default="")
+    # v13: 8 atributos formales — Diagnóstico
+    classification: Mapped[str] = mapped_column(String(20), default="normal")
+    leverage_point: Mapped[str] = mapped_column(String(20), default="none")
     created_at = mapped_column(DateTime, server_default=func.now())
     updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -275,6 +283,7 @@ class ComercialFriction(Base):
     phase_id: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(400), nullable=False)
     impact: Mapped[str] = mapped_column(String(20), default="high")
+    description: Mapped[str] = mapped_column(Text, default="")
     solution: Mapped[str] = mapped_column(Text, default="")
     expected_outcome: Mapped[str] = mapped_column(String(400), default="")
     status: Mapped[str] = mapped_column(String(20), default="pending")
@@ -284,8 +293,13 @@ class ComercialFriction(Base):
     responsable_id = mapped_column(Integer, nullable=True)
     touchpoint_id = mapped_column(Integer, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=0)
-    # Checklist de resolución: [{ "text": str, "done": bool }, ...]
     resolution_checklist = mapped_column(JSON, default=list)
+    # v13: tipo de fricción ∈ {time, repetition, channel_switch, incomplete_info,
+    # unmet_expectations, cognitive_effort} — Manifesto §20
+    friction_type = mapped_column(String(30), nullable=True)
+    # v18: marca explícita de fricción crítica — el AI prioriza solo críticas al
+    # generar iniciativas; el usuario puede filtrar el listado por críticas.
+    is_critical: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at = mapped_column(DateTime, nullable=True)
     created_at = mapped_column(DateTime, server_default=func.now())
     updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -302,6 +316,74 @@ class ComercialTrustPillar(Base):
     actions: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="pending")
     order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ComercialTrustPillarStep(Base):
+    """v14 — Wizard Motor de Confianza (autoplan F3 / task #64).
+
+    Cada pilar tiene N pasos accionables (qué hacer, evidencia, dueño, status).
+    Pensados como bloques de construcción del Motor: pasos concretos que el
+    equipo ejecuta para cerrar la brecha entre current_state y target_state.
+    """
+    __tablename__ = "comercial_trust_pillar_steps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    pillar_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    evidence: Mapped[str] = mapped_column(Text, default="")  # cómo sabemos que está cerrado
+    responsable_id = mapped_column(Integer, nullable=True)
+    due_date = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | in_progress | completed
+    order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+# v15 — F4 Tablas de gobernanza (task #66)
+class ComercialGovernanceCharter(Base):
+    """Carta de gobernanza singleton (id=1). Define dueño del modelo,
+    ritmo de revisión, criterios de cambio y principios rectores."""
+    __tablename__ = "comercial_governance_charter"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    owner_id = mapped_column(Integer, nullable=True)
+    cadence: Mapped[str] = mapped_column(String(20), default="monthly")  # weekly|biweekly|monthly|quarterly
+    change_criteria: Mapped[str] = mapped_column(Text, default="")
+    principles: Mapped[str] = mapped_column(Text, default="")
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ComercialGovernanceGap(Base):
+    """Registro de huecos. gap_type: 'tp' | 'friction' | 'kpi' | 'pillar' | 'other'."""
+    __tablename__ = "comercial_governance_gaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    gap_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    reference_id: Mapped[str] = mapped_column(String(50), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[str] = mapped_column(String(10), default="medium")  # high|medium|low
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open|closed
+    owner_id = mapped_column(Integer, nullable=True)
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    closed_at = mapped_column(DateTime, nullable=True)
+
+
+class ComercialGovernanceTest(Base):
+    """Pruebas de validación. test_type: 'contract' | 'market' | 'process'."""
+    __tablename__ = "comercial_governance_tests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    test_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject: Mapped[str] = mapped_column(String(300), nullable=False)
+    hypothesis: Mapped[str] = mapped_column(Text, default="")
+    evidence: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="planned")  # planned|running|passed|failed
+    performed_at = mapped_column(DateTime, nullable=True)
+    owner_id = mapped_column(Integer, nullable=True)
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class ComercialInitiative(Base):
@@ -416,6 +498,9 @@ class ComercialKpi(Base):
     desc_green: Mapped[str] = mapped_column(String(400), default="")
     desc_yellow: Mapped[str] = mapped_column(String(400), default="")
     desc_red: Mapped[str] = mapped_column(String(400), default="")
+    # v13: tag para 4 maestras (Utilidad, LTV, CAC, Conversión) — Manifesto §31
+    is_master: Mapped[bool] = mapped_column(Boolean, default=False)
+    master_metric = mapped_column(String(20), nullable=True)  # 'utility', 'ltv', 'cac', 'conversion'
     updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
@@ -499,3 +584,61 @@ class ComercialActivityLog(Base):
     new_value: Mapped[str] = mapped_column(Text, nullable=True)
     detail: Mapped[str] = mapped_column(Text, default="")
     created_at = mapped_column(DateTime, server_default=func.now())
+
+
+class ComercialChannel(Base):
+    """Catálogo de canales canónicos (WhatsApp, Email, Llamada, etc).
+
+    Reemplaza el campo libre `tp.canal` por una entidad estructurada con
+    icono, color y orden. M:N con touchpoints vía `comercial_touchpoint_channel`.
+    """
+    __tablename__ = "comercial_channels"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    icon: Mapped[str] = mapped_column(String(10), default="")
+    color: Mapped[str] = mapped_column(String(20), default="#94A3B8")
+    description: Mapped[str] = mapped_column(Text, default="")
+    order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ComercialTouchpointChannel(Base):
+    __tablename__ = "comercial_touchpoint_channel"
+
+    touchpoint_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    channel_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+
+
+# v16 — Company Context (singleton id=1) — task #92
+# Alimenta la AI con info de la empresa para que sus sugerencias estén
+# calibradas. Reemplaza el campo company_context manual del modal de AI.
+class ComercialCompanyContext(Base):
+    __tablename__ = "comercial_company_context"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    company_name: Mapped[str] = mapped_column(String(200), default="")
+    industry: Mapped[str] = mapped_column(String(200), default="")
+    business_model: Mapped[str] = mapped_column(String(50), default="")  # B2B/B2C/B2B2C/Marketplace
+    target_segment: Mapped[str] = mapped_column(Text, default="")
+    geographies: Mapped[str] = mapped_column(Text, default="")
+    team_size = mapped_column(Integer, nullable=True)
+    sales_team_size = mapped_column(Integer, nullable=True)
+    avg_ticket_mxn = mapped_column(Float, nullable=True)
+    sales_cycle_days = mapped_column(Integer, nullable=True)
+    main_value_prop: Mapped[str] = mapped_column(Text, default="")
+    top_competitors: Mapped[str] = mapped_column(Text, default="")
+    main_pains_today: Mapped[str] = mapped_column(Text, default="")
+    # v18: objetivos principales del CEO — alimentan al AI cuando sugiere
+    # fricciones e iniciativas (no solo qué duele, también qué se quiere lograr).
+    main_objectives: Mapped[str] = mapped_column(Text, default="")
+    language_style: Mapped[str] = mapped_column(String(20), default="directo")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    # v19: 3 pruebas de validación del workbook (Cris Urzúa, Parte 5).
+    # Cada una se atestigua con un boolean + nota libre de qué se descubrió.
+    validated_terreno: Mapped[bool] = mapped_column(Boolean, default=False)
+    validated_terreno_notes: Mapped[str] = mapped_column(Text, default="")
+    validated_fantasma: Mapped[bool] = mapped_column(Boolean, default=False)
+    validated_fantasma_notes: Mapped[str] = mapped_column(Text, default="")
+    validated_datos: Mapped[bool] = mapped_column(Boolean, default=False)
+    validated_datos_notes: Mapped[str] = mapped_column(Text, default="")
+    updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

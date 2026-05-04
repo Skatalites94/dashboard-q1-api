@@ -2217,3 +2217,190 @@ def ai_suggest_initiatives(body: _AISuggestInitiativesRequest, db: Session = Dep
         raise HTTPException(500, f"AI suggest iniciativas falló: {exc}") from exc
     return result
 
+
+# ──────────────────────────────────────────────────────────────────────────
+# AI: Resolución de UNA fricción + duplicados + auto-priority
+# (CEO plan 2026-05-04: drawer "Resolver con IA" + cherry-picks 1, 2, 4)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class _AISuggestFrictionResolutionRequest(BaseModel):
+    friction_id: str
+
+
+@router.post("/ai/suggest-friction-resolution")
+def ai_suggest_friction_resolution(
+    body: _AISuggestFrictionResolutionRequest,
+    db: Session = Depends(get_db),
+):
+    """Dada UNA fricción, AI propone resolución estructurada: solución concreta,
+    resultado esperado medible, checklist 4-6 pasos, deadline sugerido, KPIs
+    vinculables (de los existentes en la marca) o un KPI nuevo si ninguno encaja.
+
+    NO persiste — devuelve un draft. El usuario edita y aplica con PATCH /frictions/{id}.
+    """
+    from app.ai.generator import suggest_friction_resolution
+
+    fr = db.get(ComercialFriction, body.friction_id)
+    if not fr:
+        raise HTTPException(404, "Fricción no encontrada")
+
+    fr_dict = {
+        "id": fr.id,
+        "name": fr.name,
+        "description": fr.description or fr.notes or "",
+        "impact": fr.impact,
+        "phase_id": fr.phase_id,
+        "friction_type": fr.friction_type,
+        "is_critical": bool(getattr(fr, "is_critical", False)),
+    }
+
+    related_tp_dict = None
+    if fr.touchpoint_id:
+        tp = db.get(ComercialTouchpoint, fr.touchpoint_id)
+        if tp:
+            related_tp_dict = {
+                "name": tp.name,
+                "phase_id": tp.phase_id,
+                "canal": tp.canal or "",
+            }
+
+    # KPIs existentes de la marca (auto-scoping aplica brand_id)
+    kpis = db.query(ComercialKpi).all()
+    kpi_dicts = [
+        {
+            "id": k.id,
+            "name": k.name,
+            "question": k.question or "",
+            "unit": k.unit or "",
+        }
+        for k in kpis
+    ]
+
+    try:
+        result = suggest_friction_resolution(
+            friction=fr_dict,
+            existing_kpis=kpi_dicts,
+            related_touchpoint=related_tp_dict,
+            db_session=db,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"AI resolver fricción falló: {exc}") from exc
+    return result
+
+
+class _AICheckFrictionDuplicateRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    phase_id: str
+    friction_type: Optional[str] = None
+
+
+@router.post("/ai/check-friction-duplicate")
+def ai_check_friction_duplicate(
+    body: _AICheckFrictionDuplicateRequest,
+    db: Session = Depends(get_db),
+):
+    """Antes de crear una fricción, AI revisa si ya existe una con root cause
+    similar en la misma fase. Devuelve {best_match_id, similarity_score, reason}.
+
+    Si AI falla, devuelve 200 con score=0 (no bloquea creación).
+    """
+    from app.ai.generator import check_friction_duplicate
+
+    existing = db.query(ComercialFriction).filter(
+        ComercialFriction.phase_id == body.phase_id
+    ).all()
+    existing_dicts = [
+        {
+            "id": f.id,
+            "name": f.name,
+            "description": f.description or f.notes or "",
+            "friction_type": f.friction_type,
+        }
+        for f in existing
+    ]
+
+    new_dict = {
+        "name": body.name,
+        "description": body.description or "",
+        "phase_id": body.phase_id,
+        "friction_type": body.friction_type,
+    }
+
+    try:
+        result = check_friction_duplicate(
+            new_friction=new_dict,
+            existing_frictions=existing_dicts,
+            db_session=db,
+        )
+    except RuntimeError as exc:
+        # OPENAI_API_KEY no configurada → no bloqueamos creación, devolvemos noop
+        return {
+            "best_match_id": None,
+            "similarity_score": 0.0,
+            "reason": "AI no disponible (configuración).",
+            "_meta": {"error": str(exc)},
+        }
+    except Exception as exc:
+        # Cualquier otro error de AI: no bloquear, log implícito
+        return {
+            "best_match_id": None,
+            "similarity_score": 0.0,
+            "reason": f"AI no respondió: {exc}",
+            "_meta": {"error": str(exc)},
+        }
+    return result
+
+
+class _AISuggestFrictionPriorityRequest(BaseModel):
+    friction_id: str
+
+
+@router.post("/ai/suggest-friction-priority")
+def ai_suggest_friction_priority(
+    body: _AISuggestFrictionPriorityRequest,
+    db: Session = Depends(get_db),
+):
+    """AI sugiere si la fricción debería marcarse is_critical=true.
+
+    Si AI falla, devuelve 200 con is_critical=false (no muestra chip).
+    """
+    from app.ai.generator import suggest_friction_priority
+
+    fr = db.get(ComercialFriction, body.friction_id)
+    if not fr:
+        raise HTTPException(404, "Fricción no encontrada")
+
+    fr_dict = {
+        "name": fr.name,
+        "description": fr.description or fr.notes or "",
+        "impact": fr.impact,
+        "phase_id": fr.phase_id,
+        "friction_type": fr.friction_type,
+    }
+
+    related_tp_dict = None
+    if fr.touchpoint_id:
+        tp = db.get(ComercialTouchpoint, fr.touchpoint_id)
+        if tp:
+            related_tp_dict = {
+                "name": tp.name,
+                "phase_id": tp.phase_id,
+                "canal": tp.canal or "",
+            }
+
+    try:
+        result = suggest_friction_priority(
+            friction=fr_dict,
+            related_touchpoint=related_tp_dict,
+            db_session=db,
+        )
+    except RuntimeError:
+        return {"is_critical": False, "reason": "AI no disponible.", "_meta": {"error": True}}
+    except Exception as exc:
+        return {"is_critical": False, "reason": f"AI no respondió: {exc}", "_meta": {"error": True}}
+    return result
+

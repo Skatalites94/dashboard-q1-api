@@ -1390,6 +1390,73 @@ window.ComercialModule = (function() {
       .cm-friction-card.impact-medium{border-left-color:#F59E0B}
       .cm-friction-card.impact-low{border-left-color:#3B82F6}
 
+      /* AI: empty solution → "Resolver con IA" button */
+      .cm-friction-ai-empty{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+      .cm-friction-ai-empty-text{color:var(--text-muted,#94A3B8);font-size:.88rem;font-style:italic}
+      .cm-friction-ai-resolve{background:linear-gradient(135deg,#7C3AED,#4C6EF5);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:.82rem;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 2px 4px rgba(124,58,237,.25)}
+      .cm-friction-ai-resolve:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(124,58,237,.35)}
+      .cm-friction-ai-resolve:disabled{opacity:.6;cursor:not-allowed;transform:none}
+
+      /* AI: priority suggestion chip */
+      .cm-friction-ai-priority-chip{display:inline-flex;align-items:center;gap:6px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:12px;padding:3px 10px;font-size:.7rem;font-weight:700;letter-spacing:.3px;cursor:pointer;transition:background .12s}
+      .cm-friction-ai-priority-chip:hover{background:#FDE68A}
+      .cm-friction-ai-priority-chip .x{margin-left:4px;color:#A16207;font-weight:900}
+
+      /* Drawer "Resolver con IA" */
+      .cm-ai-drawer-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9998;opacity:0;transition:opacity .2s}
+      .cm-ai-drawer-overlay.is-open{opacity:1}
+      .cm-ai-drawer{position:fixed;top:0;right:0;bottom:0;width:480px;max-width:100vw;background:#fff;z-index:9999;box-shadow:-4px 0 24px rgba(15,23,42,.18);transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column}
+      .cm-ai-drawer.is-open{transform:translateX(0)}
+      .cm-ai-drawer-head{padding:20px 24px;border-bottom:1px solid var(--border,#E2E8F0);display:flex;align-items:center;gap:12px}
+      .cm-ai-drawer-head .badge{background:linear-gradient(135deg,#7C3AED,#4C6EF5);color:#fff;border-radius:6px;padding:4px 8px;font-size:.7rem;font-weight:700;letter-spacing:.4px}
+      .cm-ai-drawer-head h3{margin:0;font-size:1.05rem;font-weight:700;color:#0F172A;flex:1}
+      .cm-ai-drawer-close{background:transparent;border:none;font-size:1.4rem;color:#64748B;cursor:pointer;padding:0 4px;line-height:1}
+      .cm-ai-drawer-close:hover{color:#0F172A}
+      .cm-ai-drawer-body{flex:1;overflow-y:auto;padding:20px 24px}
+      .cm-ai-drawer-foot{padding:14px 24px;border-top:1px solid var(--border,#E2E8F0);display:flex;justify-content:space-between;gap:10px;background:#F8FAFC}
+      .cm-ai-field{margin-bottom:18px}
+      .cm-ai-field label{display:block;font-size:.72rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+      .cm-ai-field input,.cm-ai-field textarea{width:100%;padding:9px 11px;border:1px solid var(--border,#E2E8F0);border-radius:7px;font:inherit;font-size:.88rem;color:#0F172A;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+      .cm-ai-field input:focus,.cm-ai-field textarea:focus{outline:none;border-color:#7C3AED;box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+      .cm-ai-field textarea{resize:vertical;min-height:60px;font-family:inherit}
+      .cm-ai-checklist-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+      .cm-ai-checklist-row input[type="text"]{flex:1}
+      .cm-ai-checklist-row .x{background:transparent;border:none;color:#94A3B8;cursor:pointer;font-size:1.1rem;line-height:1;padding:4px 6px}
+      .cm-ai-checklist-row .x:hover{color:#EF4444}
+      .cm-ai-checklist-add{background:transparent;border:1px dashed var(--border,#E2E8F0);border-radius:7px;padding:7px 12px;font-size:.78rem;color:#64748B;cursor:pointer;margin-top:6px}
+      .cm-ai-checklist-add:hover{border-color:#7C3AED;color:#7C3AED}
+      .cm-ai-kpi-pill{display:inline-flex;align-items:center;gap:6px;background:#F1F5F9;color:#334155;border:1px solid var(--border,#E2E8F0);border-radius:14px;padding:5px 11px;margin:0 6px 6px 0;font-size:.78rem;cursor:pointer;transition:all .12s}
+      .cm-ai-kpi-pill:hover{background:#E0E7FF;border-color:#7C3AED}
+      .cm-ai-kpi-pill.is-selected{background:#EFF6FF;color:#1D4ED8;border-color:#1D4ED8;font-weight:600}
+      .cm-ai-kpi-pill input{display:none}
+      .cm-ai-rationale{background:#FEFCE8;border:1px solid #FDE68A;border-radius:8px;padding:10px 12px;font-size:.78rem;color:#713F12;line-height:1.5}
+      .cm-ai-rationale .label{font-weight:700;font-size:.7rem;letter-spacing:.4px;text-transform:uppercase;color:#A16207;margin-bottom:4px;display:block}
+      .cm-ai-loading{text-align:center;padding:60px 20px;color:#64748B}
+      .cm-ai-loading .icon{font-size:2.4rem;margin-bottom:12px;animation:cmAiPulse 1.4s ease-in-out infinite}
+      .cm-ai-loading .title{font-size:.95rem;font-weight:600;color:#1E293B;margin-bottom:6px}
+      .cm-ai-loading .sub{font-size:.78rem;color:#64748B}
+      @keyframes cmAiPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.1)}}
+      .cm-ai-error{padding:24px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;color:#991B1B;font-size:.88rem}
+      .cm-ai-error .title{font-weight:700;margin-bottom:6px}
+      .cm-ai-btn-secondary{background:#fff;border:1px solid var(--border,#E2E8F0);color:#475569;padding:8px 14px;border-radius:7px;font:inherit;font-size:.84rem;font-weight:500;cursor:pointer;transition:all .12s}
+      .cm-ai-btn-secondary:hover{background:#F8FAFC;border-color:#94A3B8}
+      .cm-ai-btn-primary{background:linear-gradient(135deg,#7C3AED,#4C6EF5);color:#fff;border:none;padding:8px 16px;border-radius:7px;font:inherit;font-size:.84rem;font-weight:600;cursor:pointer;transition:all .12s}
+      .cm-ai-btn-primary:hover:not(:disabled){box-shadow:0 4px 12px rgba(124,58,237,.4)}
+      .cm-ai-btn-primary:disabled{opacity:.55;cursor:not-allowed}
+
+      /* Duplicate dialog */
+      .cm-dup-dialog{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px}
+      .cm-dup-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.5)}
+      .cm-dup-card{position:relative;background:#fff;border-radius:12px;padding:24px;max-width:480px;width:100%;box-shadow:0 20px 48px rgba(15,23,42,.2)}
+      .cm-dup-title{font-size:1.05rem;font-weight:700;color:#0F172A;margin:0 0 6px}
+      .cm-dup-help{font-size:.8rem;color:#64748B;margin:0 0 16px;line-height:1.5}
+      .cm-dup-match{background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:12px 14px;margin-bottom:14px}
+      .cm-dup-match .id{font-size:.7rem;font-weight:700;color:#92400E;letter-spacing:.4px;margin-bottom:4px;text-transform:uppercase}
+      .cm-dup-match .name{font-size:.92rem;font-weight:600;color:#0F172A;margin-bottom:4px}
+      .cm-dup-match .desc{font-size:.78rem;color:#475569;line-height:1.5}
+      .cm-dup-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+
+
       .cm-friction-top-row{padding:16px 20px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
       .cm-friction-top-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
       .cm-friction-top-right{display:flex;align-items:center;gap:8px}
@@ -7987,6 +8054,9 @@ window.ComercialModule = (function() {
 
     el.innerHTML = html;
     bindFrictionEvents(el);
+
+    // AI: lanzar fetch de auto-priority para fricciones high-impact + non-critical visibles
+    _aiKickoffPriorityForVisibleFrictions(el);
   }
 
   /* ── Friction Card (PDF2 design) ── */
@@ -8043,9 +8113,20 @@ window.ComercialModule = (function() {
     }
 
     // Solution box
+    var aiOn = !!(state.config && state.config.demo_mode);
+    var hasSolution = !!(f.solution && f.solution.trim());
     html += '<div class="cm-field-box">';
     html += '<div class="field-label">Solucion</div>';
-    html += '<div class="field-value">' + escHtml(f.solution || 'Sin solucion definida') + '</div>';
+    if (hasSolution) {
+      html += '<div class="field-value">' + escHtml(f.solution) + '</div>';
+    } else if (aiOn) {
+      html += '<div class="cm-friction-ai-empty">';
+      html += '<span class="cm-friction-ai-empty-text">Sin solucion definida</span>';
+      html += '<button class="cm-friction-ai-resolve" data-fid="' + escHtml(f.id) + '">&#10024; Resolver con IA</button>';
+      html += '</div>';
+    } else {
+      html += '<div class="field-value">Sin solucion definida</div>';
+    }
     html += '</div>';
 
     // Expected outcome box (green text)
@@ -8405,6 +8486,14 @@ window.ComercialModule = (function() {
       });
     });
 
+    // AI: Resolver con IA (botón en card cuando solution está vacía)
+    el.querySelectorAll('.cm-friction-ai-resolve').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showAIResolveDrawer(this.dataset.fid, el);
+      });
+    });
+
     // Critical toggle (star icon) — patch is_critical y re-render
     el.querySelectorAll('.cm-friction-critical-toggle').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
@@ -8558,6 +8647,406 @@ window.ComercialModule = (function() {
   }
 
   /* ── Create Friction Modal ── */
+  /* ── AI: Drawer "Resolver con IA" ── */
+  // Estado en memoria del drawer abierto
+  var aiResolveState = null;
+  // Cache de sugerencias de prioridad por friction_id (en memoria, sesión)
+  var aiPriorityCache = {};
+  var aiPriorityInflight = {};
+
+  function showAIResolveDrawer(frictionId, parentEl) {
+    var f = (state.frictions || []).find(function(x){ return String(x.id) === String(frictionId); });
+    if (!f) { toast('Fricción no encontrada', 'error'); return; }
+
+    // Limpiar cualquier drawer abierto antes
+    closeAIResolveDrawer();
+
+    aiResolveState = { frictionId: frictionId, draft: null, parentEl: parentEl };
+
+    var overlay = document.createElement('div');
+    overlay.className = 'cm-ai-drawer-overlay';
+    overlay.id = 'cm-ai-drawer-overlay';
+    document.body.appendChild(overlay);
+
+    var drawer = document.createElement('div');
+    drawer.className = 'cm-ai-drawer';
+    drawer.id = 'cm-ai-drawer';
+    drawer.innerHTML = _aiDrawerHeadHTML(f) + '<div class="cm-ai-drawer-body" id="cm-ai-drawer-body"></div>' + _aiDrawerFootHTML();
+    document.body.appendChild(drawer);
+
+    // Animación de entrada
+    requestAnimationFrame(function() {
+      overlay.classList.add('is-open');
+      drawer.classList.add('is-open');
+    });
+
+    overlay.addEventListener('click', closeAIResolveDrawer);
+    drawer.querySelector('#cm-ai-drawer-close').addEventListener('click', closeAIResolveDrawer);
+    drawer.querySelector('#cm-ai-drawer-regen').addEventListener('click', function() { _aiCallSuggestResolution(true); });
+    drawer.querySelector('#cm-ai-drawer-apply').addEventListener('click', _aiApplyResolutionDraft);
+    document.addEventListener('keydown', _aiDrawerKeydown);
+
+    // Pintar loading + disparar fetch
+    _aiCallSuggestResolution(false);
+  }
+
+  function _aiDrawerHeadHTML(f) {
+    var html = '<div class="cm-ai-drawer-head">';
+    html += '<span class="badge">&#10024; IA</span>';
+    html += '<h3>Resolver: ' + escHtml(f.name) + '</h3>';
+    html += '<button class="cm-ai-drawer-close" id="cm-ai-drawer-close" title="Cerrar">&times;</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function _aiDrawerFootHTML() {
+    var html = '<div class="cm-ai-drawer-foot">';
+    html += '<button class="cm-ai-btn-secondary" id="cm-ai-drawer-regen" disabled>&#8635; Regenerar</button>';
+    html += '<button class="cm-ai-btn-primary" id="cm-ai-drawer-apply" disabled>Aplicar al card</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function _aiDrawerKeydown(e) {
+    if (e.key === 'Escape') closeAIResolveDrawer();
+  }
+
+  function closeAIResolveDrawer() {
+    var overlay = document.getElementById('cm-ai-drawer-overlay');
+    var drawer = document.getElementById('cm-ai-drawer');
+    if (overlay) overlay.remove();
+    if (drawer) drawer.remove();
+    document.removeEventListener('keydown', _aiDrawerKeydown);
+    aiResolveState = null;
+  }
+
+  function _aiRenderLoading() {
+    var body = document.getElementById('cm-ai-drawer-body');
+    if (!body) return;
+    body.innerHTML =
+      '<div class="cm-ai-loading">' +
+      '<div class="icon">&#10024;</div>' +
+      '<div class="title">Generando draft...</div>' +
+      '<div class="sub">El consultor experto está estructurando la resolución. Tarda 5-15s.</div>' +
+      '</div>';
+    var regen = document.getElementById('cm-ai-drawer-regen');
+    var apply = document.getElementById('cm-ai-drawer-apply');
+    if (regen) regen.disabled = true;
+    if (apply) apply.disabled = true;
+  }
+
+  function _aiCallSuggestResolution(isRegen) {
+    if (!aiResolveState) return;
+    _aiRenderLoading();
+    fetch('/api/comercial/ai/suggest-friction-resolution', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ friction_id: aiResolveState.frictionId })
+    }).then(function(r) {
+      if (!r.ok) return r.text().then(function(t) { throw new Error(t || ('HTTP ' + r.status)); });
+      return r.json();
+    }).then(function(data) {
+      if (!aiResolveState) return;  // drawer cerrado mientras tanto
+      aiResolveState.draft = {
+        solution: data.solution || '',
+        expected_outcome: data.expected_outcome || '',
+        deadline_days: data.deadline_days || 14,
+        checklist: (data.checklist || []).map(function(c) { return { text: c.text || '', done: false }; }),
+        suggested_kpi_ids: data.suggested_kpi_ids || [],
+        suggested_new_kpi: data.suggested_new_kpi || null,
+        rationale: data.rationale || '',
+        selected_kpi_ids: (data.suggested_kpi_ids || []).slice()  // pre-marcados
+      };
+      _aiRenderDraft();
+    }).catch(function(err) {
+      var body = document.getElementById('cm-ai-drawer-body');
+      if (!body) return;
+      body.innerHTML = '<div class="cm-ai-error"><div class="title">No se pudo generar el draft</div><div>' + escHtml((err.message || '').slice(0, 200) || 'Error desconocido') + '</div><div style="margin-top:10px"><button class="cm-ai-btn-secondary" id="cm-ai-retry">Reintentar</button></div></div>';
+      var btn = document.getElementById('cm-ai-retry');
+      if (btn) btn.addEventListener('click', function() { _aiCallSuggestResolution(false); });
+    });
+  }
+
+  function _aiRenderDraft() {
+    if (!aiResolveState || !aiResolveState.draft) return;
+    var d = aiResolveState.draft;
+    var body = document.getElementById('cm-ai-drawer-body');
+    if (!body) return;
+
+    var html = '';
+    html += '<div class="cm-ai-field"><label>Solución propuesta</label>';
+    html += '<textarea id="cm-ai-f-solution" rows="3">' + escHtml(d.solution) + '</textarea></div>';
+
+    html += '<div class="cm-ai-field"><label>Resultado esperado (medible)</label>';
+    html += '<textarea id="cm-ai-f-outcome" rows="2">' + escHtml(d.expected_outcome) + '</textarea></div>';
+
+    html += '<div class="cm-ai-field"><label>Plazo sugerido (días desde hoy)</label>';
+    html += '<input type="number" id="cm-ai-f-days" min="1" max="365" value="' + (parseInt(d.deadline_days, 10) || 14) + '"></div>';
+
+    html += '<div class="cm-ai-field"><label>Checklist de pasos</label>';
+    html += '<div id="cm-ai-checklist">';
+    d.checklist.forEach(function(item, idx) {
+      html += '<div class="cm-ai-checklist-row"><input type="text" data-idx="' + idx + '" value="' + escHtml(item.text) + '"><button class="x" data-idx="' + idx + '" title="Quitar paso">&times;</button></div>';
+    });
+    html += '</div>';
+    html += '<button class="cm-ai-checklist-add" id="cm-ai-checklist-add" type="button">+ Añadir paso</button></div>';
+
+    // KPIs vinculables
+    var existingKpis = (state.kpis || []).filter(function(k) { return d.suggested_kpi_ids.indexOf(k.id) >= 0; });
+    var hasKpiSection = existingKpis.length > 0 || d.suggested_new_kpi;
+    if (hasKpiSection) {
+      html += '<div class="cm-ai-field"><label>KPIs que esta resolución debería mover</label>';
+      if (existingKpis.length > 0) {
+        html += '<div style="margin-bottom:8px">';
+        existingKpis.forEach(function(k) {
+          var sel = d.selected_kpi_ids.indexOf(k.id) >= 0;
+          html += '<label class="cm-ai-kpi-pill' + (sel ? ' is-selected' : '') + '" data-kpi-id="' + escHtml(k.id) + '">';
+          html += '<input type="checkbox" ' + (sel ? 'checked' : '') + '>';
+          html += (sel ? '&#10003; ' : '') + escHtml(k.name);
+          html += '</label>';
+        });
+        html += '</div>';
+      }
+      if (d.suggested_new_kpi) {
+        html += '<div style="font-size:.74rem;color:#64748B;margin-top:4px;padding:8px 10px;background:#F1F5F9;border-radius:6px">';
+        html += '&#128161; <strong>KPI sugerido nuevo:</strong> ' + escHtml(d.suggested_new_kpi.name);
+        if (d.suggested_new_kpi.unit) html += ' (' + escHtml(d.suggested_new_kpi.unit) + ')';
+        html += '<div style="margin-top:3px;font-style:italic">' + escHtml(d.suggested_new_kpi.question || '') + '</div>';
+        html += '<div style="margin-top:6px;color:#94A3B8;font-size:.7rem">Para crear este KPI usa la pestaña KPIs después de aplicar.</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    if (d.rationale) {
+      html += '<div class="cm-ai-rationale"><span class="label">&#129504; Razonamiento</span>' + escHtml(d.rationale) + '</div>';
+    }
+
+    body.innerHTML = html;
+
+    // Bindings
+    document.getElementById('cm-ai-f-solution').addEventListener('input', function() { aiResolveState.draft.solution = this.value; });
+    document.getElementById('cm-ai-f-outcome').addEventListener('input', function() { aiResolveState.draft.expected_outcome = this.value; });
+    document.getElementById('cm-ai-f-days').addEventListener('input', function() { aiResolveState.draft.deadline_days = parseInt(this.value, 10) || 14; });
+
+    document.querySelectorAll('#cm-ai-checklist input[type="text"]').forEach(function(input) {
+      input.addEventListener('input', function() {
+        var idx = parseInt(this.dataset.idx, 10);
+        if (aiResolveState.draft.checklist[idx]) aiResolveState.draft.checklist[idx].text = this.value;
+      });
+    });
+    document.querySelectorAll('#cm-ai-checklist .x').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(this.dataset.idx, 10);
+        aiResolveState.draft.checklist.splice(idx, 1);
+        _aiRenderDraft();
+      });
+    });
+    var addBtn = document.getElementById('cm-ai-checklist-add');
+    if (addBtn) addBtn.addEventListener('click', function() {
+      aiResolveState.draft.checklist.push({ text: '', done: false });
+      _aiRenderDraft();
+    });
+
+    document.querySelectorAll('.cm-ai-kpi-pill').forEach(function(pill) {
+      pill.addEventListener('click', function(e) {
+        e.preventDefault();
+        var kid = this.dataset.kpiId;
+        var arr = aiResolveState.draft.selected_kpi_ids;
+        var i = arr.indexOf(kid);
+        if (i >= 0) arr.splice(i, 1); else arr.push(kid);
+        _aiRenderDraft();
+      });
+    });
+
+    // Habilitar foot buttons
+    var regen = document.getElementById('cm-ai-drawer-regen');
+    var apply = document.getElementById('cm-ai-drawer-apply');
+    if (regen) regen.disabled = false;
+    if (apply) apply.disabled = false;
+  }
+
+  function _aiApplyResolutionDraft() {
+    if (!aiResolveState || !aiResolveState.draft) return;
+    var d = aiResolveState.draft;
+    var fid = aiResolveState.frictionId;
+    var parentEl = aiResolveState.parentEl;
+
+    var applyBtn = document.getElementById('cm-ai-drawer-apply');
+    if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = 'Aplicando...'; }
+
+    // Construir patch para la friction
+    var deadline = null;
+    if (d.deadline_days && d.deadline_days > 0) {
+      var dt = new Date();
+      dt.setDate(dt.getDate() + d.deadline_days);
+      deadline = dt.toISOString().slice(0, 10);  // YYYY-MM-DD
+    }
+    var checklist = d.checklist.filter(function(c) { return c.text && c.text.trim(); }).map(function(c) {
+      return { text: c.text.trim(), done: false };
+    });
+
+    var patchBody = {
+      solution: d.solution,
+      expected_outcome: d.expected_outcome,
+      resolution_checklist: checklist
+    };
+    if (deadline) patchBody.deadline = deadline;
+
+    apiPatch('frictions', fid, patchBody).then(function() {
+      // Vincular KPIs: union de los ya enlazados + los seleccionados, vía PUT (replace atómico).
+      var existingLinks = state.kpi_frictions.filter(function(lk) { return String(lk.friction_id) === String(fid); }).map(function(lk) { return lk.kpi_id; });
+      var unionMap = {};
+      existingLinks.forEach(function(k) { unionMap[k] = true; });
+      (d.selected_kpi_ids || []).forEach(function(k) { unionMap[k] = true; });
+      var unionIds = Object.keys(unionMap);
+      // Solo PUT si hay cambio (selected añade alguno nuevo)
+      var hasNew = (d.selected_kpi_ids || []).some(function(k) { return existingLinks.indexOf(k) < 0; });
+      if (!hasNew) return null;
+      return fetch('/api/comercial/frictions/' + encodeURIComponent(fid) + '/kpis', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(unionIds)
+      }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+    }).then(function() {
+      toast('Resolución aplicada a ' + fid, 'success');
+      closeAIResolveDrawer();
+      return refreshAll().then(function() {
+        if (parentEl && parentEl.isConnected) renderFricciones(parentEl);
+      });
+    }).catch(function(err) {
+      console.error(err);
+      toast('Error al aplicar: ' + (err && err.message ? err.message.slice(0, 80) : 'desconocido'), 'error');
+      if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Aplicar al card'; }
+    });
+  }
+
+  /* ── AI: Detector de duplicados al crear fricción ── */
+  function _aiCheckDuplicateThenCreate(payload, onConfirmed, onError) {
+    // Si AI no está habilitada, crear directo
+    if (!(state.config && state.config.demo_mode)) {
+      onConfirmed();
+      return;
+    }
+    fetch('/api/comercial/ai/check-friction-duplicate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description || '',
+        phase_id: payload.phase_id,
+        friction_type: payload.friction_type || null
+      })
+    }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+      if (!data || !data.best_match_id || (data.similarity_score || 0) < 0.7) {
+        onConfirmed();
+        return;
+      }
+      // Mostrar dialog de confirmación
+      var match = (state.frictions || []).find(function(x){ return String(x.id) === String(data.best_match_id); });
+      if (!match) { onConfirmed(); return; }
+      _showDuplicateDialog(match, data.reason || '', onConfirmed);
+    }).catch(function() {
+      // Fail-safe: si AI falla, crear normal
+      onConfirmed();
+    });
+  }
+
+  function _showDuplicateDialog(matchFr, reason, onProceed) {
+    var dialog = document.createElement('div');
+    dialog.className = 'cm-dup-dialog';
+    var html = '<div class="cm-dup-backdrop"></div>';
+    html += '<div class="cm-dup-card">';
+    html += '<h3 class="cm-dup-title">&#10024; Esta fricción se parece a una existente</h3>';
+    html += '<p class="cm-dup-help">' + escHtml(reason) + '</p>';
+    html += '<div class="cm-dup-match">';
+    html += '<div class="id">' + escHtml(matchFr.id) + '</div>';
+    html += '<div class="name">' + escHtml(matchFr.name) + '</div>';
+    if (matchFr.description) html += '<div class="desc">' + escHtml(matchFr.description.slice(0, 200)) + (matchFr.description.length > 200 ? '...' : '') + '</div>';
+    html += '</div>';
+    html += '<div class="cm-dup-actions">';
+    html += '<button class="cm-ai-btn-secondary" id="cm-dup-cancel">Cancelar creación</button>';
+    html += '<button class="cm-ai-btn-secondary" id="cm-dup-create">Crear de todos modos</button>';
+    html += '</div></div>';
+    dialog.innerHTML = html;
+    document.body.appendChild(dialog);
+
+    function close() { if (dialog.parentNode) dialog.parentNode.removeChild(dialog); }
+    dialog.querySelector('.cm-dup-backdrop').addEventListener('click', close);
+    dialog.querySelector('#cm-dup-cancel').addEventListener('click', close);
+    dialog.querySelector('#cm-dup-create').addEventListener('click', function() {
+      close();
+      onProceed();
+    });
+  }
+
+  /* ── AI: Auto-priority chip ── */
+  function _aiFetchPrioritySuggestion(frictionId, cb) {
+    if (aiPriorityCache.hasOwnProperty(frictionId)) {
+      cb(aiPriorityCache[frictionId]);
+      return;
+    }
+    if (aiPriorityInflight[frictionId]) return;  // ya en vuelo
+    aiPriorityInflight[frictionId] = true;
+    fetch('/api/comercial/ai/suggest-friction-priority', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ friction_id: frictionId })
+    }).then(function(r) { return r.ok ? r.json() : null; }).then(function(data) {
+      delete aiPriorityInflight[frictionId];
+      var result = data && data.is_critical ? { is_critical: true, reason: data.reason || '' } : null;
+      aiPriorityCache[frictionId] = result;
+      cb(result);
+    }).catch(function() {
+      delete aiPriorityInflight[frictionId];
+      aiPriorityCache[frictionId] = null;
+      cb(null);
+    });
+  }
+
+  // Lanza fetch de priority para fricciones high-impact + non-critical visibles.
+  // Limita a 3 paralelas para no saturar.
+  function _aiKickoffPriorityForVisibleFrictions(parentEl) {
+    if (!(state.config && state.config.demo_mode)) return;
+    var candidates = (state.frictions || []).filter(function(f) {
+      return f.impact === 'high' && !f.is_critical && !aiPriorityCache.hasOwnProperty(f.id);
+    }).slice(0, 3);
+    candidates.forEach(function(f) {
+      _aiFetchPrioritySuggestion(f.id, function(result) {
+        if (result && parentEl && parentEl.isConnected) {
+          // Insertar chip en el card si está renderizado
+          var card = parentEl.querySelector('.cm-friction-card[data-fid="' + cssEscape(f.id) + '"] .cm-friction-top-left');
+          if (card && !card.querySelector('.cm-friction-ai-priority-chip')) {
+            var chip = document.createElement('button');
+            chip.className = 'cm-friction-ai-priority-chip';
+            chip.dataset.fid = f.id;
+            chip.title = result.reason || 'IA sugiere marcar como crítica';
+            chip.innerHTML = '&#10024; IA sugiere crítica';
+            chip.addEventListener('click', function(ev) {
+              ev.stopPropagation();
+              var fr = state.frictions.find(function(x){ return String(x.id) === String(f.id); });
+              if (!fr) return;
+              fr.is_critical = true;
+              renderFricciones(parentEl);
+              apiPatch('frictions', f.id, { is_critical: true })
+                .then(function(){ toast('Marcada como crítica', 'success'); })
+                .catch(function(){
+                  fr.is_critical = false;
+                  renderFricciones(parentEl);
+                  toast('Error al actualizar', 'error');
+                });
+            });
+            card.appendChild(chip);
+          }
+        }
+      });
+    });
+  }
+
+  function cssEscape(s) {
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, function(c) { return '\\' + c; });
+  }
+
   function showCreateFrictionModal() {
     var suggestedId = nextFrictionId();
 
@@ -8681,16 +9170,21 @@ window.ComercialModule = (function() {
         resolution_checklist: []
       };
 
-      apiPost('frictions', data).then(function(created) {
-        closeModal();
-        toast('Friccion "' + name + '" creada', 'success');
-        return refreshAll().then(function() {
-          var main = container.querySelector('#cm-main');
-          if (main) renderFricciones(main);
+      function doCreate() {
+        apiPost('frictions', data).then(function(created) {
+          closeModal();
+          toast('Friccion "' + name + '" creada', 'success');
+          return refreshAll().then(function() {
+            var main = container.querySelector('#cm-main');
+            if (main) renderFricciones(main);
+          });
+        }).catch(function() {
+          toast('Error al crear friccion', 'error');
         });
-      }).catch(function() {
-        toast('Error al crear friccion', 'error');
-      });
+      }
+
+      // AI duplicate-check antes de crear (no bloquea si AI falla)
+      _aiCheckDuplicateThenCreate(data, doCreate);
     });
   }
 

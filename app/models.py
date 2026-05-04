@@ -242,6 +242,7 @@ class EscenarioIngreso(Base):
 class ComercialPhase(Base):
     __tablename__ = "comercial_phases"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     icon: Mapped[str] = mapped_column(String(10), default="")
@@ -253,6 +254,7 @@ class ComercialPhase(Base):
 class ComercialTouchpoint(Base):
     __tablename__ = "comercial_touchpoints"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     phase_id: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(400), nullable=False)
@@ -279,6 +281,7 @@ class ComercialTouchpoint(Base):
 class ComercialFriction(Base):
     __tablename__ = "comercial_frictions"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[str] = mapped_column(String(10), primary_key=True)
     phase_id: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(400), nullable=False)
@@ -308,6 +311,7 @@ class ComercialFriction(Base):
 class ComercialTrustPillar(Base):
     __tablename__ = "comercial_trust_pillars"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     icon: Mapped[str] = mapped_column(String(10), default="")
@@ -327,6 +331,7 @@ class ComercialTrustPillarStep(Base):
     """
     __tablename__ = "comercial_trust_pillar_steps"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     pillar_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -346,7 +351,8 @@ class ComercialGovernanceCharter(Base):
     ritmo de revisión, criterios de cambio y principios rectores."""
     __tablename__ = "comercial_governance_charter"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     owner_id = mapped_column(Integer, nullable=True)
     cadence: Mapped[str] = mapped_column(String(20), default="monthly")  # weekly|biweekly|monthly|quarterly
     change_criteria: Mapped[str] = mapped_column(Text, default="")
@@ -358,6 +364,7 @@ class ComercialGovernanceGap(Base):
     """Registro de huecos. gap_type: 'tp' | 'friction' | 'kpi' | 'pillar' | 'other'."""
     __tablename__ = "comercial_governance_gaps"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     gap_type: Mapped[str] = mapped_column(String(20), nullable=False)
     reference_id: Mapped[str] = mapped_column(String(50), nullable=True)
@@ -374,6 +381,7 @@ class ComercialGovernanceTest(Base):
     """Pruebas de validación. test_type: 'contract' | 'market' | 'process'."""
     __tablename__ = "comercial_governance_tests"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     test_type: Mapped[str] = mapped_column(String(20), nullable=False)
     subject: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -389,6 +397,7 @@ class ComercialGovernanceTest(Base):
 class ComercialInitiative(Base):
     __tablename__ = "comercial_iniciativas"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     pillar_id: Mapped[str] = mapped_column(String(50), nullable=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -410,36 +419,42 @@ class ComercialInitiative(Base):
 
 class ComercialInitiativeFriction(Base):
     __tablename__ = "comercial_initiative_friction"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     friction_id: Mapped[str] = mapped_column(String(10), primary_key=True)
 
 
 class ComercialInitiativeTouchpoint(Base):
     __tablename__ = "comercial_initiative_touchpoint"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     touchpoint_id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
 
 class ComercialInitiativePillar(Base):
     __tablename__ = "comercial_initiative_pillar"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     pillar_id: Mapped[str] = mapped_column(String(50), primary_key=True)
 
 
 class ComercialInitiativeInvolved(Base):
     __tablename__ = "comercial_initiative_involved"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     person_id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
 
 class ComercialInitiativeDependency(Base):
     __tablename__ = "comercial_initiative_dependency"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     initiative_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     depends_on_id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
 
 class ComercialCanvasLayout(Base):
     __tablename__ = "comercial_canvas_layout"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     view_id: Mapped[str] = mapped_column(String(50), default="comercial_main")
     entity_type: Mapped[str] = mapped_column(String(20))
@@ -453,6 +468,7 @@ class ComercialCanvasLayout(Base):
 
 class ComercialTouchpointFlow(Base):
     __tablename__ = "comercial_touchpoint_flow"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     from_touchpoint_id: Mapped[int] = mapped_column(Integer, index=True)
     to_touchpoint_id: Mapped[int] = mapped_column(Integer, index=True)
@@ -463,6 +479,7 @@ class ComercialTouchpointFlow(Base):
 
 class ComercialCanvasNote(Base):
     __tablename__ = "comercial_canvas_notes"
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     text: Mapped[str] = mapped_column(Text, default="")
     color: Mapped[str] = mapped_column(String(20), default="yellow")
@@ -473,6 +490,7 @@ class ComercialCanvasNote(Base):
 class ComercialKpi(Base):
     __tablename__ = "comercial_kpis"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     question: Mapped[str] = mapped_column(Text, default="")
@@ -507,6 +525,7 @@ class ComercialKpi(Base):
 class ComercialPerson(Base):
     __tablename__ = "comercial_people"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[str] = mapped_column(String(200), default="")
@@ -521,6 +540,7 @@ class ComercialPerson(Base):
 class ComercialKpiHistory(Base):
     __tablename__ = "comercial_kpi_history"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
     value: Mapped[float] = mapped_column(Float, nullable=False)
@@ -532,6 +552,7 @@ class ComercialKpiHistory(Base):
 class ComercialKpiFriction(Base):
     __tablename__ = "comercial_kpi_friction"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
     friction_id: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -540,6 +561,7 @@ class ComercialKpiFriction(Base):
 class ComercialKpiTouchpoint(Base):
     __tablename__ = "comercial_kpi_touchpoint"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
     touchpoint_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -552,6 +574,7 @@ class ComercialTpKpiHistory(Base):
     """Medición periódica de un KPI en el contexto de un touchpoint crítico."""
     __tablename__ = "comercial_tp_kpi_history"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     kpi_id: Mapped[str] = mapped_column(String(50), nullable=False)
     touchpoint_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -564,6 +587,7 @@ class ComercialTpKpiHistory(Base):
 class ComercialComment(Base):
     __tablename__ = "comercial_comments"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "friction", "touchpoint", "pillar"
     entity_id: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -576,6 +600,7 @@ class ComercialComment(Base):
 class ComercialActivityLog(Base):
     __tablename__ = "comercial_activity_log"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -594,6 +619,7 @@ class ComercialChannel(Base):
     """
     __tablename__ = "comercial_channels"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     id: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     icon: Mapped[str] = mapped_column(String(10), default="")
@@ -605,6 +631,7 @@ class ComercialChannel(Base):
 class ComercialTouchpointChannel(Base):
     __tablename__ = "comercial_touchpoint_channel"
 
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     touchpoint_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     channel_id: Mapped[str] = mapped_column(String(50), primary_key=True)
 
@@ -615,7 +642,8 @@ class ComercialTouchpointChannel(Base):
 class ComercialCompanyContext(Base):
     __tablename__ = "comercial_company_context"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    brand_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     company_name: Mapped[str] = mapped_column(String(200), default="")
     industry: Mapped[str] = mapped_column(String(200), default="")
     business_model: Mapped[str] = mapped_column(String(50), default="")  # B2B/B2C/B2B2C/Marketplace
@@ -642,3 +670,16 @@ class ComercialCompanyContext(Base):
     validated_datos: Mapped[bool] = mapped_column(Boolean, default=False)
     validated_datos_notes: Mapped[str] = mapped_column(Text, default="")
     updated_at = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+# v20 — Workspaces (multi-marca).
+# Cada marca es un workspace independiente. Promoselect ocupa id=1.
+# Las 28 tablas comercial_* ahora se filtran por brand_id (default=1 para
+# datos legacy). El frontend pasa el header X-Brand-Id en cada request.
+class Brand(Base):
+    __tablename__ = "brands"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    slug: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at = mapped_column(DateTime, server_default=func.now())

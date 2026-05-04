@@ -297,6 +297,72 @@ body.sidebar-collapsed .topbar { left: 64px; }
   align-items: center;
   justify-content: space-between;
 }
+/* ── Brand Switcher (Workspaces) ── */
+.brand-switcher { position: relative; display: flex; align-items: center; }
+.brand-trigger {
+  display: flex; align-items: center; gap: 6px;
+  background: #F8FAFC; border: 1px solid var(--border, #E2E8F0); border-radius: 8px;
+  padding: 6px 12px; cursor: pointer; font: inherit; color: var(--text, #0F172A);
+  transition: background 0.15s, border-color 0.15s;
+}
+.brand-trigger:hover { background: #F1F5F9; border-color: #CBD5E1; }
+.brand-trigger .brand-label { color: #64748B; font-size: 12px; font-weight: 500; }
+.brand-trigger .brand-name { font-size: 13px; font-weight: 600; }
+.brand-trigger .brand-caret { color: #94A3B8; font-size: 10px; }
+.brand-menu {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  background: #FFFFFF; border: 1px solid var(--border, #E2E8F0); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  min-width: 220px; padding: 6px; z-index: 200;
+}
+.brand-list { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
+.brand-list-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: var(--text, #0F172A);
+  transition: background 0.12s;
+  border: none; background: transparent; text-align: left; width: 100%;
+}
+.brand-list-item:hover { background: #F1F5F9; }
+.brand-list-item.active { background: #EFF6FF; color: #1D4ED8; font-weight: 600; }
+.brand-list-item .check { color: #1D4ED8; }
+.brand-divider { height: 1px; background: var(--border, #E2E8F0); margin: 6px 0; }
+.brand-create-btn {
+  width: 100%; padding: 8px 10px; border-radius: 6px;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 13px; color: #1D4ED8; font-weight: 500; text-align: left;
+  transition: background 0.12s;
+}
+.brand-create-btn:hover { background: #EFF6FF; }
+
+/* Modal Crear marca */
+.brand-modal { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.brand-modal-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.5); }
+.brand-modal-card {
+  position: relative; background: #FFFFFF; border-radius: 12px;
+  padding: 28px; max-width: 440px; width: calc(100% - 48px);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.2);
+}
+.brand-modal-title { margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #0F172A; }
+.brand-modal-help { margin: 0 0 20px 0; font-size: 13px; color: #64748B; line-height: 1.5; }
+.brand-modal-label { display: block; font-size: 12px; font-weight: 500; color: #475569; margin-bottom: 6px; }
+.brand-modal-input {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border, #E2E8F0); border-radius: 8px;
+  font: inherit; font-size: 14px; color: #0F172A; box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.brand-modal-input:focus { outline: none; border-color: #2563EB; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
+.brand-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.brand-modal-cancel, .brand-modal-create {
+  padding: 9px 18px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+}
+.brand-modal-cancel { background: #FFFFFF; border-color: var(--border, #E2E8F0); color: #475569; }
+.brand-modal-cancel:hover { background: #F8FAFC; }
+.brand-modal-create { background: #2563EB; color: #FFFFFF; }
+.brand-modal-create:hover:not(:disabled) { background: #1D4ED8; }
+.brand-modal-create:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .topbar .breadcrumb {
   display: flex;
   align-items: center;
@@ -513,14 +579,68 @@ body.sidebar-collapsed .topbar { left: 64px; }
           <span class="bc-current" id="pageTitle">Dashboard Q1</span>
         </div>
       </div>
+      <div class="brand-switcher" id="brandSwitcher">
+        <button class="brand-trigger" id="brandTrigger" type="button">
+          <span class="brand-label">Marca:</span>
+          <span class="brand-name" id="brandActiveName">Promoselect</span>
+          <span class="brand-caret">&#9662;</span>
+        </button>
+        <div class="brand-menu" id="brandMenu" hidden>
+          <div class="brand-list" id="brandList"></div>
+          <div class="brand-divider"></div>
+          <button class="brand-create-btn" id="brandCreateBtn" type="button">+ Crear nueva marca</button>
+        </div>
+      </div>
     </div>
     <div class="content-area" id="contentArea"></div>
+  </div>
+</div>
+
+<!-- Modal: Crear nueva marca -->
+<div class="brand-modal" id="brandModal" hidden>
+  <div class="brand-modal-backdrop" id="brandModalBackdrop"></div>
+  <div class="brand-modal-card">
+    <h3 class="brand-modal-title">Crear nueva marca</h3>
+    <p class="brand-modal-help">Cada marca es un workspace independiente. Empezarás con las 6 fases base vacías y construirás tu arquitectura comercial desde cero.</p>
+    <label class="brand-modal-label" for="brandModalName">Nombre de la marca</label>
+    <input type="text" class="brand-modal-input" id="brandModalName" placeholder="Ej. Stencil Promo, Marca B" maxlength="160" />
+    <div class="brand-modal-actions">
+      <button class="brand-modal-cancel" id="brandModalCancel" type="button">Cancelar</button>
+      <button class="brand-modal-create" id="brandModalCreate" type="button">Crear marca</button>
+    </div>
   </div>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
+/* ── Workspaces (multi-marca): inyecta X-Brand-Id en cada fetch ── */
+(function() {
+  var KEY = 'active_brand_id';
+  function getActiveBrandId() {
+    var v = localStorage.getItem(KEY);
+    var n = parseInt(v, 10);
+    return (n && n > 0) ? n : 1;
+  }
+  window.__getActiveBrandId = getActiveBrandId;
+  window.__setActiveBrandId = function(id) {
+    localStorage.setItem(KEY, String(id));
+  };
+
+  // Wrapper global de fetch — todas las llamadas del frontend pasan por aquí
+  // y reciben el header X-Brand-Id automáticamente.
+  var originalFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    init = init || {};
+    var headers = new Headers(init.headers || (input && input.headers) || {});
+    if (!headers.has('X-Brand-Id')) {
+      headers.set('X-Brand-Id', String(getActiveBrandId()));
+    }
+    init.headers = headers;
+    return originalFetch(input, init);
+  };
+})();
+
 /* ── Toast util (global) ── */
 window.__toast = function(msg, type) {
   type = type || 'info';
@@ -760,6 +880,147 @@ window.__toast = function(msg, type) {
       route();
     }
   }
+})();
+
+/* ── Brand Switcher (Workspaces) ── */
+(function() {
+  var trigger = document.getElementById('brandTrigger');
+  var menu = document.getElementById('brandMenu');
+  var nameEl = document.getElementById('brandActiveName');
+  var listEl = document.getElementById('brandList');
+  var createBtn = document.getElementById('brandCreateBtn');
+  var modal = document.getElementById('brandModal');
+  var modalBackdrop = document.getElementById('brandModalBackdrop');
+  var modalCancel = document.getElementById('brandModalCancel');
+  var modalCreate = document.getElementById('brandModalCreate');
+  var modalInput = document.getElementById('brandModalName');
+
+  if (!trigger || !menu) return;
+
+  var brands = [];
+
+  function loadBrands() {
+    return fetch('/api/brands/').then(function(r) {
+      if (!r.ok) throw new Error('No se pudieron cargar las marcas (' + r.status + ')');
+      return r.json();
+    }).then(function(data) {
+      brands = data || [];
+      renderActive();
+      renderList();
+    }).catch(function(err) {
+      console.error('Brands load error', err);
+      // No mostrar toast en boot inicial — degradar silenciosamente
+    });
+  }
+
+  function renderActive() {
+    var activeId = window.__getActiveBrandId();
+    var match = brands.find(function(b) { return b.id === activeId; });
+    if (!match && brands.length > 0) {
+      // ID guardada ya no existe — caer a la primera
+      window.__setActiveBrandId(brands[0].id);
+      match = brands[0];
+    }
+    nameEl.textContent = match ? match.name : 'Promoselect';
+  }
+
+  function renderList() {
+    var activeId = window.__getActiveBrandId();
+    listEl.innerHTML = '';
+    brands.forEach(function(b) {
+      var btn = document.createElement('button');
+      btn.className = 'brand-list-item' + (b.id === activeId ? ' active' : '');
+      btn.type = 'button';
+      btn.innerHTML = '<span>' + escapeHtml(b.name) + '</span>' + (b.id === activeId ? '<span class="check">&#10003;</span>' : '');
+      btn.addEventListener('click', function() { switchBrand(b.id); });
+      listEl.appendChild(btn);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function switchBrand(newId) {
+    if (newId === window.__getActiveBrandId()) {
+      closeMenu();
+      return;
+    }
+    window.__setActiveBrandId(newId);
+    // Reload completo: el módulo comercial cachea bootstrap en memoria, lo limpio.
+    window.location.reload();
+  }
+
+  function openMenu() { menu.hidden = false; }
+  function closeMenu() { menu.hidden = true; }
+
+  trigger.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (menu.hidden) {
+      renderList();
+      openMenu();
+    } else {
+      closeMenu();
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!menu.hidden && !menu.contains(e.target) && !trigger.contains(e.target)) {
+      closeMenu();
+    }
+  });
+
+  // ── Modal Crear marca ──
+  function openModal() {
+    closeMenu();
+    modal.hidden = false;
+    modalInput.value = '';
+    setTimeout(function() { modalInput.focus(); }, 50);
+  }
+  function closeModal() { modal.hidden = true; }
+
+  createBtn.addEventListener('click', openModal);
+  modalCancel.addEventListener('click', closeModal);
+  modalBackdrop.addEventListener('click', closeModal);
+  modalInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doCreate();
+    if (e.key === 'Escape') closeModal();
+  });
+  modalCreate.addEventListener('click', doCreate);
+
+  function doCreate() {
+    var name = modalInput.value.trim();
+    if (!name) {
+      modalInput.focus();
+      return;
+    }
+    modalCreate.disabled = true;
+    modalCreate.textContent = 'Creando…';
+    fetch('/api/brands/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name })
+    }).then(function(r) {
+      if (!r.ok) return r.text().then(function(t) { throw new Error(t || ('HTTP ' + r.status)); });
+      return r.json();
+    }).then(function(newBrand) {
+      window.__toast('Marca "' + newBrand.name + '" creada', 'success');
+      window.__setActiveBrandId(newBrand.id);
+      closeModal();
+      // Reload para entrar a la marca nueva limpia
+      setTimeout(function() { window.location.reload(); }, 300);
+    }).catch(function(err) {
+      console.error(err);
+      window.__toast('Error al crear marca: ' + err.message.slice(0, 80), 'error');
+      modalCreate.disabled = false;
+      modalCreate.textContent = 'Crear marca';
+    });
+  }
+
+  // Boot: cargar marcas
+  loadBrands();
 })();
 </script>
 </body>

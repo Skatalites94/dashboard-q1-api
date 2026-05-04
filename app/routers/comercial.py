@@ -185,7 +185,8 @@ def comercial_bootstrap(db: Session = Depends(get_db)):
     channels = db.query(ComercialChannel).order_by(ComercialChannel.order, ComercialChannel.name).all()
     tp_channels = db.query(ComercialTouchpointChannel).all()
     pillar_steps = db.query(ComercialTrustPillarStep).order_by(ComercialTrustPillarStep.pillar_id, ComercialTrustPillarStep.order).all()
-    gov_charter = db.query(ComercialGovernanceCharter).filter(ComercialGovernanceCharter.id == 1).first()
+    # Singleton-por-marca: el filtro por brand_id lo aplica el listener.
+    gov_charter = db.query(ComercialGovernanceCharter).first()
     gov_gaps = db.query(ComercialGovernanceGap).order_by(ComercialGovernanceGap.created_at.desc()).all()
     gov_tests = db.query(ComercialGovernanceTest).order_by(ComercialGovernanceTest.created_at.desc()).all()
 
@@ -263,7 +264,8 @@ def _is_demo_mode() -> bool:
 
 def _company_context_out_or_none(db: Session):
     try:
-        row = db.query(ComercialCompanyContext).filter(ComercialCompanyContext.id == 1).first()
+        # Singleton-por-marca: brand_id lo filtra el listener.
+        row = db.query(ComercialCompanyContext).first()
         return comercial_company_context_out(row) if row else None
     except Exception:
         # Tabla aún no migrada en este server — degradar silenciosamente
@@ -1778,18 +1780,19 @@ def delete_pillar_step(step_id: int, db: Session = Depends(get_db)):
 # ── Gobernanza F4 (task #66) ────────────────────────────────────────────
 @router.get("/governance/charter")
 def get_charter(db: Session = Depends(get_db)):
-    row = db.get(ComercialGovernanceCharter, 1)
+    # Singleton-por-marca: el listener inyecta brand_id en query e insert.
+    row = db.query(ComercialGovernanceCharter).first()
     if not row:
-        row = ComercialGovernanceCharter(id=1, cadence="monthly")
+        row = ComercialGovernanceCharter(cadence="monthly")
         db.add(row); db.commit(); db.refresh(row)
     return comercial_gov_charter_out(row)
 
 
 @router.patch("/governance/charter")
 def update_charter(body: ComercialGovernanceCharterUpdate, db: Session = Depends(get_db)):
-    row = db.get(ComercialGovernanceCharter, 1)
+    row = db.query(ComercialGovernanceCharter).first()
     if not row:
-        row = ComercialGovernanceCharter(id=1, cadence="monthly")
+        row = ComercialGovernanceCharter(cadence="monthly")
         db.add(row)
     data = body.model_dump(exclude_unset=True)
     for k, v in data.items():
@@ -1801,18 +1804,18 @@ def update_charter(body: ComercialGovernanceCharterUpdate, db: Session = Depends
 # task #92 — Company Context (singleton id=1)
 @router.get("/company-context")
 def get_company_context(db: Session = Depends(get_db)):
-    row = db.get(ComercialCompanyContext, 1)
+    row = db.query(ComercialCompanyContext).first()
     if not row:
-        row = ComercialCompanyContext(id=1)
+        row = ComercialCompanyContext()
         db.add(row); db.commit(); db.refresh(row)
     return comercial_company_context_out(row)
 
 
 @router.patch("/company-context")
 def update_company_context(body: ComercialCompanyContextUpdate, db: Session = Depends(get_db)):
-    row = db.get(ComercialCompanyContext, 1)
+    row = db.query(ComercialCompanyContext).first()
     if not row:
-        row = ComercialCompanyContext(id=1)
+        row = ComercialCompanyContext()
         db.add(row)
     data = body.model_dump(exclude_unset=True)
     for k, v in data.items():

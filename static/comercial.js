@@ -1939,7 +1939,8 @@ window.ComercialModule = (function() {
     // Cris Urzua workbook (preguntas verbatim, atributos, validation tests).
     // Cargado solo una vez por sesion; si falla, los hints se ocultan pero el resto sigue.
     if (state.workbook) return Promise.resolve();
-    return fetch('/workbook.json', { cache: 'force-cache' })
+    // v=2: discovery_questions ahora son objetos {q, example}. Versión bumpea cuando el shape cambia.
+    return fetch('/workbook.json?v=2', { cache: 'no-cache' })
       .then(function(r){ if (!r.ok) throw new Error('workbook ' + r.status); return r.json(); })
       .then(function(data){ state.workbook = data; })
       .catch(function(err){ console.warn('Workbook no cargo:', err); state.workbook = null; });
@@ -11563,7 +11564,7 @@ window.ComercialModule = (function() {
     html += '<div class="cm-qs-header">';
     html += '<div class="cm-qs-title-row">';
     html += '<div><div class="cm-qs-title">🚀 Quick Start</div>';
-    html += '<div class="cm-qs-subtitle">Construye tu arquitectura comercial paso a paso. Cada item se marca solo cuando hay data real en la BD.</div></div>';
+    html += '<div class="cm-qs-subtitle">Construye tu arquitectura comercial. Empieza por donde quieras — cada item se marca solo cuando hay data real en la BD.</div></div>';
     html += '<div class="cm-qs-progress-circle"><div class="cm-qs-pct">' + pct + '%</div><div class="cm-qs-pct-meta">' + totalDone + '/' + totalItems + ' completos</div></div>';
     html += '</div>';
     html += '<div class="cm-qs-progress-bar"><div class="cm-qs-progress-fill" style="width:' + pct + '%"></div></div>';
@@ -11596,14 +11597,12 @@ window.ComercialModule = (function() {
       { id: 'onboarding', title: 'Touchpoints de Onboarding', desc: 'Cómo entregas y das la bienvenida: kickoff, setup, capacitación.', done: c.onboarding },
       { id: 'recompra', title: 'Touchpoints de Recompra', desc: 'Cómo logras que vuelvan a comprar: account mgmt, upsell, programa.', done: c.recompra },
     ];
-    // Visual: la primera no completada queda 'active'; las posteriores 'future'.
-    var firstPendingIdx = phaseDefs.findIndex(function(p) { return !p.done; });
+    // Sin orden forzado: cada fase es independiente. Solo distinguimos 'done' visualmente.
     phaseDefs.forEach(function(p, idx) {
-      var visual = p.done ? 'done' : (idx === firstPendingIdx ? 'active' : 'future');
       html += _qsItemHTML({
         done: p.done,
         step: idx + 1,
-        visual: visual,
+        visual: p.done ? 'done' : null,
         title: p.title,
         description: p.desc,
         buttons: [

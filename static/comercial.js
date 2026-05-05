@@ -6180,11 +6180,11 @@ window.ComercialModule = (function() {
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
     html += '<button class="cm-drawer-inline-btn" data-act="link-friction" data-tp-id="' + tp.id + '">+ Vincular</button>';
     html += '<button class="cm-drawer-inline-btn" data-act="add-friction" data-tp-id="' + tp.id + '">+ Crear</button>';
-    html += '<button class="cm-drawer-inline-btn cm-drawer-ai-btn" data-act="ai-suggest-frictions" data-tp-id="' + tp.id + '" title="AI sugiere fricciones probables para este touchpoint">✨ Sugerir con AI</button>';
+    html += '<button class="cm-drawer-inline-btn cm-drawer-ai-btn" data-act="ai-suggest-frictions" data-tp-id="' + tp.id + '" title="AI sugiere fricciones probables solo para este touchpoint">✨ Sugerir solo para este TP</button>';
     html += '</div>';
     html += '</div>';
     if (fricts.length === 0) {
-      html += '<div class="cm-canvas-drawer-empty">Sin fricciones reportadas — usa <b>Crear</b> manual o <b>✨ Sugerir con AI</b></div>';
+      html += '<div class="cm-canvas-drawer-empty">Sin fricciones reportadas — usa <b>Crear</b> manual o <b>✨ Sugerir solo para este TP</b></div>';
     } else {
       fricts.forEach(function(f) {
         var icfg = _impactCfg[f.impact||'medium'] || _impactCfg.medium;
@@ -11128,6 +11128,75 @@ window.ComercialModule = (function() {
     }, 30);
   }
 
+  function _showHolisticNarrativeModal() {
+    // Modo holístico: narrativa libre que cubre TODA la operación. La AI distribuye
+    // TPs/fricciones/KPIs por fase automáticamente (target_phase_id vacío).
+    closeModal();
+    _aiDraftCache = null;
+    _aiSelected = { tps: {}, fr: {}, kpis: {} };
+
+    var phasePrompts = [
+      { icon: '🧲', name: 'Atracción', tip: '¿Cómo te encuentran los prospectos? (Google, referidos, redes sociales, anuncios...)' },
+      { icon: '📥', name: 'Captura', tip: '¿Cómo capturas sus datos? (form web, WhatsApp, llamada, agenda online...)' },
+      { icon: '💸', name: 'Conversión', tip: '¿Cómo cierras la venta? (demo, propuesta, negociación, pago...)' },
+      { icon: '🤝', name: 'Onboarding', tip: '¿Cómo entregas y das la bienvenida? (kickoff, setup, capacitación...)' },
+      { icon: '🔄', name: 'Recompra', tip: '¿Cómo logras que vuelvan? (account mgmt, upsell, programa de lealtad...)' },
+      { icon: '🛡️', name: 'Confianza', tip: '¿Cómo construyes confianza en paralelo? (testimonios, contenido, autoridad...)' }
+    ];
+
+    var html = '<div class="cm-modal-backdrop" id="cm-modal-backdrop"><div class="cm-modal cm-ai-modal" style="max-width:780px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0">';
+    html += '<div class="cm-modal-header" style="display:flex;align-items:center;gap:10px;padding:18px 22px;border-bottom:1px solid #E2E8F0">';
+    html += '<span style="font-size:1.4rem">🎙️</span>';
+    html += '<div style="flex:1"><div style="font-weight:700;font-size:1.05rem">Narra TODA tu operación con AI</div>';
+    html += '<div style="font-size:.74rem;color:#64748B">Cuenta tu negocio de extremo a extremo. La AI distribuye TPs, fricciones y KPIs en su fase correcta automáticamente.</div></div>';
+    html += '<button class="cm-icon-btn" id="cm-ai-close" aria-label="Cerrar" style="font-size:1.2rem;background:none;border:none;cursor:pointer;color:#64748B">×</button>';
+    html += '</div>';
+
+    html += '<div class="cm-ai-body" id="cm-ai-body" style="flex:1;overflow-y:auto;padding:18px 22px">';
+    html += '<div><label style="font-size:.7rem;color:#64748B;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Contexto de empresa (opcional)</label>';
+    html += '<input class="cm-input" id="cm-ai-context" placeholder="Ej: B2B promocionales, ticket promedio $50k MXN, 8 asesores, México"/></div>';
+    html += '<div style="margin-top:14px"><label style="font-size:.7rem;color:#64748B;text-transform:uppercase;letter-spacing:.4px;font-weight:700">Tu narrativa — cuenta todo el proceso</label>';
+    var ph = 'Cuenta cómo es tu operación de principio a fin, sin pulir. Ejemplo:&#10;&#10;«Vendemos merch promocional B2B. La gente nos descubre buscando \'merch corporativo\' en Google (60%) o por referidos (25%). Llegan a la web, casi siempre piden cotización por WhatsApp porque el form es pesado. Un asesor responde en ~4h, hace 3 preguntas (cantidad, fecha, presupuesto) y manda propuesta en 24-48h. El 30% no contesta cotización; los que sí, negocian precio y cierran...»';
+    html += '<textarea class="cm-input" id="cm-ai-narrative" rows="14" placeholder="' + ph + '" style="resize:vertical;min-height:240px;font-family:inherit;font-size:.88rem;line-height:1.55;width:100%;padding:12px 14px"></textarea>';
+    html += '<div style="font-size:.7rem;color:#94A3B8;margin-top:4px">Mientras más específica (canales reales, tiempos concretos, fricciones que ya viste), mejor el draft. Cuesta ~$0.001 USD por generación.</div></div>';
+
+    html += '<details style="margin-top:14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px"><summary style="cursor:pointer;list-style:none;padding:10px 14px;font-size:.78rem;font-weight:600;color:#475569">💡 ¿Qué incluir? Prompts guía por fase (opcional, expande para ver)</summary>';
+    html += '<div style="padding:6px 16px 14px;border-top:1px solid #E2E8F0">';
+    phasePrompts.forEach(function(p) {
+      html += '<div style="font-size:.76rem;color:#475569;line-height:1.5;padding:4px 0"><b>' + p.icon + ' ' + escHtml(p.name) + ':</b> ' + escHtml(p.tip) + '</div>';
+    });
+    html += '</div></details>';
+    html += '</div>';
+
+    html += '<div class="cm-ai-footer" id="cm-ai-footer" style="padding:14px 22px;border-top:1px solid #E2E8F0;display:flex;gap:8px;justify-content:flex-end;background:#F8FAFC">';
+    html += '<button class="cm-btn cm-btn-ghost" id="cm-ai-cancel">Cancelar</button>';
+    html += '<button class="cm-btn cm-btn-primary" id="cm-ai-go" style="background:linear-gradient(135deg,#7C3AED,#4F46E5)">Generar arquitectura completa ✨</button>';
+    html += '</div>';
+    html += '</div></div>';
+
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    (document.fullscreenElement || document.body).appendChild(div.firstChild);
+
+    var close = function() { closeModal(); };
+    document.querySelector('#cm-ai-close').addEventListener('click', close);
+    document.querySelector('#cm-ai-cancel').addEventListener('click', close);
+    document.querySelector('#cm-ai-go').addEventListener('click', function() {
+      var narr = document.querySelector('#cm-ai-narrative').value.trim();
+      var ctx = document.querySelector('#cm-ai-context').value.trim();
+      if (!narr || narr.length < 30) {
+        toast('Escribe al menos 30 caracteres de narrativa', 'error');
+        return;
+      }
+      _aiCallGenerate(narr, ctx, '');  // sin target_phase_id → holístico, AI distribuye por fase
+    });
+
+    setTimeout(function() {
+      var ta = document.querySelector('#cm-ai-narrative');
+      if (ta) ta.focus();
+    }, 30);
+  }
+
   function _runAIGenerateFromCoach(narrative, phaseId) {
     // Equivalente a abrir showAIGeneratorModal y disparar Generate, pero sin pedir narrativa
     // (ya viene del Phase Coach). Reusa el mismo modal/UI de revision.
@@ -11268,63 +11337,119 @@ window.ComercialModule = (function() {
       html += '</div>';
     }
 
-    // TPs
-    html += '<div style="margin-bottom:18px">';
-    html += '<div style="font-size:.78rem;font-weight:700;color:#1E293B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Touchpoints (' + (d.touchpoints || []).length + ')</div>';
-    (d.touchpoints || []).forEach(function(tp, i) {
-      var checked = _aiSelected.tps[i] ? 'checked' : '';
-      var phase = (state.phases.find(function(p){ return p.id === tp.phase_id; }) || {}).name || tp.phase_id;
-      html += '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
-      html += '<div style="display:flex;align-items:flex-start;gap:8px">';
-      html += '<input type="checkbox" class="cm-ai-tp-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
-      html += '<div style="flex:1">';
-      html += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(tp.name) + '</div>';
-      html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px"><span style="background:#EEF2FF;color:#4338CA;padding:1px 6px;border-radius:9999px;font-weight:600">' + escHtml(phase) + '</span> · Canal: <b>' + escHtml(tp.channel || '—') + '</b> · Resp: <b>' + escHtml(tp.responsible_role || '—') + '</b></div>';
-      if (tp.objective) html += '<div style="font-size:.74rem;color:#475569;margin-top:4px"><b>Objetivo:</b> ' + escHtml(tp.objective) + '</div>';
-      if (tp.success_signal) html += '<div style="font-size:.72rem;color:#475569;margin-top:2px"><b>Señal de éxito:</b> ' + escHtml(tp.success_signal) + '</div>';
-      if ((tp.inferred_fields || []).length > 0) {
-        html += '<div style="font-size:.66rem;color:#94A3B8;margin-top:3px">⚠ Inferidos: ' + tp.inferred_fields.map(escHtml).join(', ') + '</div>';
-      }
-      html += '</div></div></div>';
+    // Helpers para render por fase
+    var _phaseList = (state.phases || []).slice().sort(function(a,b){ return (a.order||0)-(b.order||0); });
+    var _phaseName = function(pid) {
+      if (!pid) return 'Sin fase';
+      var p = _phaseList.find(function(x){ return x.id === pid; });
+      return p ? p.name : pid;
+    };
+    var _phaseIcon = function(pid) {
+      var p = _phaseList.find(function(x){ return x.id === pid; });
+      return (p && p.icon) || '📍';
+    };
+
+    // Construir buckets: cada fase agrupa sus TPs/fricciones/KPIs.
+    // Fricción → fase via lookup por touchpoint_name dentro del draft.
+    var tps = d.touchpoints || [];
+    var frs = d.frictions || [];
+    var kpis = d.kpis || [];
+    var tpNameToPhase = {};
+    tps.forEach(function(tp){ tpNameToPhase[tp.name] = tp.phase_id || ''; });
+    var bucket = {};  // phaseId → { tps:[{idx,obj}], fr:[...], kpis:[...] }
+    var ensure = function(pid) {
+      var key = pid || '';
+      if (!bucket[key]) bucket[key] = { tps: [], fr: [], kpis: [] };
+      return bucket[key];
+    };
+    tps.forEach(function(tp, i){ ensure(tp.phase_id || '').tps.push({ idx: i, obj: tp }); });
+    frs.forEach(function(fr, i){
+      var pid = tpNameToPhase[fr.touchpoint_name] || '';
+      ensure(pid).fr.push({ idx: i, obj: fr });
     });
-    html += '</div>';
+    kpis.forEach(function(k, i){ ensure(k.linked_phase_id || '').kpis.push({ idx: i, obj: k }); });
 
-    // Fricciones
-    if ((d.frictions || []).length > 0) {
-      html += '<div style="margin-bottom:18px">';
-      html += '<div style="font-size:.78rem;font-weight:700;color:#1E293B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Fricciones (' + d.frictions.length + ')</div>';
-      d.frictions.forEach(function(fr, i) {
-        var checked = _aiSelected.fr[i] ? 'checked' : '';
-        html += '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
-        html += '<div style="display:flex;align-items:flex-start;gap:8px">';
-        html += '<input type="checkbox" class="cm-ai-fr-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
-        html += '<div style="flex:1">';
-        html += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(fr.name) + '</div>';
-        var sevColor = fr.severity === 'high' ? '#DC2626' : fr.severity === 'medium' ? '#F59E0B' : '#94A3B8';
-        html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">En: <b>' + escHtml(fr.touchpoint_name) + '</b> · Tipo: <span style="background:#EEF2FF;color:#3730A3;padding:1px 6px;border-radius:9999px;font-weight:600">' + escHtml(fr.friction_type || '—') + '</span> · Severidad: <b style="color:' + sevColor + '">' + escHtml(fr.severity || '—') + '</b></div>';
-        if (fr.description) html += '<div style="font-size:.74rem;color:#475569;margin-top:4px">' + escHtml(fr.description) + '</div>';
-        html += '</div></div></div>';
-      });
-      html += '</div>';
-    }
+    // Orden de fases: las del state primero, luego "" (sin fase) al final
+    var orderedPhaseIds = _phaseList.map(function(p){ return p.id; });
+    Object.keys(bucket).forEach(function(pid){
+      if (orderedPhaseIds.indexOf(pid) === -1) orderedPhaseIds.push(pid);
+    });
 
-    // KPIs
-    if ((d.kpis || []).length > 0) {
-      html += '<div style="margin-bottom:18px">';
-      html += '<div style="font-size:.78rem;font-weight:700;color:#1E293B;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">KPIs (' + d.kpis.length + ')</div>';
-      d.kpis.forEach(function(k, i) {
-        var checked = _aiSelected.kpis[i] ? 'checked' : '';
-        html += '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
-        html += '<div style="display:flex;align-items:flex-start;gap:8px">';
-        html += '<input type="checkbox" class="cm-ai-kpi-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
-        html += '<div style="flex:1">';
-        html += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(k.name) + (k.is_master ? ' <span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:9999px;font-size:.62rem;font-weight:700">★ MAESTRO ' + escHtml(String(k.master_metric || '').toUpperCase()) + '</span>' : '') + '</div>';
-        html += '<div style="font-size:.74rem;color:#475569;margin-top:2px">' + escHtml(k.question || '') + '</div>';
-        html += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">Unidad: <b>' + escHtml(k.unit || '—') + '</b>' + (k.linked_phase_id ? ' · Fase: <b>' + escHtml(k.linked_phase_id) + '</b>' : '') + '</div>';
-        html += '</div></div></div>';
-      });
-      html += '</div>';
-    }
+    var renderTp = function(entry) {
+      var tp = entry.obj, i = entry.idx;
+      var checked = _aiSelected.tps[i] ? 'checked' : '';
+      var s = '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
+      s += '<div style="display:flex;align-items:flex-start;gap:8px">';
+      s += '<input type="checkbox" class="cm-ai-tp-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
+      s += '<div style="flex:1">';
+      s += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(tp.name) + '</div>';
+      s += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">Canal: <b>' + escHtml(tp.channel || '—') + '</b> · Resp: <b>' + escHtml(tp.responsible_role || '—') + '</b></div>';
+      if (tp.objective) s += '<div style="font-size:.74rem;color:#475569;margin-top:4px"><b>Objetivo:</b> ' + escHtml(tp.objective) + '</div>';
+      if (tp.success_signal) s += '<div style="font-size:.72rem;color:#475569;margin-top:2px"><b>Señal de éxito:</b> ' + escHtml(tp.success_signal) + '</div>';
+      if ((tp.inferred_fields || []).length > 0) {
+        s += '<div style="font-size:.66rem;color:#94A3B8;margin-top:3px">⚠ Inferidos: ' + tp.inferred_fields.map(escHtml).join(', ') + '</div>';
+      }
+      s += '</div></div></div>';
+      return s;
+    };
+    var renderFr = function(entry) {
+      var fr = entry.obj, i = entry.idx;
+      var checked = _aiSelected.fr[i] ? 'checked' : '';
+      var sevColor = fr.severity === 'high' ? '#DC2626' : fr.severity === 'medium' ? '#F59E0B' : '#94A3B8';
+      var s = '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
+      s += '<div style="display:flex;align-items:flex-start;gap:8px">';
+      s += '<input type="checkbox" class="cm-ai-fr-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
+      s += '<div style="flex:1">';
+      s += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(fr.name) + '</div>';
+      s += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">En: <b>' + escHtml(fr.touchpoint_name) + '</b> · Tipo: <span style="background:#EEF2FF;color:#3730A3;padding:1px 6px;border-radius:9999px;font-weight:600">' + escHtml(fr.friction_type || '—') + '</span> · Severidad: <b style="color:' + sevColor + '">' + escHtml(fr.severity || '—') + '</b></div>';
+      if (fr.description) s += '<div style="font-size:.74rem;color:#475569;margin-top:4px">' + escHtml(fr.description) + '</div>';
+      s += '</div></div></div>';
+      return s;
+    };
+    var renderKpi = function(entry) {
+      var k = entry.obj, i = entry.idx;
+      var checked = _aiSelected.kpis[i] ? 'checked' : '';
+      var s = '<div class="cm-ai-card" style="border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:#fff">';
+      s += '<div style="display:flex;align-items:flex-start;gap:8px">';
+      s += '<input type="checkbox" class="cm-ai-kpi-check" data-idx="' + i + '" ' + checked + ' style="margin-top:3px"/>';
+      s += '<div style="flex:1">';
+      s += '<div style="font-weight:600;font-size:.86rem;color:#1E293B">' + escHtml(k.name) + (k.is_master ? ' <span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:9999px;font-size:.62rem;font-weight:700">★ MAESTRO ' + escHtml(String(k.master_metric || '').toUpperCase()) + '</span>' : '') + '</div>';
+      s += '<div style="font-size:.74rem;color:#475569;margin-top:2px">' + escHtml(k.question || '') + '</div>';
+      s += '<div style="font-size:.7rem;color:#64748B;margin-top:2px">Unidad: <b>' + escHtml(k.unit || '—') + '</b></div>';
+      s += '</div></div></div>';
+      return s;
+    };
+
+    // Banner explicativo del agrupamiento
+    html += '<div style="font-size:.74rem;color:#64748B;margin-bottom:12px;padding:8px 12px;background:#F1F5F9;border-radius:6px">📍 La AI distribuyó cada item en su fase correcta. Revisa, desmarca lo que no apliques, y aplica.</div>';
+
+    orderedPhaseIds.forEach(function(pid) {
+      var b = bucket[pid];
+      if (!b) return;
+      var totalInPhase = b.tps.length + b.fr.length + b.kpis.length;
+      if (totalInPhase === 0) return;
+      var phaseLabel = pid ? (_phaseIcon(pid) + ' ' + _phaseName(pid)) : '🌐 Cross-fase / sin fase específica';
+      // Sección colapsable por fase, abierta por default
+      html += '<details open style="margin-bottom:14px;border:1px solid #E2E8F0;border-radius:10px;background:#FAFAFA">';
+      html += '<summary style="cursor:pointer;list-style:none;padding:10px 14px;font-size:.84rem;font-weight:700;color:#1E1B4B;display:flex;align-items:center;gap:8px;background:#fff;border-radius:10px 10px 0 0">';
+      html += '<span style="flex:1">' + escHtml(phaseLabel) + '</span>';
+      html += '<span style="font-size:.7rem;font-weight:600;color:#64748B">' + totalInPhase + ' items</span>';
+      html += '</summary>';
+      html += '<div style="padding:10px 14px 14px">';
+      if (b.tps.length) {
+        html += '<div style="font-size:.7rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:4px 0 6px">Touchpoints (' + b.tps.length + ')</div>';
+        b.tps.forEach(function(e){ html += renderTp(e); });
+      }
+      if (b.fr.length) {
+        html += '<div style="font-size:.7rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:8px 0 6px">Fricciones (' + b.fr.length + ')</div>';
+        b.fr.forEach(function(e){ html += renderFr(e); });
+      }
+      if (b.kpis.length) {
+        html += '<div style="font-size:.7rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:8px 0 6px">KPIs (' + b.kpis.length + ')</div>';
+        b.kpis.forEach(function(e){ html += renderKpi(e); });
+      }
+      html += '</div></details>';
+    });
 
     body.innerHTML = html;
 
@@ -11570,6 +11695,16 @@ window.ComercialModule = (function() {
     html += '<div class="cm-qs-progress-bar"><div class="cm-qs-progress-fill" style="width:' + pct + '%"></div></div>';
     html += '</div>';
 
+    // Card destacada: modo holístico con narrativa libre
+    html += '<div class="cm-qs-narrate-card" style="background:linear-gradient(135deg,#EEF2FF 0%,#FAF5FF 100%);border:1px solid #C7D2FE;border-radius:12px;padding:18px 20px;margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">';
+    html += '<div style="font-size:2.2rem;flex-shrink:0">🎙️</div>';
+    html += '<div style="flex:1;min-width:240px">';
+    html += '<div style="font-weight:700;font-size:1rem;color:#1E1B4B;margin-bottom:3px">Narra TODA tu operación con AI</div>';
+    html += '<div style="font-size:.82rem;color:#4338CA;line-height:1.5">Cuéntale a la AI cómo funciona tu negocio comercial de extremo a extremo en una sola narrativa. La AI distribuye touchpoints, fricciones y KPIs en su fase correcta automáticamente — sin tener que ir paso a paso.</div>';
+    html += '</div>';
+    html += '<button class="cm-btn cm-btn-primary" data-qs-action="narrate-all" style="background:linear-gradient(135deg,#7C3AED,#4F46E5);font-weight:600;padding:10px 18px;flex-shrink:0">▶ Empezar narración ✨</button>';
+    html += '</div>';
+
     // Sección 1: Define el contexto
     html += '<div class="cm-qs-section">';
     html += '<div class="cm-qs-section-header"><span class="cm-qs-section-icon">🎯</span><span class="cm-qs-section-title">Define el contexto</span><span class="cm-qs-section-meta">Información base que la AI necesita</span></div>';
@@ -11591,13 +11726,14 @@ window.ComercialModule = (function() {
     html += '<div class="cm-qs-section">';
     html += '<div class="cm-qs-section-header"><span class="cm-qs-section-icon">🗺️</span><span class="cm-qs-section-title">Mapea tu proceso comercial</span><span class="cm-qs-section-meta">Atracción → Captura → Conversión → Onboarding → Recompra</span></div>';
     var phaseDefs = [
-      { id: 'atraccion', title: 'Touchpoints de Atracción', desc: 'Cómo te encuentran los prospectos: redes, SEO, recomendaciones, anuncios.', done: c.atraccion },
-      { id: 'captura', title: 'Touchpoints de Captura', desc: 'Cómo capturas datos del prospecto: forms, WhatsApp, agenda, llamada.', done: c.captura },
-      { id: 'conversion', title: 'Touchpoints de Conversión', desc: 'Cómo cierras la venta: demos, propuestas, negociación, pago.', done: c.conversion },
-      { id: 'onboarding', title: 'Touchpoints de Onboarding', desc: 'Cómo entregas y das la bienvenida: kickoff, setup, capacitación.', done: c.onboarding },
-      { id: 'recompra', title: 'Touchpoints de Recompra', desc: 'Cómo logras que vuelvan a comprar: account mgmt, upsell, programa.', done: c.recompra },
+      { id: 'atraccion', short: 'Atracción', title: 'Touchpoints de Atracción', desc: 'Cómo te encuentran los prospectos: redes, SEO, recomendaciones, anuncios.', done: c.atraccion },
+      { id: 'captura', short: 'Captura', title: 'Touchpoints de Captura', desc: 'Cómo capturas datos del prospecto: forms, WhatsApp, agenda, llamada.', done: c.captura },
+      { id: 'conversion', short: 'Conversión', title: 'Touchpoints de Conversión', desc: 'Cómo cierras la venta: demos, propuestas, negociación, pago.', done: c.conversion },
+      { id: 'onboarding', short: 'Onboarding', title: 'Touchpoints de Onboarding', desc: 'Cómo entregas y das la bienvenida: kickoff, setup, capacitación.', done: c.onboarding },
+      { id: 'recompra', short: 'Recompra', title: 'Touchpoints de Recompra', desc: 'Cómo logras que vuelvan a comprar: account mgmt, upsell, programa.', done: c.recompra },
     ];
     // Sin orden forzado: cada fase es independiente. Solo distinguimos 'done' visualmente.
+    // Botón AI labeled por-fase para que el scope sea explícito ("Solo Atracción ✨").
     phaseDefs.forEach(function(p, idx) {
       html += _qsItemHTML({
         done: p.done,
@@ -11607,7 +11743,7 @@ window.ComercialModule = (function() {
         description: p.desc,
         buttons: [
           { label: 'Hacer manual', cls: 'cm-btn-ghost', action: 'manual-phase', phaseId: p.id },
-          { label: 'Con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-phase', phaseId: p.id },
+          { label: 'Solo ' + p.short + ' ✨', cls: 'cm-qs-btn-ai', action: 'ai-phase', phaseId: p.id },
         ],
         extra: _qsWorkbookExpandable(p.id),
       });
@@ -11619,7 +11755,7 @@ window.ComercialModule = (function() {
       description: 'Corre en paralelo a las 5 fases. Contenido, testimonios, marca, autoridad, comunidad.',
       buttons: [
         { label: 'Hacer manual', cls: 'cm-btn-ghost', action: 'manual-phase', phaseId: 'confianza' },
-        { label: 'Con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-phase', phaseId: 'confianza' },
+        { label: 'Solo Confianza ✨', cls: 'cm-qs-btn-ai', action: 'ai-phase', phaseId: 'confianza' },
       ],
       extra: _qsWorkbookExpandable('confianza'),
     });
@@ -11634,7 +11770,7 @@ window.ComercialModule = (function() {
       description: 'Utilidad, LTV, CAC y Conversión — los 4 que el CEO mira para decidir. Cada uno necesita al menos 1 KPI driver con dato.',
       buttons: [
         { label: 'Ver KPIs', cls: 'cm-btn-ghost', action: 'goto-kpis' },
-        { label: 'Sugerir con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-kpis' },
+        { label: 'Generar con narración ✨', cls: 'cm-qs-btn-ai', action: 'narrate-all' },
       ],
     });
     html += _qsItemHTML({
@@ -11643,7 +11779,7 @@ window.ComercialModule = (function() {
       description: 'Donde el proceso se traba: tiempo de espera, repetición, info incompleta, switch de canal, expectativas rotas, esfuerzo cognitivo.',
       buttons: [
         { label: 'Ver fricciones', cls: 'cm-btn-ghost', action: 'goto-fricciones' },
-        { label: 'Detectar con AI ✨', cls: 'cm-qs-btn-ai', action: 'ai-fricciones' },
+        { label: 'Generar con narración ✨', cls: 'cm-qs-btn-ai', action: 'narrate-all' },
       ],
     });
     html += '</div>';
@@ -11658,7 +11794,8 @@ window.ComercialModule = (function() {
       btn.addEventListener('click', function() {
         var action = this.dataset.qsAction;
         var phaseId = this.dataset.qsPhase || null;
-        if (action === 'context') _showCompanyContextModal();
+        if (action === 'narrate-all') _showHolisticNarrativeModal();
+        else if (action === 'context') _showCompanyContextModal();
         else if (action === 'goto-equipo') { activeTab = 'equipo'; render(); }
         else if (action === 'goto-kpis') { activeTab = 'kpis'; render(); }
         else if (action === 'goto-fricciones') { activeTab = 'fricciones'; render(); }

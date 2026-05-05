@@ -20,31 +20,24 @@ from sqlalchemy import text
 
 from app.database import engine
 
-# Tablas con id auto-increment Integer que pueden tener este problema.
-# (Modelos con id String como ComercialPhase, ComercialFriction, etc no aplican.)
-TABLES = [
-    ("comercial_people", "id"),
-    ("comercial_kpi_friction", "id"),
-    ("comercial_kpi_touchpoint", "id"),
-    ("comercial_kpi_history", "id"),
-    ("comercial_tp_kpi_history", "id"),
-    ("comercial_activity_log", "id"),
-    ("comercial_canvas_layout", "id"),
-    ("comercial_canvas_notes", "id"),
-    ("comercial_touchpoint_flow", "id"),
-    ("comercial_iniciativas", "id"),
-    ("comercial_initiative_friction", "id"),
-    ("comercial_initiative_touchpoint", "id"),
-    ("comercial_initiative_kpi", "id"),
-    ("comercial_trust_pillars", "id"),
-    ("comercial_trust_pillar_steps", "id"),
-    ("comercial_governance_gaps", "id"),
-    ("comercial_governance_tests", "id"),
-    ("comercial_touchpoint_channels", "id"),
-    ("comercial_channels", "id"),
-    ("comercial_touchpoints", "id"),
-    ("brands", "id"),
-]
+# El script auto-descubre TODAS las (tabla, columna) con secuencia serial
+# en el schema public de Postgres consultando information_schema. Así no
+# se nos olvida ninguna cuando se añaden tablas nuevas.
+DISCOVERY_SQL = """
+SELECT
+    n.nspname || '.' || c.relname AS table_full,
+    a.attname AS col,
+    pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) AS seq
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_attribute a ON a.attrelid = c.oid
+WHERE c.relkind = 'r'
+  AND n.nspname = 'public'
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+  AND pg_get_serial_sequence(quote_ident(n.nspname) || '.' || quote_ident(c.relname), a.attname) IS NOT NULL
+ORDER BY c.relname, a.attname;
+"""
 
 
 def main() -> int:
@@ -53,43 +46,31 @@ def main() -> int:
         print(f"Dialect={dialect} — fix_sequences solo aplica a Postgres. No se hizo nada.")
         return 0
 
+    # Auto-discover todas las tablas con secuencia serial
+    with engine.connect() as conn:
+        rows = conn.execute(text(DISCOVERY_SQL)).fetchall()
+
+    print(f"Encontradas {len(rows)} columnas serial en schema public.\n")
+
     fixed = 0
-    skipped = 0
     failed = 0
 
     # Una transacción por tabla — si una falla, las demás siguen.
-    for table, pk in TABLES:
+    for full_table, col, seq in rows:
         try:
             with engine.begin() as conn:
-                # Verificar que la tabla existe
-                exists = conn.execute(text(
-                    "SELECT to_regclass(:t) IS NOT NULL"
-                ), {"t": table}).scalar()
-                if not exists:
-                    print(f"  - {table}: no existe, skip")
-                    skipped += 1
-                    continue
-
-                # Obtener el nombre real de la secuencia
-                seq_name = conn.execute(text(
-                    "SELECT pg_get_serial_sequence(:t, :p)"
-                ), {"t": table, "p": pk}).scalar()
-                if not seq_name:
-                    print(f"  - {table}.{pk}: sin secuencia asociada (no es serial), skip")
-                    skipped += 1
-                    continue
-
-                max_id = conn.execute(text(f"SELECT COALESCE(MAX({pk}), 0) FROM {table}")).scalar()
+                max_id = conn.execute(text(f"SELECT COALESCE(MAX({col}), 0) FROM {full_table}")).scalar()
                 new_val = conn.execute(text(
                     "SELECT setval(:s, GREATEST(:m, 1), true)"
-                ), {"s": seq_name, "m": max_id}).scalar()
-                print(f"  - {table}.{pk}: max={max_id} → seq={seq_name} reseteado a {new_val}")
+                ), {"s": seq, "m": max_id}).scalar()
+                print(f"  - {full_table}.{col}: max={max_id} → {seq} = {new_val}")
                 fixed += 1
         except Exception as exc:
-            # Solo la primera línea del error (psycopg2 vuelca el SQL)
-            err_short = str(exc).split("\n")[0][:120]
-            print(f"  - {table}.{pk}: ERROR {err_short}")
+            err_short = str(exc).split("\n")[0][:140]
+            print(f"  - {full_table}.{col}: ERROR {err_short}")
             failed += 1
+
+    skipped = 0  # auto-discovery descarta las que no aplican
 
     print(f"\nResumen: {fixed} secuencias corregidas, {skipped} omitidas, {failed} con error")
     return 0 if failed == 0 else 1

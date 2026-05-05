@@ -6063,7 +6063,16 @@ window.ComercialModule = (function() {
     var ph = wb.phases[tp.phase_id];
     if (!ph) return '';
     var hints = ph.field_hints || {};
-    var coachQs = ph.coach_questions || (ph.discovery_questions || []).slice(0, 5);
+    // coach_questions es array de strings; discovery_questions ahora es array de {q,example}.
+    // Normalizamos a strings para el render compacto del drawer.
+    var coachQs;
+    if (ph.coach_questions && ph.coach_questions.length) {
+      coachQs = ph.coach_questions.slice();
+    } else {
+      coachQs = (ph.discovery_questions || []).slice(0, 5).map(function(item) {
+        return (item && typeof item === 'object') ? (item.q || '') : String(item || '');
+      });
+    }
     var html = '<details class="cm-qs-wb" style="margin-top:10px">';
     html += '<summary>📋 Checks del workbook para ' + escHtml(ph.title) + ' (Cris Urzúa)</summary>';
     html += '<div class="cm-qs-wb-body">';
@@ -11018,8 +11027,12 @@ window.ComercialModule = (function() {
       return;
     }
     var ph = wb.phases[phaseKey];
-    var coachQs = ph.coach_questions || ph.discovery_questions.slice(0, 5);
-    var allQs = ph.discovery_questions || [];
+    // discovery_questions ahora es un array de {q, example} (con fallback a string para compat).
+    var rawQs = ph.discovery_questions || [];
+    var allQs = rawQs.map(function(item) {
+      if (item && typeof item === 'object') return { q: item.q || '', example: item.example || '' };
+      return { q: String(item || ''), example: '' };
+    });
     var phaseName = ph.title;
     var phaseSummary = ph.summary || '';
     var sanity = ph.sanity_check || '';
@@ -11037,13 +11050,16 @@ window.ComercialModule = (function() {
     html += '<strong style="display:block;margin-bottom:3px">💡 Tip de Cris</strong>';
     html += 'Documenta lo que <strong>realmente pasa</strong>, no lo que debería pasar. Si la realidad incomoda, mejor — ahí está la oportunidad.';
     html += '</div>';
-    html += '<div style="font-size:.86rem;font-weight:600;color:#1E293B;margin-bottom:6px">Responde las preguntas clave del workbook:</div>';
-    html += '<div style="font-size:.74rem;color:#64748B;margin-bottom:14px">Tus respuestas alimentan al consultor AI para que drafee touchpoints concretos en lugar de plantillas genéricas.</div>';
+    html += '<div style="font-size:.86rem;font-weight:600;color:#1E293B;margin-bottom:6px">Preguntas del workbook (' + allQs.length + ')</div>';
+    html += '<div style="font-size:.74rem;color:#64748B;margin-bottom:14px">Todas son opcionales. Responde las que tengan respuesta concreta — entre más respondas, más rico el draft. Los ejemplos en gris son sugerencias de qué podrías decir, no respuestas reales.</div>';
     html += '<form id="cm-pc-form">';
-    coachQs.forEach(function(q, idx) {
+    allQs.forEach(function(item, idx) {
+      var q = item.q;
+      var ex = item.example;
+      var placeholder = ex || 'Tu respuesta honesta — incluye nombres reales, tiempos concretos, canales específicos.';
       html += '<div style="margin-bottom:14px">';
       html += '<label style="font-size:.78rem;color:#1E293B;font-weight:600;display:block;margin-bottom:4px;line-height:1.4">' + (idx + 1) + '. ' + escHtml(q) + '</label>';
-      html += '<textarea class="cm-input cm-pc-answer" data-q="' + escHtml(q) + '" rows="2" style="resize:vertical;width:100%;padding:8px 10px;font-size:.85rem;font-family:inherit" placeholder="Tu respuesta honesta — incluye nombres reales, tiempos concretos, canales específicos."></textarea>';
+      html += '<textarea class="cm-input cm-pc-answer" data-q="' + escHtml(q) + '" rows="2" style="resize:vertical;width:100%;padding:8px 10px;font-size:.85rem;font-family:inherit;color:#1E293B" placeholder="' + escHtml(placeholder) + '"></textarea>';
       html += '</div>';
     });
     html += '</form>';
@@ -11051,15 +11067,6 @@ window.ComercialModule = (function() {
       html += '<div style="margin-top:8px;background:#F1F5F9;border-left:3px solid #4F46E5;padding:10px 14px;border-radius:0 6px 6px 0;font-size:.78rem;color:#475569;line-height:1.5">';
       html += '<strong style="color:#1E293B">Sanity check:</strong> ' + escHtml(sanity);
       html += '</div>';
-    }
-    if (allQs.length > coachQs.length) {
-      html += '<details style="margin-top:14px;background:#FAFAF9;border:1px solid #E7E5E4;border-radius:8px">';
-      html += '<summary style="cursor:pointer;list-style:none;padding:8px 14px;font-size:.74rem;font-weight:600;color:#57534E">▸ Ver las ' + allQs.length + ' preguntas completas del workbook</summary>';
-      html += '<div style="padding:6px 16px 12px;border-top:1px solid #E7E5E4">';
-      allQs.forEach(function(q) {
-        html += '<div style="font-size:.78rem;color:#44403C;line-height:1.5;padding:4px 0;border-left:2px solid #D6D3D1;padding-left:10px;margin:6px 0">' + escHtml(q) + '</div>';
-      });
-      html += '</div></details>';
     }
     if (redFlags.length) {
       html += '<details style="margin-top:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px">';
@@ -11095,15 +11102,21 @@ window.ComercialModule = (function() {
         var a = (ta.value || '').trim();
         if (a) answers.push({ q: q, a: a });
       });
+      // Las preguntas son opcionales — si no hay ninguna respondida, la IA usa
+      // solo el company_context. Avisamos al usuario antes de proceder en seco.
       if (answers.length === 0) {
-        toast('Responde al menos 1 pregunta para que la AI tenga material', 'error');
-        return;
+        var ok = window.confirm('No respondiste ninguna pregunta. La IA usará solo el contexto de tu empresa para generar TPs (más genérico). ¿Continuar?');
+        if (!ok) return;
       }
       // Construye narrativa estructurada Pregunta/Respuesta — el endpoint AI ya soporta narrative libre.
       var narrative = 'Mapeo de fase ' + phaseName + ' (workbook Cris Urzua).\n\n';
-      answers.forEach(function(item) {
-        narrative += 'Pregunta: ' + item.q + '\nRespuesta: ' + item.a + '\n\n';
-      });
+      if (answers.length === 0) {
+        narrative += '(El usuario no respondió preguntas. Genera touchpoints plausibles para esta fase basados solo en el contexto de la empresa y el patrón típico de la industria.)\n';
+      } else {
+        answers.forEach(function(item) {
+          narrative += 'Pregunta: ' + item.q + '\nRespuesta: ' + item.a + '\n\n';
+        });
+      }
       // Cierra el modal coach y abre el AI generator con narrativa pre-cargada y fase fija.
       closeModal();
       _runAIGenerateFromCoach(narrative, phaseKey === 'confianza' ? null : phaseKey);
@@ -11419,7 +11432,9 @@ window.ComercialModule = (function() {
     html += '<summary>📋 Ver checks del workbook (' + questions.length + ' preguntas)</summary>';
     html += '<div class="cm-qs-wb-body">';
     questions.forEach(function(q) {
-      html += '<div class="cm-qs-wb-q">' + escHtml(q) + '</div>';
+      // q ahora puede ser {q,example} u (legacy) string. Normalizar.
+      var text = (q && typeof q === 'object') ? (q.q || '') : String(q || '');
+      html += '<div class="cm-qs-wb-q">' + escHtml(text) + '</div>';
     });
     if (ph.sanity_check) {
       html += '<div class="cm-qs-wb-sanity"><strong>Sanity check:</strong>' + escHtml(ph.sanity_check) + '</div>';

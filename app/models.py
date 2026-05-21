@@ -682,4 +682,6 @@ class Brand(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     slug: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
+    # UUID de Supabase Auth (auth.users.id). NULL = legacy (solo admins en ADMIN_USER_IDS).
+    owner_user_id: Mapped[str] = mapped_column(String(36), nullable=True, index=True)
     created_at = mapped_column(DateTime, server_default=func.now())

@@ -28,6 +28,13 @@ class BasicAuthASGIMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Con Supabase Auth activo, el login es por cuenta (JWT), no contraseña global.
+        from app.supabase_auth import is_auth_enabled
+
+        if is_auth_enabled():
+            await self.app(scope, receive, send)
+            return
+
         password = _expected_password()
         if not password:
             await self.app(scope, receive, send)

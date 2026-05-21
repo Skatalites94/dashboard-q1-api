@@ -512,13 +512,134 @@ body.sidebar-collapsed .topbar { left: 64px; }
 .toast.info { border-left-color: var(--primary); color: var(--primary); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-8px); } }
+
+/* ── Auth gate (Supabase) ── */
+#authGate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(160deg, #F5F7FA 0%, #EDF2FF 100%);
+}
+#authGate[hidden] { display: none !important; }
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: #FFFFFF;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 32px;
+  border: 1px solid var(--border);
+}
+.auth-card h1 {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0F172A;
+}
+.auth-card .auth-sub {
+  margin: 0 0 24px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #F8FAFC;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.auth-tab.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.auth-field { margin-bottom: 14px; }
+.auth-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.auth-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(76, 110, 245, 0.15);
+}
+.auth-submit {
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-submit:hover:not(:disabled) { background: var(--primary-hover); }
+.auth-submit:disabled { opacity: 0.65; cursor: not-allowed; }
+.auth-msg {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  min-height: 18px;
+}
+.auth-msg.error { color: #DC2626; }
+.auth-msg.success { color: #15803D; }
+#appShell[hidden] { display: none !important; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
+<div id="authGate" hidden>
+  <div class="auth-card">
+    <h1>Arquitectura Comercial</h1>
+    <p class="auth-sub">Crea tu cuenta, arma tu mapa de proceso y prueba Quick Start con IA.</p>
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" id="authTabLogin">Iniciar sesión</button>
+      <button type="button" class="auth-tab" id="authTabSignup">Crear cuenta</button>
+    </div>
+    <form id="authForm">
+      <div class="auth-field">
+        <label for="authEmail">Correo</label>
+        <input type="email" id="authEmail" autocomplete="email" required placeholder="tu@empresa.com" />
+      </div>
+      <div class="auth-field">
+        <label for="authPassword">Contraseña</label>
+        <input type="password" id="authPassword" autocomplete="current-password" required minlength="6" placeholder="Mínimo 6 caracteres" />
+      </div>
+      <button type="submit" class="auth-submit" id="authSubmit">Entrar</button>
+    </form>
+    <p class="auth-msg" id="authMsg"></p>
+  </div>
+</div>
+
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-<div class="shell">
+<div class="shell" id="appShell" hidden>
   <aside class="sidebar" id="sidebar">
     <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Colapsar barra lateral">&#10094;</button>
     <div class="sidebar-brand">
@@ -562,10 +683,11 @@ body.sidebar-collapsed .topbar { left: 64px; }
       </button>
     </nav>
     <div class="sidebar-footer">
-      <div class="user-avatar">JC</div>
+      <div class="user-avatar" id="sidebarUserAvatar">JC</div>
       <div class="user-info">
-        <div class="user-name">Jeronimo C.</div>
-        <div>CEO</div>
+        <div class="user-name" id="sidebarUserName">Mi cuenta</div>
+        <div id="sidebarUserRole">Arquitectura Comercial</div>
+        <button type="button" id="authLogoutBtn" style="display:none;margin-top:8px;padding:0;border:none;background:none;color:var(--sidebar-text);font-size:11px;cursor:pointer;text-decoration:underline;">Cerrar sesión</button>
       </div>
     </div>
   </aside>
@@ -615,31 +737,169 @@ body.sidebar-collapsed .topbar { left: 64px; }
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
-/* ── Workspaces (multi-marca): inyecta X-Brand-Id en cada fetch ── */
+/* ── Supabase Auth + fetch global (Bearer + X-Brand-Id) ── */
 (function() {
   var KEY = 'active_brand_id';
+  window.__authEnabled = false;
+  window.__supabaseClient = null;
+  window.__supabaseSession = null;
+  window.__allowedBrandIds = null;
+
   function getActiveBrandId() {
-    var v = localStorage.getItem(KEY);
-    var n = parseInt(v, 10);
-    return (n && n > 0) ? n : 1;
+    var allowed = window.__allowedBrandIds;
+    if (allowed && allowed.length) {
+      var v = localStorage.getItem(KEY);
+      var n = parseInt(v, 10);
+      if (n && allowed.indexOf(n) >= 0) return n;
+      window.__setActiveBrandId(allowed[0]);
+      return allowed[0];
+    }
+    var v2 = localStorage.getItem(KEY);
+    var n2 = parseInt(v2, 10);
+    return (n2 && n2 > 0) ? n2 : 1;
   }
   window.__getActiveBrandId = getActiveBrandId;
   window.__setActiveBrandId = function(id) {
     localStorage.setItem(KEY, String(id));
   };
 
-  // Wrapper global de fetch — todas las llamadas del frontend pasan por aquí
-  // y reciben el header X-Brand-Id automáticamente.
+  window.__getAccessToken = function() {
+    return (window.__supabaseSession && window.__supabaseSession.access_token) || null;
+  };
+
   var originalFetch = window.fetch.bind(window);
   window.fetch = function(input, init) {
     init = init || {};
     var headers = new Headers(init.headers || (input && input.headers) || {});
+    var token = window.__getAccessToken();
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', 'Bearer ' + token);
+    }
     if (!headers.has('X-Brand-Id')) {
       headers.set('X-Brand-Id', String(getActiveBrandId()));
     }
     init.headers = headers;
     return originalFetch(input, init);
   };
+
+  function showApp() {
+    var gate = document.getElementById('authGate');
+    var shell = document.getElementById('appShell');
+    if (gate) gate.hidden = true;
+    if (shell) shell.hidden = false;
+    var logoutBtn = document.getElementById('authLogoutBtn');
+    if (logoutBtn && window.__authEnabled) logoutBtn.style.display = 'block';
+    if (window.__supabaseSession && window.__supabaseSession.user) {
+      var em = window.__supabaseSession.user.email || '';
+      var nameEl = document.getElementById('sidebarUserName');
+      var av = document.getElementById('sidebarUserAvatar');
+      if (nameEl) nameEl.textContent = em.split('@')[0] || 'Usuario';
+      if (av && em) av.textContent = (em[0] || 'U').toUpperCase();
+    }
+    if (typeof window.__startApp === 'function') window.__startApp();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var logoutBtn = document.getElementById('authLogoutBtn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', function() {
+        if (window.__supabaseClient) {
+          window.__supabaseClient.auth.signOut();
+        } else {
+          window.location.reload();
+        }
+      });
+    }
+  });
+
+  function setAuthMsg(text, type) {
+    var el = document.getElementById('authMsg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'auth-msg' + (type ? ' ' + type : '');
+  }
+
+  function bindAuthForm(mode) {
+    var tabLogin = document.getElementById('authTabLogin');
+    var tabSignup = document.getElementById('authTabSignup');
+    var submit = document.getElementById('authSubmit');
+    if (tabLogin) tabLogin.classList.toggle('active', mode === 'login');
+    if (tabSignup) tabSignup.classList.toggle('active', mode === 'signup');
+    if (submit) submit.textContent = mode === 'signup' ? 'Crear cuenta' : 'Entrar';
+    window.__authMode = mode;
+  }
+
+  function initAuthUI() {
+    var tabLogin = document.getElementById('authTabLogin');
+    var tabSignup = document.getElementById('authTabSignup');
+    var form = document.getElementById('authForm');
+    bindAuthForm('login');
+    if (tabLogin) tabLogin.addEventListener('click', function() { bindAuthForm('login'); setAuthMsg(''); });
+    if (tabSignup) tabSignup.addEventListener('click', function() { bindAuthForm('signup'); setAuthMsg(''); });
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var email = (document.getElementById('authEmail') || {}).value.trim();
+        var password = (document.getElementById('authPassword') || {}).value;
+        var submit = document.getElementById('authSubmit');
+        if (!window.__supabaseClient) {
+          setAuthMsg('Autenticación no configurada en el servidor.', 'error');
+          return;
+        }
+        submit.disabled = true;
+        setAuthMsg('Un momento…', '');
+        var mode = window.__authMode || 'login';
+        var promise = mode === 'signup'
+          ? window.__supabaseClient.auth.signUp({ email: email, password: password })
+          : window.__supabaseClient.auth.signInWithPassword({ email: email, password: password });
+        promise.then(function(res) {
+          if (res.error) throw res.error;
+          window.__supabaseSession = res.data.session;
+          if (mode === 'signup' && !res.data.session) {
+            setAuthMsg('Revisa tu correo para confirmar la cuenta, luego inicia sesión.', 'success');
+            bindAuthForm('login');
+            submit.disabled = false;
+            return;
+          }
+          showApp();
+        }).catch(function(err) {
+          setAuthMsg(err.message || 'No se pudo completar el acceso.', 'error');
+          submit.disabled = false;
+        });
+      });
+    }
+  }
+
+  fetch('/api/auth/config').then(function(r) { return r.json(); }).then(function(cfg) {
+    if (!cfg.auth_enabled) {
+      window.__authEnabled = false;
+      showApp();
+      return;
+    }
+    window.__authEnabled = true;
+    var gate = document.getElementById('authGate');
+    if (gate) gate.hidden = false;
+    window.__supabaseClient = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+    initAuthUI();
+    return window.__supabaseClient.auth.getSession();
+  }).then(function(res) {
+    if (!window.__authEnabled || !res) return;
+    if (res.data && res.data.session) {
+      window.__supabaseSession = res.data.session;
+      showApp();
+    }
+    if (window.__supabaseClient) {
+      window.__supabaseClient.auth.onAuthStateChange(function(event, session) {
+        window.__supabaseSession = session;
+        if (event === 'SIGNED_OUT') {
+          window.location.reload();
+        }
+      });
+    }
+  }).catch(function(err) {
+    console.error('Auth init error', err);
+    showApp();
+  });
 })();
 
 /* ── Toast util (global) ── */
@@ -869,18 +1129,25 @@ window.__toast = function(msg, type) {
 
   window.addEventListener('hashchange', route);
 
-  // Set default hash if none
-  if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
-    window.location.hash = '#/comercial';
-  } else {
-    // Si entra por #/dashboard, #/gastos, #/escenarios o #/simulador (módulos ocultos), redirige a comercial
-    var h = window.location.hash.replace('#', '');
-    if (h === '/dashboard' || h === '/gastos' || h === '/escenarios' || h === '/simulador') {
+  function bootRouter() {
+    if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
       window.location.hash = '#/comercial';
     } else {
-      route();
+      var h = window.location.hash.replace('#', '');
+      if (h === '/dashboard' || h === '/gastos' || h === '/escenarios' || h === '/simulador') {
+        window.location.hash = '#/comercial';
+      } else {
+        route();
+      }
     }
   }
+
+  window.__startApp = function() {
+    if (window.__appStarted) return;
+    window.__appStarted = true;
+    bootRouter();
+    if (typeof window.__loadBrands === 'function') window.__loadBrands();
+  };
 })();
 
 /* ── Brand Switcher (Workspaces) ── */
@@ -906,8 +1173,12 @@ window.__toast = function(msg, type) {
       return r.json();
     }).then(function(data) {
       brands = data || [];
+      window.__allowedBrandIds = brands.map(function(b) { return b.id; });
       renderActive();
       renderList();
+      if (window.__authEnabled && brands.length === 0) {
+        setTimeout(function() { openModal(); }, 400);
+      }
     }).catch(function(err) {
       console.error('Brands load error', err);
       // No mostrar toast en boot inicial — degradar silenciosamente
@@ -1020,8 +1291,7 @@ window.__toast = function(msg, type) {
     });
   }
 
-  // Boot: cargar marcas
-  loadBrands();
+  window.__loadBrands = loadBrands;
 })();
 </script>
 </body>

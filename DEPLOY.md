@@ -16,12 +16,35 @@
 
 ---
 
-## Paso 2 — Variable `DATABASE_URL` en Railway
+## Paso 2 — Variables en Railway
 
 1. En tu servicio: **Variables → New Variable**.
-2. **Key:** `DATABASE_URL`
-3. **Value:** tu URI de Supabase (la misma de `.env` local).
-4. Click **Deploy** para que tome la variable.
+2. Obligatorias (base de datos):
+
+| Key | Value |
+|-----|--------|
+| `DATABASE_URL` | URI pooler de Supabase |
+
+3. Piloto con **cuentas propias** (Supabase → Project Settings → API):
+
+| Key | Value |
+|-----|--------|
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_ANON_KEY` | anon public |
+| `SUPABASE_JWT_SECRET` | JWT Secret |
+| `ADMIN_USER_IDS` | Tu UUID de usuario (ver Authentication → Users) |
+| `DEMO_MODE` | `true` |
+| `OPENAI_API_KEY` | `sk-...` |
+
+4. Antes del deploy, en tu Mac (con `DATABASE_URL` en `.env`):
+
+```bash
+python3 migrate_comercial_v21.py
+```
+
+5. En Supabase → **Authentication → Providers**: Email activado, registro abierto.
+6. En Supabase → **Authentication → URL Configuration**: Site URL = tu dominio Railway.
+7. Click **Deploy** para que tome las variables.
 
 ---
 

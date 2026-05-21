@@ -45,6 +45,9 @@ python3 migrate_comercial_v9.py
 # Migración comercial v10 (tabla comercial_touchpoint_flow — journey editable)
 python3 migrate_comercial_v10.py
 
+# Migración comercial v21 (owner_user_id en brands — cuentas Supabase Auth)
+python3 migrate_comercial_v21.py
+
 # Solo SQLite local (ignora DATABASE_URL del .env):
 python3 migrate_comercial_v3.py --sqlite
 # URI explícita (p. ej. pooler Supabase para IPv4):
@@ -117,6 +120,17 @@ railway service status
 6. **Test the full cycle**: model change → migration → seed → API call → UI loads without errors.
 
 **Never commit model changes without the corresponding migration.** This breaks the live Postgres database.
+
+## Auth (piloto multiusuario)
+
+Con `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_JWT_SECRET` en el entorno:
+
+- Login/registro en la UI (Supabase Auth, registro abierto).
+- Cada marca nueva queda ligada al UUID del usuario (`brands.owner_user_id`).
+- `ADMIN_USER_IDS` (UUIDs separados por coma): acceso a Promoselect y marcas legacy sin dueño.
+- `DEMO_MODE=true` + `OPENAI_API_KEY` para Quick Start e IA en piloto.
+
+Sin esas variables, sigue el modo legacy con `DASHBOARD_PASSWORD` opcional.
 
 ## Deploy
 

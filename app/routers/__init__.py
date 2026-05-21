@@ -1,8 +1,9 @@
 from fastapi import APIRouter
 
-from app.routers import areas, bootstrap, brands, comercial, deals, escenarios, gastos, iniciativas, kpis_meta, semaforo, simulador
+from app.routers import areas, auth, bootstrap, brands, comercial, deals, escenarios, gastos, iniciativas, kpis_meta, semaforo, simulador
 
 api_router = APIRouter()
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(bootstrap.router, tags=["bootstrap"])
 api_router.include_router(brands.router, prefix="/brands", tags=["brands"])
 api_router.include_router(deals.router, prefix="/deals", tags=["deals"])

@@ -201,8 +201,20 @@ Situaciones que justifican abrir o actualizar una fricción vinculada al KPI:
 - Al **eliminar** una fricción se borran vínculos `comercial_kpi_friction` y comentarios asociados.
 - Al **eliminar** un touchpoint se borran vínculos `comercial_kpi_touchpoint`.
 
+## Acceso multiusuario (piloto Supabase Auth)
+
+- **Usuario = piloto** en esta fase: cada persona con cuenta propia (email + contraseña vía Supabase Auth).
+- **Registro abierto** en Supabase (Authentication → Providers → Email).
+- Cada marca (`brands`) tiene **`owner_user_id`** (UUID de `auth.users`). Un usuario solo lista y edita marcas donde es dueño.
+- **Promoselect** (`brand_id = 1`) puede quedar con `owner_user_id` NULL (legacy). Solo usuarios listados en **`ADMIN_USER_IDS`** (env, UUIDs separados por coma) ven marcas sin dueño y todas las marcas.
+- El frontend envía `Authorization: Bearer <jwt>` y `X-Brand-Id` en cada `fetch`.
+- Sin `SUPABASE_JWT_SECRET` + `SUPABASE_URL` + `SUPABASE_ANON_KEY`, la app sigue en modo anterior (`DASHBOARD_PASSWORD` opcional, sin login por cuenta).
+- **Quick Start + IA en piloto:** `DEMO_MODE=true` y `OPENAI_API_KEY` en el servidor (Railway/.env). La UI muestra Quick Start solo si `demo_mode` viene en bootstrap.
+- Migración: `migrate_comercial_v21.py` añade `owner_user_id` en `brands`.
+
 ## Migraciones
 
+- `migrate_comercial_v21.py`: añade `owner_user_id` en `brands` (dueño por cuenta Supabase).
 - `migrate_comercial_v3.py`: añade `resolution_checklist` en `comercial_frictions`.
 - `migrate_comercial_v4.py`: añade campos híbridos (`tracking_mode`, `frequency`, `grace_days`) en `comercial_kpis`, campos de config (`is_critical`, `target_value_local`, `responsable_id`) en `comercial_kpi_touchpoint`, y crea tabla `comercial_tp_kpi_history`.
 - `migrate_comercial_v5.py`: crea tabla `comercial_iniciativas` para seguimiento básico de iniciativas del módulo comercial.

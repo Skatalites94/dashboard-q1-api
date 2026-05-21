@@ -11,8 +11,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.brand_context import use_brand
 from app.database import get_db
 from app.models import Brand, ComercialPhase
+from app.supabase_auth import (
+    current_user_id,
+    is_auth_enabled,
+    is_current_user_admin,
+    user_can_access_brand,
+)
 
 router = APIRouter()
 
@@ -52,7 +59,13 @@ def slugify(name: str) -> str:
 
 @router.get("/")
 def list_brands(db: Session = Depends(get_db)):
-    rows = db.query(Brand).order_by(Brand.id).all()
+    q = db.query(Brand)
+    if is_auth_enabled() and not is_current_user_admin():
+        uid = current_user_id()
+        if not uid:
+            raise HTTPException(status_code=401, detail="Inicia sesión para continuar.")
+        q = q.filter(Brand.owner_user_id == uid)
+    rows = q.order_by(Brand.id).all()
     return [{"id": r.id, "slug": r.slug, "name": r.name} for r in rows]
 
 
@@ -61,12 +74,18 @@ def get_brand(brand_id: int, db: Session = Depends(get_db)):
     b = db.query(Brand).filter(Brand.id == brand_id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Brand not found")
+    if is_auth_enabled() and not user_can_access_brand(db, brand_id, current_user_id()):
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta marca.")
     return {"id": b.id, "slug": b.slug, "name": b.name}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_brand(body: BrandCreate, db: Session = Depends(get_db)):
     name = body.name.strip()
+    owner_uid = current_user_id() if is_auth_enabled() else None
+    if is_auth_enabled() and not owner_uid:
+        raise HTTPException(status_code=401, detail="Inicia sesión para crear una marca.")
+
     base_slug = slugify(body.slug) if body.slug else slugify(name)
 
     # garantizar slug único
@@ -76,7 +95,7 @@ def create_brand(body: BrandCreate, db: Session = Depends(get_db)):
         slug = f"{base_slug}-{n}"
         n += 1
 
-    brand = Brand(slug=slug, name=name)
+    brand = Brand(slug=slug, name=name, owner_user_id=owner_uid)
     db.add(brand)
     db.flush()  # asigna id
 
@@ -85,16 +104,17 @@ def create_brand(body: BrandCreate, db: Session = Depends(get_db)):
     # con _b{brand_id} para evitar colisión con Promoselect (brand 1) que
     # ya tiene ids "atraccion", "captura", etc.
     suffix = "" if brand.id == 1 else f"_b{brand.id}"
-    for ph in PHASES_TEMPLATE:
-        db.add(ComercialPhase(
-            id=f"{ph['id']}{suffix}",
-            brand_id=brand.id,
-            name=ph["name"],
-            icon=ph["icon"],
-            color=ph["color"],
-            description=ph["description"],
-            order=ph["order"],
-        ))
+    with use_brand(brand.id):
+        for ph in PHASES_TEMPLATE:
+            db.add(ComercialPhase(
+                id=f"{ph['id']}{suffix}",
+                brand_id=brand.id,
+                name=ph["name"],
+                icon=ph["icon"],
+                color=ph["color"],
+                description=ph["description"],
+                order=ph["order"],
+            ))
 
     db.commit()
     db.refresh(brand)

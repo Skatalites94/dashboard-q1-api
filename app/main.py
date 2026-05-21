@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.auth import BasicAuthASGIMiddleware
+from app.supabase_auth import BrandAccessASGIMiddleware, SupabaseAuthASGIMiddleware
 from app.brand_context import current_brand_id_var
 from app.brand_scope import install_brand_scope
 from app.database import Base, engine
@@ -52,7 +53,9 @@ install_brand_scope()
 # Middlewares ASGI puros (sin BaseHTTPMiddleware) para que el ContextVar de
 # brand_id se propague correctamente al route handler.
 # add_middleware aplica en orden inverso: el último añadido es el más externo.
+app.add_middleware(BrandAccessASGIMiddleware)
 app.add_middleware(BrandContextASGIMiddleware)
+app.add_middleware(SupabaseAuthASGIMiddleware)
 app.add_middleware(BasicAuthASGIMiddleware)
 register_error_handlers(app)
 

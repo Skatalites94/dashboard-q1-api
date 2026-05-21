@@ -1921,6 +1921,8 @@ window.ComercialModule = (function() {
       state.touchpoint_channels = data.touchpoint_channels || [];
       // Quick Start (#92)
       state.config = data.config || {};
+      // En modo demo y vista Detalle, el módulo abre en Quick Start (onboarding).
+      if (state.config.demo_mode && _getViewMode() !== 'compact') activeTab = 'quickstart';
       state.company_context = data.company_context || null;
       state.trust_pillar_steps = data.trust_pillar_steps || state.trust_pillar_steps || [];
       state.governance_charter = data.governance_charter || state.governance_charter || null;
@@ -11911,8 +11913,8 @@ window.ComercialModule = (function() {
       return s;
     };
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-    html += field('Nombre de la empresa', 'company_name', 'text', ctx.company_name, '', 'Promoselect');
-    html += field('Industria', 'industry', 'text', ctx.industry, '', 'Promocionales B2B');
+    html += field('Nombre de la empresa', 'company_name', 'text', ctx.company_name, '', 'Ej. Mi Empresa');
+    html += field('Industria', 'industry', 'text', ctx.industry, '', 'Ej. Software B2B');
     html += '</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
     html += field('Modelo de negocio', 'business_model', 'text', ctx.business_model, 'B2B / B2C / B2B2C / Marketplace', 'B2B');

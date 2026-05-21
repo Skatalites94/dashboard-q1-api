@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vision 2026 — Stencil Group</title>
+<title>Arquitectura Comercial</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -643,10 +643,10 @@ body.sidebar-collapsed .topbar { left: 64px; }
   <aside class="sidebar" id="sidebar">
     <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Colapsar barra lateral">&#10094;</button>
     <div class="sidebar-brand">
-      <div class="brand-icon">S</div>
+      <div class="brand-icon" id="sidebarBrandIcon">M</div>
       <div class="brand-text">
-        <h2>Stencil Group</h2>
-        <div class="sub">Vision 2026</div>
+        <h2 id="sidebarBrandName">Mi marca</h2>
+        <div class="sub">Arquitectura Comercial</div>
       </div>
     </div>
     <nav class="sidebar-nav">
@@ -697,15 +697,13 @@ body.sidebar-collapsed .topbar { left: 64px; }
       <div style="display:flex;align-items:center;">
         <button class="hamburger" id="hamburger">&#9776;</button>
         <div class="breadcrumb">
-          <span>Vision 2026</span>
-          <span class="bc-sep">/</span>
-          <span class="bc-current" id="pageTitle">Dashboard Q1</span>
+          <span class="bc-current" id="pageTitle">Arquitectura Comercial</span>
         </div>
       </div>
       <div class="brand-switcher" id="brandSwitcher">
         <button class="brand-trigger" id="brandTrigger" type="button">
           <span class="brand-label">Marca:</span>
-          <span class="brand-name" id="brandActiveName">Promoselect</span>
+          <span class="brand-name" id="brandActiveName"></span>
           <span class="brand-caret">&#9662;</span>
         </button>
         <div class="brand-menu" id="brandMenu" hidden>
@@ -726,7 +724,7 @@ body.sidebar-collapsed .topbar { left: 64px; }
     <h3 class="brand-modal-title">Crear nueva marca</h3>
     <p class="brand-modal-help">Cada marca es un workspace independiente. Empezarás con las 6 fases base vacías y construirás tu arquitectura comercial desde cero.</p>
     <label class="brand-modal-label" for="brandModalName">Nombre de la marca</label>
-    <input type="text" class="brand-modal-input" id="brandModalName" placeholder="Ej. Stencil Promo, Marca B" maxlength="160" />
+    <input type="text" class="brand-modal-input" id="brandModalName" placeholder="Ej. Mi Empresa" maxlength="160" />
     <div class="brand-modal-actions">
       <button class="brand-modal-cancel" id="brandModalCancel" type="button">Cancelar</button>
       <button class="brand-modal-create" id="brandModalCreate" type="button">Crear marca</button>
@@ -1145,8 +1143,15 @@ window.__toast = function(msg, type) {
   window.__startApp = function() {
     if (window.__appStarted) return;
     window.__appStarted = true;
-    bootRouter();
-    if (typeof window.__loadBrands === 'function') window.__loadBrands();
+    if (typeof window.__loadBrands === 'function') {
+      window.__loadBrands().then(function() {
+        // Sin marcas: el modal "Crear marca" queda abierto; no renderizamos el módulo (evita error de bootstrap).
+        if (window.__hasBrands === false) return;
+        bootRouter();
+      });
+    } else {
+      bootRouter();
+    }
   };
 })();
 
@@ -1173,6 +1178,7 @@ window.__toast = function(msg, type) {
       return r.json();
     }).then(function(data) {
       brands = data || [];
+      window.__hasBrands = brands.length > 0;
       window.__allowedBrandIds = brands.map(function(b) { return b.id; });
       renderActive();
       renderList();
@@ -1193,7 +1199,12 @@ window.__toast = function(msg, type) {
       window.__setActiveBrandId(brands[0].id);
       match = brands[0];
     }
-    nameEl.textContent = match ? match.name : 'Promoselect';
+    var label = match ? match.name : '';
+    nameEl.textContent = label;
+    var sbName = document.getElementById('sidebarBrandName');
+    var sbIcon = document.getElementById('sidebarBrandIcon');
+    if (sbName) sbName.textContent = label || 'Mi marca';
+    if (sbIcon) sbIcon.textContent = ((label.trim()[0]) || 'M').toUpperCase();
   }
 
   function renderList() {
@@ -1249,6 +1260,8 @@ window.__toast = function(msg, type) {
     closeMenu();
     modal.hidden = false;
     modalInput.value = '';
+    // Primera marca obligatoria: sin marcas no se puede cancelar.
+    modalCancel.style.display = brands.length === 0 ? 'none' : '';
     setTimeout(function() { modalInput.focus(); }, 50);
   }
   function closeModal() { modal.hidden = true; }
